@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Activity, Cpu, Sparkles } from 'lucide-react';
+import { Activity, Cpu, Sparkles, Play, Trash2 } from 'lucide-react';
+import { NodePalette } from './components/canvas/NodePalette';
+import { FlowCanvas } from './components/canvas/FlowCanvas';
+import { useCanvasStore } from './stores/useCanvasStore';
 
 interface SystemInfo {
   name: string;
@@ -13,6 +16,7 @@ interface SystemInfo {
 export default function App() {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
+  const { nodes, clearCanvas } = useCanvasStore();
 
   useEffect(() => {
     fetch('/health')
@@ -28,9 +32,9 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 select-none">
       {/* Top Header Bar */}
-      <header className="h-14 border-b border-slate-800 bg-slate-900/60 backdrop-blur px-4 flex items-center justify-between">
+      <header className="h-14 border-b border-slate-800 bg-slate-900/80 backdrop-blur px-4 flex items-center justify-between z-20">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
             <Sparkles className="w-5 h-5" />
@@ -39,6 +43,25 @@ export default function App() {
             <h1 className="font-semibold text-sm tracking-wide">AI-Workflow</h1>
             <p className="text-[11px] text-slate-400">API-First Creative Canvas</p>
           </div>
+        </div>
+
+        {/* Global Workflow Action Controls */}
+        <div className="flex items-center gap-2">
+          <button
+            disabled={nodes.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium shadow-lg shadow-indigo-600/20 transition"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            Run Workflow
+          </button>
+          <button
+            onClick={clearCanvas}
+            disabled={nodes.length === 0}
+            title="Clear canvas"
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 hover:text-rose-400 border border-slate-700 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Engine Status Indicators */}
@@ -57,16 +80,13 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Canvas Workspace Container */}
-      <main className="flex-1 relative flex items-center justify-center bg-slate-950">
-        <div className="text-center p-8 rounded-xl border border-dashed border-slate-800 max-w-md">
-          <Sparkles className="w-10 h-10 text-indigo-400 mx-auto mb-3" />
-          <h2 className="text-lg font-medium text-slate-200">Creative Canvas Ready</h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Universal 5-type node system and dirty-check caching engine initialized.
-          </p>
-        </div>
-      </main>
+      {/* Main Workspace Layout */}
+      <div className="flex-1 flex overflow-hidden relative">
+        <NodePalette />
+        <main className="flex-1 relative">
+          <FlowCanvas />
+        </main>
+      </div>
     </div>
   );
 }
