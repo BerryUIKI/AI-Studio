@@ -11,6 +11,7 @@ from app.core.cache import cache_store, compute_node_hash
 from app.core.dag import CyclicDependencyError, DAGResolver
 from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
+from app.runners.comfy_runner import comfy_client
 from app.schemas.events import (
     GraphFinishedEvent,
     GraphStartedEvent,
@@ -57,6 +58,18 @@ async def system_info() -> dict[str, object]:
         },
         "cache": {"items_cached": cache_store.size()},
     }
+
+
+@app.get("/api/v1/comfy/status")
+async def comfy_status() -> dict[str, Any]:
+    """Check connectivity and hardware stats of the local ComfyUI instance."""
+    return await comfy_client.check_status()
+
+
+@app.get("/api/v1/comfy/models")
+async def comfy_models() -> dict[str, List[str]]:
+    """Retrieve available checkpoints and LoRA models from ComfyUI."""
+    return await comfy_client.get_models()
 
 
 @app.get("/api/v1/nodes", response_model=List[NodeDefinition])
