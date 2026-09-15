@@ -12,6 +12,7 @@ from app.core.dag import CyclicDependencyError, DAGResolver
 from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
 from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
+from app.runtime.supervisor import supervisor
 
 # Register ComfyUI node runners
 NODE_RUNNERS["image.comfy.txt2img"] = run_comfy_txt2img_node
@@ -51,13 +52,13 @@ async def health_check() -> dict[str, str]:
 
 @app.get("/api/v1/info")
 async def system_info() -> dict[str, object]:
-    """System info endpoint reporting capabilities and supported runners."""
+    installed = supervisor.is_installed()
     return {
         "name": "AI-Workflow",
         "version": "0.1.0",
         "runners": {
             "api": {"status": "ready", "type": "cloud"},
-            "comfyui": {"status": "optional", "installed": False, "connected": False},
+            "comfyui": {"status": "optional", "installed": installed, "connected": False},
         },
         "cache": {"items_cached": cache_store.size()},
     }
@@ -73,6 +74,24 @@ async def comfy_status() -> dict[str, Any]:
 async def comfy_models() -> dict[str, List[str]]:
     """Retrieve available checkpoints and LoRA models from ComfyUI."""
     return await comfy_client.get_models()
+
+
+@app.get("/api/v1/runtime/status")
+async def runtime_status() -> dict[str, Any]:
+    """Check the status of the sandboxed ComfyUI runtime and process supervisor."""
+    return supervisor.get_status()
+
+
+@app.post("/api/v1/runtime/start")
+async def runtime_start() -> dict[str, Any]:
+    """Launch the isolated ComfyUI subprocess via supervisor."""
+    return supervisor.start()
+
+
+@app.post("/api/v1/runtime/stop")
+async def runtime_stop() -> dict[str, Any]:
+    """Stop the isolated ComfyUI subprocess via supervisor."""
+    return supervisor.stop()
 
 
 @app.get("/api/v1/nodes", response_model=List[NodeDefinition])
