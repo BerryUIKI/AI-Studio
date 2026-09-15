@@ -17,9 +17,12 @@ This roadmap outlines the phased development path for **AI-Workflow**, moving fr
   - `output.preview` — Media Preview Card
 - [x] Core DAG engine with topological sorting (Kahn's algorithm) and cycle detection.
 - [x] Deterministic dirty-checking and output caching via SHA-256 node hashing (`/api/v1/workflow/plan`).
-- [ ] **[In Progress]** Cloud API execution runner (`api_runner.py`) with OpenAI-compatible LLM & image API calls.
-- [ ] Single-node isolated execution via `▶ Run this node` wired to execution runner.
-- [ ] WebSocket real-time progress streaming from backend to canvas node status badges.
+- [x] **Cloud API execution runner** (`api_runner.py`): OpenAI-compatible LLM, FLUX/SDXL/DALL-E image, and passthrough input drivers.
+- [x] **WebSocket real-time streaming** (`/ws/workflow/run`): Streams `NodeStatus`, `NodeOutput`, `GraphFinished` events to the canvas.
+- [x] **Single-node isolated execution**: `▶ Run this node` wired via WebSocket with upstream dependency auto-resolution.
+
+> **Milestone 1 is complete.** 14/14 backend tests passing. Frontend canvas renders live status badges.
+
 
 ---
 
