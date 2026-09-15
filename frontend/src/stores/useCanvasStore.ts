@@ -9,26 +9,31 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
 } from '@xyflow/react';
-import { CustomNodeData, NodeDefinition } from '../types/workflow';
+import { CustomNodeData, ExecutionStatus, NodeDefinition } from '../types/workflow';
 
 interface CanvasState {
   nodes: Node<CustomNodeData>[];
   edges: Edge[];
   selectedNodeId: string | null;
+  isExecuting: boolean;
 
   onNodesChange: (changes: NodeChange<Node<CustomNodeData>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (definition: NodeDefinition, position?: { x: number; y: number }) => void;
   updateNodeParam: (nodeId: string, paramName: string, value: any) => void;
+  setNodeStatus: (nodeId: string, status: ExecutionStatus) => void;
+  setNodeOutput: (nodeId: string, output: Record<string, any>) => void;
   setSelectedNodeId: (nodeId: string | null) => void;
   clearCanvas: () => void;
+  runWorkflow: () => Promise<void>;
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   nodes: [],
   edges: [],
   selectedNodeId: null,
+  isExecuting: false,
 
   onNodesChange: (changes) => {
     set({
@@ -102,7 +107,103 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
+  setNodeStatus: (nodeId, status) => {
+    set({
+      nodes: get().nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            status,
+          },
+        };
+      }),
+    });
+  },
+
+  setNodeOutput: (nodeId, output) => {
+    set({
+      nodes: get().nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            output,
+          },
+        };
+      }),
+    });
+  },
+
   setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
 
-  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: null }),
+  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: null, isExecuting: false }),
+
+  runWorkflow: async () => {
+    const { nodes, edges, setNodeStatus, setNodeOutput } = get();
+    if (nodes.length === 0) return;
+
+    set({ isExecuting: true });
+
+    // Reset all nodes to queued/idle
+    nodes.forEach((n) => setNodeStatus(n.id, 'queued'));
+
+    const graphPayload = {
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        type: n.data.definition.type,
+        params: n.data.params,
+      })),
+      edges: edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        source_handle: e.sourceHandle || 'output',
+        target: e.target,
+        target_handle: e.targetHandle || 'input',
+      })),
+    };
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws/workflow/run`;
+
+    try {
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify(graphPayload));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'NODE_STATUS') {
+            setNodeStatus(msg.node_id, msg.status);
+          } else if (msg.type === 'NODE_OUTPUT') {
+            setNodeOutput(msg.node_id, msg.output);
+          } else if (msg.type === 'GRAPH_FINISHED') {
+            set({ isExecuting: false });
+          } else if (msg.type === 'ERROR' || msg.type === 'NODE_ERROR') {
+            if (msg.node_id) {
+              setNodeStatus(msg.node_id, 'error');
+            }
+            set({ isExecuting: false });
+          }
+        } catch {
+          // ignore parsing error
+        }
+      };
+
+      ws.onerror = () => {
+        set({ isExecuting: false });
+      };
+
+      ws.onclose = () => {
+        set({ isExecuting: false });
+      };
+    } catch {
+      set({ isExecuting: false });
+    }
+  },
 }));
