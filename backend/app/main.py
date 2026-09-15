@@ -11,7 +11,10 @@ from app.core.cache import cache_store, compute_node_hash
 from app.core.dag import CyclicDependencyError, DAGResolver
 from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
-from app.runners.comfy_runner import comfy_client
+from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
+
+# Register ComfyUI node runners
+NODE_RUNNERS["image.comfy.txt2img"] = run_comfy_txt2img_node
 from app.schemas.events import (
     GraphFinishedEvent,
     GraphStartedEvent,
