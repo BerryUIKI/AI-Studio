@@ -1,13 +1,24 @@
 """FastAPI application entrypoint for AI-Workflow."""
 
-from typing import List
-from fastapi import FastAPI, HTTPException
+import json
+import time
+from typing import Any, Dict, List
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.dag import DAGResolver, CyclicDependencyError
-from app.core.cache import compute_node_hash, cache_store
+
+from app.core.cache import cache_store, compute_node_hash
+from app.core.dag import CyclicDependencyError, DAGResolver
 from app.nodes.registry import registry
+from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
+from app.schemas.events import (
+    GraphFinishedEvent,
+    GraphStartedEvent,
+    NodeOutputEvent,
+    NodeStatusEvent,
+)
 from app.schemas.node import NodeDefinition
-from app.schemas.workflow import WorkflowGraph, ExecutionPlan, PlannedNodeStep
+from app.schemas.workflow import ExecutionPlan, PlannedNodeStep, WorkflowGraph
 
 # Import builtin nodes to trigger auto-registration
 import app.nodes.builtin  # noqa: F401
@@ -94,3 +105,107 @@ async def generate_plan(graph: WorkflowGraph, target_node: str | None = None) ->
         total_nodes=len(steps),
         cached_nodes_count=cached_count,
     )
+
+
+@app.websocket("/ws/workflow/run")
+async def websocket_run_workflow(websocket: WebSocket) -> None:
+    """
+    WebSocket endpoint for real-time workflow execution.
+
+    Accepts a WorkflowGraph JSON payload, resolves DAG order, applies cache,
+    and streams NodeStatusEvent / NodeOutputEvent / GraphFinishedEvent back
+    to the canvas for live status badge updates.
+    """
+    await websocket.accept()
+    try:
+        raw = await websocket.receive_text()
+        graph = WorkflowGraph.model_validate_json(raw)
+    except Exception as e:
+        await websocket.send_text(json.dumps({"type": "ERROR", "message": f"Invalid graph payload: {e}"}))
+        await websocket.close()
+        return
+
+    try:
+        resolver = DAGResolver(graph)
+        sorted_nodes = resolver.topological_sort()
+    except CyclicDependencyError as e:
+        await websocket.send_text(json.dumps({"type": "ERROR", "message": str(e)}))
+        await websocket.close()
+        return
+
+    # Compute execution plan with cache
+    node_hashes: Dict[str, str] = {}
+    node_outputs: Dict[str, Dict[str, Any]] = {}
+    cached_count = 0
+
+    for node in sorted_nodes:
+        parents = resolver.get_parent_ids(node.id)
+        parent_hashes = [node_hashes[pid] for pid in parents if pid in node_hashes]
+        h = compute_node_hash(node.type, node.params, parent_hashes)
+        node_hashes[node.id] = h
+        if cache_store.has(h):
+            cached_count += 1
+
+    start_time = time.monotonic()
+    await websocket.send_text(
+        GraphStartedEvent(total_nodes=len(sorted_nodes), cached_nodes=cached_count).model_dump_json()
+    )
+
+    for node in sorted_nodes:
+        node_hash = node_hashes[node.id]
+
+        # Serve from cache if available
+        if cache_store.has(node_hash):
+            cached_output = cache_store.get(node_hash)
+            await websocket.send_text(NodeStatusEvent(node_id=node.id, status="cached").model_dump_json())
+            await websocket.send_text(NodeOutputEvent(node_id=node.id, output=cached_output or {}).model_dump_json())
+            node_outputs[node.id] = cached_output or {}
+            continue
+
+        # Resolve inputs from upstream node outputs
+        inputs: Dict[str, Any] = {}
+        for edge in graph.edges:
+            if edge.target == node.id and edge.source in node_outputs:
+                source_output = node_outputs[edge.source]
+                if edge.source_handle in source_output:
+                    inputs[edge.target_handle] = source_output[edge.source_handle]
+
+        # Dispatch to appropriate runner
+        runner = NODE_RUNNERS.get(node.type)
+        if runner is None:
+            await websocket.send_text(
+                json.dumps({"type": "NODE_ERROR", "node_id": node.id, "message": f"No runner for node type: {node.type}"})
+            )
+            continue
+
+        output: Dict[str, Any] = {}
+        try:
+            # input.text has a different signature (no inputs dict)
+            if node.type == "input.text":
+                async for event in run_input_text_node(node.id, node.params):
+                    await websocket.send_text(event.model_dump_json())
+                    if isinstance(event, NodeOutputEvent):
+                        output = event.output
+            else:
+                async for event in runner(node.id, inputs, node.params):
+                    await websocket.send_text(event.model_dump_json())
+                    if isinstance(event, NodeOutputEvent):
+                        output = event.output
+        except Exception as e:
+            await websocket.send_text(
+                json.dumps({"type": "NODE_ERROR", "node_id": node.id, "message": str(e)})
+            )
+            continue
+
+        # Cache the result for future runs
+        if output:
+            cache_store.set(node_hash, output)
+            node_outputs[node.id] = output
+
+    elapsed_ms = (time.monotonic() - start_time) * 1000
+    await websocket.send_text(GraphFinishedEvent(execution_time_ms=elapsed_ms).model_dump_json())
+
+    try:
+        await websocket.close()
+    except Exception:
+        pass
