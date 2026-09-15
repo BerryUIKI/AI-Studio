@@ -14,8 +14,9 @@ const TYPE_COLORS: Record<DataType, string> = {
 
 function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
   const customData = data as CustomNodeData;
-  const { definition, params, status } = customData;
+  const { definition, params, status, output } = customData;
   const updateNodeParam = useCanvasStore((state) => state.updateNodeParam);
+  const runWorkflow = useCanvasStore((state) => state.runWorkflow);
 
   const getStatusBadge = () => {
     switch (status) {
@@ -63,6 +64,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
         <div className="flex items-center gap-1.5">
           {getStatusBadge()}
           <button
+            onClick={() => runWorkflow()}
             title="Run this node"
             className="p-1 rounded hover:bg-slate-700/60 text-slate-400 hover:text-indigo-400 transition"
           >
@@ -143,18 +145,18 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
 
         {/* Output Handles */}
         <div className="space-y-2 mt-2 pt-2 border-t border-slate-800/60">
-          {definition.outputs.map((output) => (
-            <div key={output.id} className="relative flex items-center justify-end gap-2">
+          {definition.outputs.map((outputPort) => (
+            <div key={outputPort.id} className="relative flex items-center justify-end gap-2">
               <span className="text-[9px] uppercase px-1 rounded bg-slate-800 text-slate-400 border border-slate-700/50">
-                {output.type}
+                {outputPort.type}
               </span>
-              <span className="text-[11px] font-medium text-slate-300">{output.name}</span>
+              <span className="text-[11px] font-medium text-slate-300">{outputPort.name}</span>
               <Handle
                 type="source"
                 position={Position.Right}
-                id={output.id}
+                id={outputPort.id}
                 style={{
-                  backgroundColor: TYPE_COLORS[output.type] || '#94a3b8',
+                  backgroundColor: TYPE_COLORS[outputPort.type] || '#94a3b8',
                   width: '9px',
                   height: '9px',
                   right: '-17px',
@@ -163,6 +165,24 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
             </div>
           ))}
         </div>
+
+        {/* Output Previews (Images, Text) */}
+        {output?.image && (
+          <div className="mt-2 pt-2 border-t border-slate-800/60">
+            <img
+              src={output.image}
+              alt="Node Output"
+              className="w-full h-32 object-cover rounded-lg border border-slate-800 shadow-md"
+            />
+          </div>
+        )}
+        {output?.result && (
+          <div className="mt-2 pt-2 border-t border-slate-800/60">
+            <div className="text-[11px] text-slate-300 bg-slate-950/70 p-2 rounded border border-slate-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
+              {output.result}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
