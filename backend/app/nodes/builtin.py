@@ -130,3 +130,66 @@ registry.register(
         parameters=[],
     )
 )
+
+# 5. Local ComfyUI Txt2Img Node
+registry.register(
+    NodeDefinition(
+        type="image.comfy.txt2img",
+        title="Local ComfyUI Txt2Img",
+        category=NodeCategory.IMAGE,
+        description="Generate images locally via sandboxed or external ComfyUI (No GPU cloud cost)",
+        inputs=[
+            NodePort(id="prompt", name="Prompt", type=DataType.STRING, required=True),
+            NodePort(id="negative_prompt", name="Negative Prompt", type=DataType.STRING, required=False),
+        ],
+        outputs=[
+            NodePort(id="image", name="Output Image", type=DataType.IMAGE)
+        ],
+        parameters=[
+            ParameterDef(
+                name="checkpoint",
+                label="Model Checkpoint",
+                type=ParameterType.STRING,
+                default="v1-5-pruned-emaonly.safetensors",
+                description="Filename of the checkpoint safetensors in ComfyUI models/checkpoints",
+            ),
+            ParameterDef(
+                name="steps",
+                label="Inference Steps",
+                type=ParameterType.NUMBER,
+                default=20,
+                min_value=1,
+                max_value=150,
+                step=1,
+            ),
+            ParameterDef(
+                name="cfg",
+                label="CFG Scale",
+                type=ParameterType.NUMBER,
+                default=7.0,
+                min_value=1.0,
+                max_value=30.0,
+                step=0.5,
+            ),
+            ParameterDef(
+                name="aspect_ratio",
+                label="Aspect Ratio",
+                type=ParameterType.SELECT,
+                default="1:1",
+                options=[
+                    SelectOption(label="1:1 Square", value="1:1"),
+                    SelectOption(label="16:9 Landscape", value="16:9"),
+                    SelectOption(label="9:16 Portrait (Shorts)", value="9:16"),
+                    SelectOption(label="4:3 Standard", value="4:3"),
+                ],
+            ),
+            ParameterDef(
+                name="lora_name",
+                label="Optional LoRA",
+                type=ParameterType.STRING,
+                default="",
+                description="Optional LoRA filename in ComfyUI models/loras",
+            ),
+        ],
+    )
+)
