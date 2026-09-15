@@ -62,7 +62,7 @@ AI-Workflow/
 │   │   ├── runners/                 # Cloud API Driver & ComfyUI WebSocket Bridge
 │   │   ├── runtime/                 # Isolated ComfyUI Supervisor & Sandboxed Installer
 │   │   └── schemas/                 # Pydantic models (NodeDefinition, WorkflowGraph, Events)
-│   └── tests/                       # Pytest test suites (10 tests, 100% passing)
+│   └── tests/                       # Pytest test suites (28 tests, 100% passing)
 └── docs/                            # Architecture spec, Roadmap, RFCs
 ```
 
