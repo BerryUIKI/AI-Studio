@@ -50,13 +50,20 @@ ComfyUI is remarkably capable, but it was designed as a low-level PyTorch tensor
 
 ```
 AI-Workflow/
-├── frontend/               # React + TypeScript + @xyflow/react + Tailwind CSS
-├── backend/                # FastAPI + AsyncIO Core
-│   ├── app/core/           # DAG Engine, Topological Sorter, Hash Cache
-│   ├── app/nodes/          # Node registries (Text, Image, Audio, Video)
-│   ├── app/runners/        # Cloud API Driver & ComfyUI WebSocket Bridge
-│   └── app/runtime/        # Isolated ComfyUI Supervisor & Sandboxed Installer
-└── docs/                   # Specifications, Architecture, and Roadmap
+├── frontend/                        # Vite + React 18 + TypeScript + @xyflow/react + Tailwind CSS
+│   └── src/
+│       ├── components/canvas/       # FlowCanvas, WorkflowNode, NodePalette
+│       ├── stores/                  # Zustand canvas & engine state
+│       └── types/                   # TypeScript contracts (NodeDefinition, DataType, etc.)
+├── backend/                         # FastAPI + Pydantic v2 + AsyncIO
+│   ├── app/
+│   │   ├── core/                    # DAG Engine, SHA-256 Hash Cache, Runner Router
+│   │   ├── nodes/                   # Node registry & built-in node definitions
+│   │   ├── runners/                 # Cloud API Driver & ComfyUI WebSocket Bridge
+│   │   ├── runtime/                 # Isolated ComfyUI Supervisor & Sandboxed Installer
+│   │   └── schemas/                 # Pydantic models (NodeDefinition, WorkflowGraph, Events)
+│   └── tests/                       # Pytest test suites (10 tests, 100% passing)
+└── docs/                            # Architecture spec, Roadmap, RFCs
 ```
 
 For complete technical details, see the [Architecture Document](docs/ARCHITECTURE.md).
@@ -66,7 +73,7 @@ For complete technical details, see the [Architecture Document](docs/ARCHITECTUR
 ## 🚦 Quick Start (Development)
 
 ### Prerequisites
-- Node.js `18+` and `pnpm`
+- Node.js `18+` and `pnpm` (`npm install -g pnpm`)
 - Python `3.10+`
 
 ### 1. Clone & Switch to Integration Branch
@@ -89,6 +96,7 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd ../frontend
 pnpm install
+pnpm approve-builds --all   # Required on first install to allow esbuild native binaries
 pnpm dev
 ```
 Open [http://localhost:5173](http://localhost:5173) in your browser.
