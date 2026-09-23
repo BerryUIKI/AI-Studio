@@ -11,7 +11,7 @@ Never hardcodes secrets.
 
 import os
 import time
-from typing import Any, AsyncGenerator, Dict
+from typing import Any, AsyncGenerator, Dict, Optional
 
 import httpx
 
@@ -228,6 +228,88 @@ async def _call_siliconflow(prompt: str, width: int, height: int, api_key: str) 
         response.raise_for_status()
         data = response.json()
         return data["data"][0]["url"] if data.get("data") else None
+
+
+async def _call_openai_inpaint(
+    prompt: str, image_bytes: bytes, mask_bytes: bytes, api_key: str
+) -> str | None:
+    if not api_key:
+        raise APIRunnerError("OPENAI_API_KEY not set for OpenAI inpainting")
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        files = {
+            "image": ("image.png", image_bytes, "image/png"),
+            "mask": ("mask.png", mask_bytes, "image/png"),
+        }
+        data = {
+            "prompt": prompt,
+            "n": 1,
+            "size": "1024x1024",
+        }
+        response = await client.post(
+            "https://api.openai.com/v1/images/edits",
+            headers={"Authorization": f"Bearer {api_key}"},
+            files=files,
+            data=data,
+        )
+        response.raise_for_status()
+        resp_data = response.json()
+        return resp_data["data"][0]["url"] if resp_data.get("data") else None
+
+
+async def _call_fal_ai_action(
+    action: str,
+    prompt: str,
+    api_key: str,
+    width: int = 1024,
+    height: int = 1024,
+    image_b64: Optional[str] = None,
+    mask_b64: Optional[str] = None,
+    denoise: float = 0.75,
+    upscale_factor: float = 2.0,
+) -> str | None:
+    if not api_key:
+        raise APIRunnerError("FAL_KEY / IMAGE_API_KEY not set for Fal.ai")
+
+    headers = {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        if action == "inpaint":
+            if not image_b64 or not mask_b64:
+                raise ValueError("Image and mask required for Fal.ai inpainting")
+            endpoint = "https://fal.run/fal-ai/flux-general/inpainting"
+            payload = {
+                "prompt": prompt,
+                "image_url": f"data:image/png;base64,{image_b64}",
+                "mask_url": f"data:image/png;base64,{mask_b64}",
+            }
+        elif action == "upscale":
+            if not image_b64:
+                raise ValueError("Image required for Fal.ai upscaling")
+            endpoint = "https://fal.run/fal-ai/clarity-upscaler"
+            payload = {
+                "image_url": f"data:image/png;base64,{image_b64}",
+                "scale": int(upscale_factor),
+            }
+        elif action == "img2img":
+            if not image_b64:
+                raise ValueError("Image required for Fal.ai img2img")
+            endpoint = "https://fal.run/fal-ai/flux/dev/image-to-image"
+            payload = {
+                "prompt": prompt,
+                "image_url": f"data:image/png;base64,{image_b64}",
+                "strength": max(0.1, min(1.0, 1.0 - denoise)),
+            }
+        else:
+            endpoint = "https://fal.run/fal-ai/flux/schnell"
+            payload = {"prompt": prompt, "image_size": {"width": width, "height": height}}
+
+        response = await client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        if "image" in data and isinstance(data["image"], dict):
+            return data["image"].get("url")
+        images = data.get("images", [])
+        return images[0]["url"] if images else None
 
 
 # ---------------------------------------------------------------------------

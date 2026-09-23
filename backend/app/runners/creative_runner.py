@@ -7,6 +7,7 @@ enforcing deterministic caching, provenance tracking, and content-addressable st
 """
 
 import asyncio
+import base64
 import hashlib
 import json
 import logging
@@ -17,7 +18,13 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.core.cache import cache_store
-from app.runners.api_runner import _call_fal_ai, _call_openai_images, _call_siliconflow
+from app.runners.api_runner import (
+    _call_fal_ai,
+    _call_fal_ai_action,
+    _call_openai_images,
+    _call_openai_inpaint,
+    _call_siliconflow,
+)
 from app.runners.comfy_runner import comfy_client
 from app.runners.macro_compiler import (
     ASPECT_RATIO_DIMENSIONS,
@@ -66,9 +73,44 @@ def compute_creative_cache_hash(req: CreativeActionRequest, input_hash: str = ""
 class CreativeRunner:
     """Coordinates canvas-level image generation, inpainting, and upscaling."""
 
+    def __init__(self) -> None:
+        self.active_tasks: Dict[str, Dict[str, Any]] = {}
+        self.active_cancellations: Dict[str, asyncio.Event] = {}
+
+    async def cancel_task(self, task_id: str) -> Dict[str, Any]:
+        """Cancel an active creative task and signal cancellation to engines."""
+        cancel_event = self.active_cancellations.get(task_id)
+        task_info = self.active_tasks.get(task_id, {})
+        engine_id = task_info.get("engine", "")
+
+        if cancel_event:
+            cancel_event.set()
+
+        interrupted = False
+        disclaimer = None
+
+        if "comfy" in engine_id:
+            interrupted = await comfy_client.interrupt()
+        elif "webui" in engine_id:
+            runner = WebUIRunner()
+            interrupted = await runner.interrupt()
+        elif "cloud" in engine_id:
+            disclaimer = (
+                "Cloud cancellation requested locally. Note: external cloud providers "
+                "may continue asynchronous inference or incur compute charges."
+            )
+
+        return {
+            "task_id": task_id,
+            "status": "cancelled",
+            "engine_interrupted": interrupted,
+            "disclaimer": disclaimer,
+        }
+
     async def execute(self, req: CreativeActionRequest) -> CreativeActionResult:
-        task_id = f"task_{Date_now() if False else int(time.time() * 1000)}"
+        task_id = f"task_{int(time.time() * 1000)}"
         start_time = time.monotonic()
+        cancel_event = asyncio.Event()
 
         # Resolve aspect ratio dimensions if default 512
         if req.aspect_ratio in ASPECT_RATIO_DIMENSIONS:
@@ -111,6 +153,14 @@ class CreativeRunner:
                 is_cached=True,
             )
 
+        # Register active task
+        self.active_tasks[task_id] = {
+            "action": req.action.value,
+            "engine": req.engine_id,
+            "start_time": time.time(),
+        }
+        self.active_cancellations[task_id] = cancel_event
+
         # Dispatch based on engine
         try:
             if "webui" in req.engine_id:
@@ -127,7 +177,7 @@ class CreativeRunner:
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
             elif "cloud" in req.engine_id:
-                action_data = await self._run_cloud(req)
+                action_data = await self._run_cloud(req, input_file_path, mask_file_path)
                 asset_id = action_data["asset_id"]
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
@@ -139,6 +189,15 @@ class CreativeRunner:
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
+
+            if cancel_event.is_set():
+                return CreativeActionResult(
+                    success=False,
+                    task_id=task_id,
+                    error_message="Task cancelled by user.",
+                    width=req.width,
+                    height=req.height,
+                )
 
             elapsed_ms = round((time.monotonic() - start_time) * 1000, 2)
 
@@ -190,6 +249,9 @@ class CreativeRunner:
                 width=req.width,
                 height=req.height,
             )
+        finally:
+            self.active_tasks.pop(task_id, None)
+            self.active_cancellations.pop(task_id, None)
 
     async def _run_comfy(
         self,
@@ -270,45 +332,129 @@ class CreativeRunner:
             "height": req.height,
         }
 
-    async def _run_cloud(self, req: CreativeActionRequest) -> Dict[str, Any]:
+    async def _run_cloud(
+        self,
+        req: CreativeActionRequest,
+        input_file: Optional[Path] = None,
+        mask_file: Optional[Path] = None,
+    ) -> Dict[str, Any]:
         """Dispatch creative action to cloud API using BYOK key."""
         model = req.model.lower()
-        if "flux" in model or req.engine_id == "cloud_fal":
-            provider_id = CloudProviderId.FAL
-            key = credentials_manager.get_key(provider_id)
-            if not key:
-                raise RuntimeError("Fal.ai API key is missing. Configure it in Cloud Providers (BYOK).")
-            target_model = "flux-schnell" if "schnell" in model else "flux-dev"
-            remote_url = await _call_fal_ai(target_model, req.prompt, req.width, req.height, key)
-        elif "dall-e" in model or "openai" in req.engine_id:
-            provider_id = CloudProviderId.OPENAI
-            key = credentials_manager.get_key(provider_id)
-            if not key:
-                raise RuntimeError("OpenAI API key is missing. Configure it in Cloud Providers (BYOK).")
-            remote_url = await _call_openai_images(req.prompt, key)
-        else:
-            # Default to SiliconFlow / SDXL or Fal.ai
-            provider_id = CloudProviderId.SILICONFLOW
-            key = credentials_manager.get_key(provider_id)
-            if not key:
-                # Check Fal.ai fallback
-                key = credentials_manager.get_key(CloudProviderId.FAL)
-                if key:
-                    remote_url = await _call_fal_ai("flux-schnell", req.prompt, req.width, req.height, key)
-                else:
-                    raise RuntimeError("No cloud provider API key configured. Please set up a BYOK key in Cloud Settings.")
+        image_b64: Optional[str] = None
+        mask_b64: Optional[str] = None
+        image_bytes: Optional[bytes] = None
+        mask_bytes: Optional[bytes] = None
+
+        if input_file and input_file.is_file():
+            image_bytes = input_file.read_bytes()
+            image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        if mask_file and mask_file.is_file():
+            mask_bytes = mask_file.read_bytes()
+            mask_b64 = base64.b64encode(mask_bytes).decode("utf-8")
+
+        out_w = req.width
+        out_h = req.height
+
+        if req.action == CreativeActionType.INPAINT:
+            if not image_bytes or not mask_bytes:
+                raise ValueError("Source image and mask are required for cloud inpainting.")
+
+            if "openai" in req.engine_id or "dall-e" in model:
+                key = credentials_manager.get_key(CloudProviderId.OPENAI)
+                if not key:
+                    raise RuntimeError("OpenAI API key missing. Configure it in Cloud Providers (BYOK).")
+                remote_url = await _call_openai_inpaint(req.prompt, image_bytes, mask_bytes, key)
             else:
-                remote_url = await _call_siliconflow(req.prompt, req.width, req.height, key)
+                key = credentials_manager.get_key(CloudProviderId.FAL)
+                if not key:
+                    raise RuntimeError(
+                        "Fal.ai API key is required for cloud inpainting. "
+                        "Configure Fal.ai or OpenAI in Cloud Settings (BYOK)."
+                    )
+                remote_url = await _call_fal_ai_action(
+                    action="inpaint",
+                    prompt=req.prompt,
+                    api_key=key,
+                    image_b64=image_b64,
+                    mask_b64=mask_b64,
+                )
+
+        elif req.action == CreativeActionType.UPSCALE:
+            if not image_b64:
+                raise ValueError("Source image is required for cloud upscaling.")
+
+            key = credentials_manager.get_key(CloudProviderId.FAL)
+            if not key:
+                raise RuntimeError(
+                    "Cloud upscaling requires Fal.ai API key. "
+                    "OpenAI DALL-E 3 does not offer an upscaling endpoint. "
+                    "Please configure a Fal.ai BYOK key or use local ComfyUI/WebUI."
+                )
+            remote_url = await _call_fal_ai_action(
+                action="upscale",
+                prompt=req.prompt,
+                api_key=key,
+                image_b64=image_b64,
+                upscale_factor=req.upscale_factor,
+            )
+            out_w = int(req.width * req.upscale_factor)
+            out_h = int(req.height * req.upscale_factor)
+
+        elif req.action == CreativeActionType.IMG2IMG:
+            if not image_b64:
+                raise ValueError("Source image is required for cloud image-to-image.")
+
+            key = credentials_manager.get_key(CloudProviderId.FAL)
+            if not key:
+                raise RuntimeError(
+                    "Cloud image-to-image currently requires Fal.ai (FLUX img2img). "
+                    "Please configure a Fal.ai BYOK key or use local ComfyUI/WebUI."
+                )
+            remote_url = await _call_fal_ai_action(
+                action="img2img",
+                prompt=req.prompt,
+                api_key=key,
+                image_b64=image_b64,
+                denoise=req.denoise,
+            )
+
+        else:
+            # TXT2IMG
+            if "flux" in model or req.engine_id == "cloud_fal":
+                provider_id = CloudProviderId.FAL
+                key = credentials_manager.get_key(provider_id)
+                if not key:
+                    raise RuntimeError("Fal.ai API key is missing. Configure it in Cloud Providers (BYOK).")
+                target_model = "flux-schnell" if "schnell" in model else "flux-dev"
+                remote_url = await _call_fal_ai(target_model, req.prompt, req.width, req.height, key)
+            elif "dall-e" in model or "openai" in req.engine_id:
+                provider_id = CloudProviderId.OPENAI
+                key = credentials_manager.get_key(provider_id)
+                if not key:
+                    raise RuntimeError("OpenAI API key is missing. Configure it in Cloud Providers (BYOK).")
+                remote_url = await _call_openai_images(req.prompt, key)
+            else:
+                provider_id = CloudProviderId.SILICONFLOW
+                key = credentials_manager.get_key(provider_id)
+                if not key:
+                    key = credentials_manager.get_key(CloudProviderId.FAL)
+                    if key:
+                        remote_url = await _call_fal_ai("flux-schnell", req.prompt, req.width, req.height, key)
+                    else:
+                        raise RuntimeError("No cloud provider API key configured. Please set up a BYOK key in Cloud Settings.")
+                else:
+                    remote_url = await _call_siliconflow(req.prompt, req.width, req.height, key)
 
         if not remote_url:
-            raise RuntimeError("Cloud provider returned no image URL.")
+            raise RuntimeError(f"Cloud provider returned no image URL for action {req.action}.")
 
         asset = await asset_store.save_image_from_url(remote_url, filename="cloud_output.png")
         return {
             "asset_id": asset.id,
             "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": req.width,
-            "height": req.height,
+            "width": out_w,
+            "height": out_h,
         }
 
 
