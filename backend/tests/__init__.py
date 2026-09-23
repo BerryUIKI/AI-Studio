@@ -1,1 +1,1 @@
-"""Test suite for AI-Workflow."""
+"""Test suite for Berry AI Studio."""

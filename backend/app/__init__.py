@@ -1,1 +1,1 @@
-"""AI-Workflow backend application package."""
+"""Berry AI Studio backend application package."""

@@ -77,6 +77,17 @@ class DAGResolver:
                 queue.extend(self.parents[curr])
         return ancestors
 
+    def get_descendants(self, node_id: str) -> Set[str]:
+        """Recursively gather all downstream descendant nodes."""
+        descendants: Set[str] = set()
+        queue = deque(self.adjacency[node_id])
+        while queue:
+            curr = queue.popleft()
+            if curr not in descendants:
+                descendants.add(curr)
+                queue.extend(self.adjacency[curr])
+        return descendants
+
     def get_parent_ids(self, node_id: str) -> List[str]:
         """Return direct upstream parent node IDs."""
         return self.parents.get(node_id, [])
