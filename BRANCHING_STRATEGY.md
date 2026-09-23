@@ -1,129 +1,77 @@
-# Git Branching Strategy & Release Specification
+# Berry AI Studio GitFlow Branching and Release Policy
 
-This document establishes the official Git branching model, branch governance, commit standards, and release workflows for the **AI-Workflow** repository.
+Status: project policy. All branch names, commit messages, pull requests, tags, and release notes use English.
 
----
+## 1. Permanent Branches
 
-## 1. Branch Architecture Overview
+| Branch | Purpose | Rules |
+| --- | --- | --- |
+| `main` | Released, production-ready history | Protected. No direct commits or pushes. Release and hotfix PRs only. Every new release commit is tagged after merge and verification. |
+| `dev` | Integration for the next release | Protected. Feature and ordinary bug-fix PRs merge here. A green `dev` build is integration evidence, not a release declaration. |
 
-The repository follows a modified Git Flow model optimized for modern CI/CD, continuous development, and strict release stability.
+Do not use `main` as a working branch. Do not tag a feature branch or `dev` as an official release.
 
-```
-(main)    v0.1.0 -------------------------------------> v0.2.0 (Release Tags)
-             ^                                             ^
-             |                                             |
-(release)    |                                      [release/v0.2.0]
-             |                                             ^
-(dev)        +--- [PR Merge] <--- [PR Merge] <--- [PR Merge] (Integration)
-                    ^                   ^
-                    |                   |
-(feature)      [feature/canvas]    [feature/api-runner]
-```
+## 2. Short-Lived Branches
 
-### The Primary Branches
+| Pattern | Create from | Merge into | Purpose |
+| --- | --- | --- | --- |
+| `feature/<issue-or-topic>` | `dev` | `dev` | New product capability or focused technical work. |
+| `bugfix/<issue-or-topic>` | `dev` | `dev` | Ordinary defects found during development. |
+| `docs/<issue-or-topic>` | `dev` | `dev` | Documentation-only changes. |
+| `release/vX.Y.Z` | `dev` | `main`, then synchronize back to `dev` | Release stabilization, version numbers, changelog and packaging fixes. |
+| `hotfix/vX.Y.Z` | `main` | `main`, then synchronize back to `dev` | Urgent correction to a released version. |
 
-| Branch | Lifecycle | Protection Level | Purpose |
-| :--- | :--- | :--- | :--- |
-| **`main`** | Permanent | **Strictly Protected** | **Production / Official Releases**. Every commit on `main` represents a stable, release-ready artifact tagged with a Semantic Version (`vX.Y.Z`). Direct pushes are prohibited. |
-| **`dev`** | Permanent | **Protected (Default Branch)** | **Active Integration**. All new features, performance improvements, and non-critical bug fixes converge here. Continuous Integration (CI) test suites run on every commit. |
+Use lowercase, short, descriptive names. Include an issue ID when one exists. One branch should have a reviewable objective; avoid accumulating unrelated milestones in one branch. Existing historical branches are not renamed merely to satisfy this policy.
 
----
+## 3. Normal Development Flow
 
-## 2. Supporting Branch Conventions
+1. Update local `dev` from `origin/dev` and create a short-lived branch from it.
+2. Implement a focused change with the relevant tests and English documentation.
+3. Write English Conventional Commits, for example `feat(launcher): add startup readiness check` or `fix(runtime): preserve engine data during update`.
+4. Open a PR targeting `dev`. Describe user-visible behavior, validation evidence, limitations and related requirement or issue IDs.
+5. Keep the branch current with `dev` before merging. Resolve conflicts on the working branch and rerun affected checks.
+6. Merge only after review and required checks pass. Prefer squash merge for feature, bug-fix and documentation PRs, yielding one clear change in `dev` per PR. Delete the temporary branch after merge.
 
-All temporary branches must branch off the appropriate source and follow the standardized naming convention:
+Never merge a feature branch directly into `main`. Never force-push a shared integration or release branch. Rebasing a personal branch before review is allowed; do not rewrite a shared branch after others depend on it.
 
-```
-<prefix>/<issue-id-or-descriptor>
-```
+## 4. Release Flow
 
-| Type | Source Branch | Target Branch | Description & Example |
-| :--- | :--- | :--- | :--- |
-| **`feature/*`** | `dev` | `dev` | New features, nodes, UI modules.<br>`feature/reactflow-canvas`<br>`feature/isolated-comfy-installer` |
-| **`bugfix/*`** | `dev` | `dev` | Non-critical bug fixes during normal development.<br>`bugfix/dag-cycle-detection`<br>`bugfix/node-cache-hash` |
-| **`release/*`** | `dev` | `main` & `dev` | Preparing a new production release (version bumping, changelog update, final freeze testing).<br>`release/v0.2.0` |
-| **`hotfix/*`** | `main` | `main` & `dev` | Critical production security or runtime bug fixes requiring immediate deployment.<br>`hotfix/v0.1.1` |
+1. Once the planned scope is integrated in `dev`, create `release/vX.Y.Z` from the current `dev` commit. No new features enter the release branch.
+2. On the release branch, allow only regression fixes, version/changelog updates, packaging, security fixes and release documentation. Record the exact commit and test environment for the release candidate.
+3. Run the complete release gate: required CI, Windows package installation and launcher checks, supported local/cloud creation journeys, update/recovery tests, and documented open limitations. Mock tests alone do not establish real engine or provider compatibility.
+4. Open a PR from `release/vX.Y.Z` to `main`. Merge with a merge commit to preserve the release branch and the verified release candidate. Do not squash a release PR into unverified contents.
+5. Verify the resulting `main` commit and create an annotated tag `vX.Y.Z` on that commit. Publish artifacts and release notes from the tagged commit only. Publishing is a separate release action.
+6. Synchronize the released changes back into `dev` using a PR from `main` (or an equivalent reviewed back-merge that preserves the release commit). Resolve any conflicts and run affected checks. Then delete the release branch.
 
----
+If a release fix must also reach ongoing development before the final back-merge, apply it through a separate reviewed PR or wait for the back-merge. Do not silently cherry-pick the same change twice.
 
-## 3. Commit Message Standards (Conventional Commits)
+## 5. Hotfix Flow
 
-All commits across all branches must follow the [Conventional Commits v1.0.0](https://www.conventionalcommits.org/) specification:
+1. Create `hotfix/vX.Y.Z` from the current `main` release tag or commit, not from `dev`.
+2. Make the smallest correction needed. Add a regression test when it verifies the failure. Update version and release notes.
+3. Run targeted checks plus affected release smoke tests. Open a PR to `main` and merge with a merge commit after review.
+4. Tag the merged `main` commit with the patch version and publish artifacts from that tag.
+5. Back-merge `main` to `dev` through a reviewed PR. If a release branch is open, also synchronize the hotfix into that release branch and resolve conflicts before release.
 
-```
-<type>(<optional scope>): <description>
+## 6. Versioning and Tags
 
-[optional body]
+Use SemVer tags in the form `vMAJOR.MINOR.PATCH`. Increment major for incompatible public project/workflow formats or APIs, minor for compatible features, and patch for compatible fixes. Before a public 1.0 release, explain any compatibility breaks in release notes even when SemVer allows flexibility.
 
-[optional footer(s)]
-```
+The repository may contain historical commits without release tags. This policy governs future releases; do not create retrospective tags without matching verified artifacts and a documented reason.
 
-### Allowed Types
+## 7. Protection, Review and Checks
 
-- **`feat`**: Introduces a new feature or user-facing capability.
-- **`fix`**: Fixes a bug.
-- **`docs`**: Documentation changes only.
-- **`style`**: Formatting, missing semi-colons, whitespace (no code change).
-- **`refactor`**: Code restructuring that neither fixes a bug nor adds a feature.
-- **`perf`**: Performance improvement.
-- **`test`**: Adding missing tests or correcting existing tests.
-- **`build`**: Changes that affect the build system or external dependencies (npm, uv, pyproject, vite).
-- **`ci`**: Changes to CI/CD configuration files and scripts (GitHub Actions).
-- **`chore`**: Maintenance tasks, housekeeping, tooling updates.
+Configure repository branch protection for `main` and `dev`: no direct pushes, required status checks, and up-to-date PR branches.
 
-### Examples
+- **Merging into `dev`**: Feature, bug-fix, and documentation pull requests targeting `dev` may be self-merged once all required automated checks pass and the PR checklist is fulfilled. Failing checks must never be bypassed.
+- **Promotion to `main`**: Release (`release/vX.Y.Z`) and hotfix (`hotfix/vX.Y.Z`) pull requests targeting `main` strictly require product-owner release approval and verified release evidence before publication.
 
-- `feat(canvas): add single-node run button and isolated execution trigger`
-- `fix(engine): resolve race condition in dag topological sort when nodes fail`
-- `docs(readme): add quickstart guide for isolated comfyui runtime`
-- `refactor(runners): unify openai-compatible request payload adapter`
+At minimum, gate changes with the checks that exist and are relevant: backend tests, frontend type-check/build, Rust launcher build/tests, formatting/lint where configured, and a documentation/link check. Add CI workflows for these gates if missing. Real Windows packaging, local engines, cloud providers and hardware need recorded manual/integration evidence at release time; mark unavailable checks unverified rather than passed.
 
----
+Never commit secrets, model weights, generated assets, local runtime directories, or build outputs unless a reviewed packaging requirement explicitly calls for a generated artifact. Keep application and engine update changes separate where possible.
 
-## 4. Pull Request (PR) Lifecycle & Merge Rules
+## 8. Current Large Feature Branch
 
-### Branch Protection Rules
-1. **No direct pushes** to `main` or `dev`.
-2. **Review Requirements**: At least 1 code review approval required before merge.
-3. **CI Status Checks**: All automated tests, type checks (`tsc`, `pyright`/`mypy`), and linter runs (`eslint`, `ruff`) must pass.
-4. **Up-to-Date**: Branches must be rebased or updated with target before merging.
+`feature/berry-product-alignment` currently holds reported M0–M6 implementation. Treat its completion reports as developer evidence awaiting unified acceptance. Do not merge it into `main` or tag a release directly.
 
-### Merge Strategies
-- **Merging into `dev`**: **Squash and Merge** or **Rebase and Merge** (keeps the integration history linear and readable).
-- **Merging into `main`**: **Merge Commit** (preserves the release branch history and tag pointers) or **Squash and Merge** for hotfixes.
-
----
-
-## 5. Release Workflow & Semantic Versioning
-
-This project adheres to **Semantic Versioning (SemVer 2.0.0)**:
-`MAJOR.MINOR.PATCH`
-
-- **MAJOR**: Incompatible API or workflow graph schema breaking changes.
-- **MINOR**: Backward-compatible new functionality (e.g., new node types, runner drivers).
-- **PATCH**: Backward-compatible bug fixes and security patches.
-
-### Step-by-Step Release Procedure
-
-1. **Cut Release Branch**:
-   ```bash
-   git checkout dev
-   git pull origin dev
-   git checkout -b release/v0.2.0
-   ```
-2. **Stabilization & Bumping**:
-   - Bump version numbers in `package.json`, `pyproject.toml`, etc.
-   - Update `CHANGELOG.md` with notes from the milestone.
-   - Run full regression tests and verification suites.
-3. **Merge Release into `main`**:
-   - Create PR from `release/v0.2.0` into `main`.
-   - Once approved and merged, tag the release:
-     ```bash
-     git checkout main
-     git pull origin main
-     git tag -a v0.2.0 -m "Release v0.2.0: Isolated ComfyUI engine integration"
-     git push origin v0.2.0
-     ```
-4. **Back-merge into `dev`**:
-   - Merge `release/v0.2.0` back into `dev` to ensure version bumps and changelog persist.
-   - Delete `release/v0.2.0`.
+Before integrating it into `dev`, prepare a PR with a change summary by requirement, current test/build results, known limitations, and a separate list of real Windows, local-engine and cloud scenarios that remain unverified. Review the diff for unrelated changes and split follow-up work into focused branches where practical. If the branch cannot be split safely after shared commits, integrate it as one reviewed exception and return to small branches afterward. Unified product acceptance and release promotion remain separate decisions.
