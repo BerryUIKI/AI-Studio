@@ -68,3 +68,37 @@ export interface ImageCardData {
   provenance?: GenerationProvenance;
   label?: string;
 }
+
+export interface AgentActionStep {
+  step_number: number;
+  action: CreativeActionType;
+  engine_id: string;
+  model: string;
+  parameters: Record<string, any>;
+  description?: string;
+}
+
+export interface AgentProposal {
+  id: string;
+  intent: string;
+  title: string;
+  summary: string;
+  target_engine: string;
+  model: string;
+  parameters: Record<string, any>;
+  chain_steps: AgentActionStep[];
+  estimated_calls: number;
+  cost_disclaimer: string;
+  explanation: string;
+  requires_user_approval: boolean;
+  approved: boolean;
+}
+
+export interface AgentChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  proposal?: AgentProposal;
+  created_at: string;
+}
+
