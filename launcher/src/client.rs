@@ -88,6 +88,22 @@ pub struct EngineUpdateManifest {
     pub rollback_performed: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliCreativeResult {
+    pub success: bool,
+    pub task_id: String,
+    pub asset_id: Option<String>,
+    pub image_url: Option<String>,
+    pub video_url: Option<String>,
+    pub width: u32,
+    pub height: u32,
+    pub duration_seconds: Option<f64>,
+    pub fps: Option<u32>,
+    pub provenance: Option<serde_json::Value>,
+    pub is_cached: bool,
+    pub error_message: Option<String>,
+}
+
 pub struct BerryClient {
     base_url: String,
     agent: ureq::Agent,
@@ -188,5 +204,106 @@ impl BerryClient {
         let mut resp = self.agent.post(&url).send_empty().map_err(|e| format!("Failed to update application: {}", e))?;
         resp.body_mut().read_json::<serde_json::Value>().map_err(|e| format!("JSON decode failed: {}", e))
     }
+
+    pub fn execute_creative(&self, payload: serde_json::Value) -> Result<CliCreativeResult, String> {
+        let url = format!("{}/api/v1/creative/execute", self.base_url);
+        let creative_agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(300)))
+            .build()
+            .new_agent();
+        let mut resp = creative_agent.post(&url)
+            .send_json(payload)
+            .map_err(|e| format!("Creative execution request failed: {}", e))?;
+        resp.body_mut().read_json::<CliCreativeResult>().map_err(|e| format!("JSON decode failed: {}", e))
+    }
+
+    pub fn download_asset_bytes(&self, path_or_url: &str) -> Result<Vec<u8>, String> {
+        let url = if path_or_url.starts_with("http") {
+            path_or_url.to_string()
+        } else {
+            format!("{}{}", self.base_url, path_or_url)
+        };
+        let mut resp = self.agent.get(&url).call().map_err(|e| format!("Failed to download asset from {}: {}", url, e))?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut resp.body_mut().as_reader(), &mut bytes)
+            .map_err(|e| format!("Failed to read asset bytes: {}", e))?;
+        Ok(bytes)
+    }
+
+    pub fn list_active_tasks(&self) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/v1/tasks/active", self.base_url);
+        let mut resp = self.agent.get(&url).call().map_err(|e| format!("Failed to list active tasks: {}", e))?;
+        resp.body_mut().read_json::<serde_json::Value>().map_err(|e| format!("JSON decode failed: {}", e))
+    }
+
+    pub fn cancel_task(&self, task_id: &str) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/v1/tasks/{}/cancel", self.base_url, task_id);
+        let mut resp = self.agent.post(&url).send_empty().map_err(|e| format!("Failed to cancel task {}: {}", task_id, e))?;
+        resp.body_mut().read_json::<serde_json::Value>().map_err(|e| format!("JSON decode failed: {}", e))
+    }
+
+    pub fn get_system_info(&self) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/v1/system/info", self.base_url);
+        let mut resp = self.agent.get(&url).call().map_err(|e| format!("Failed to get system info: {}", e))?;
+        resp.body_mut().read_json::<serde_json::Value>().map_err(|e| format!("JSON decode failed: {}", e))
+    }
+
+    pub fn upload_asset_from_file(&self, file_path: &std::path::Path) -> Result<String, String> {
+        let bytes = std::fs::read(file_path).map_err(|e| format!("Failed to read file {}: {}", file_path.display(), e))?;
+        let filename = file_path.file_name().and_then(|n| n.to_str()).unwrap_or("input_asset.png");
+        let b64 = base64_encode(&bytes);
+        let url = format!("{}/api/v1/creative/upload-base64", self.base_url);
+        let is_video = filename.ends_with(".mp4") || filename.ends_with(".webm");
+        let payload = serde_json::json!({
+            "filename": filename,
+            "content_base64": b64,
+            "media_type": if is_video { "video" } else { "image" }
+        });
+        let mut resp = self.agent.post(&url)
+            .send_json(payload)
+            .map_err(|e| format!("Failed to upload asset: {}", e))?;
+        let res: serde_json::Value = resp.body_mut().read_json().map_err(|e| format!("JSON decode failed: {}", e))?;
+        res.get("id").and_then(|id| id.as_str()).map(|s| s.to_string()).ok_or_else(|| "Missing asset ID in response".to_string())
+    }
 }
+
+pub fn base64_encode(data: &[u8]) -> String {
+    const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as usize;
+        let b1 = if chunk.len() > 1 { chunk[1] as usize } else { 0 };
+        let b2 = if chunk.len() > 2 { chunk[2] as usize } else { 0 };
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        result.push(CHARSET[(triple >> 18) & 0x3F] as char);
+        result.push(CHARSET[(triple >> 12) & 0x3F] as char);
+        if chunk.len() > 1 {
+            result.push(CHARSET[(triple >> 6) & 0x3F] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(CHARSET[triple & 0x3F] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base64_encode() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"Berry AI Studio"), "QmVycnkgQUkgU3R1ZGlv");
+    }
+}
+
+
 

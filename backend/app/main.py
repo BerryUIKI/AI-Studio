@@ -524,6 +524,26 @@ async def upload_creative_asset(file: UploadFile = File(...)) -> AssetRecord:
     return await asset_store.save_bytes(data, filename=filename, media_type=content_type)
 
 
+class AssetUploadBase64Request(BaseModel):
+    filename: str
+    content_base64: str
+    media_type: str = "image"
+
+
+@app.post("/api/v1/creative/upload-base64", response_model=AssetRecord)
+async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRecord:
+    """Upload asset encoded in base64 (used by CLI and programmatic API clients)."""
+    import base64
+    import binascii
+    try:
+        data = base64.b64decode(req.content_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}")
+    return await asset_store.save_bytes(data, filename=req.filename, media_type=req.media_type)
+
+
+
+
 # ---------------------------------------------------------------------------
 # Cloud Providers & BYOK Credentials Endpoints (M4)
 # ---------------------------------------------------------------------------
