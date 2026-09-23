@@ -312,6 +312,82 @@ async def _call_fal_ai_action(
         return images[0]["url"] if images else None
 
 
+async def _call_fal_ai_video(
+    action: str,
+    prompt: str,
+    api_key: str,
+    image_b64: Optional[str] = None,
+    fps: int = 16,
+    num_frames: int = 25,
+    motion_bucket_id: int = 127,
+) -> str | None:
+    """Call Fal.ai video endpoints (Fast SVD for img2video, Luma/Kling for txt2video)."""
+    if not api_key:
+        raise APIRunnerError("FAL_KEY / IMAGE_API_KEY not set for Fal.ai video")
+
+    headers = {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        if action == "img2video":
+            if not image_b64:
+                raise ValueError("Source image required for Fal.ai img2video")
+            endpoint = "https://fal.run/fal-ai/fast-svd/image-to-video"
+            payload = {
+                "image_url": f"data:image/png;base64,{image_b64}",
+                "motion_bucket_id": motion_bucket_id,
+                "fps": fps,
+                "cond_aug": 0.02,
+                "steps": 25,
+            }
+        else:  # txt2video
+            endpoint = "https://fal.run/fal-ai/luma-dream-machine"
+            payload = {
+                "prompt": prompt,
+                "aspect_ratio": "16:9",
+                "loop": False,
+            }
+
+        response = await client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        if "video" in data and isinstance(data["video"], dict):
+            return data["video"].get("url")
+        return data.get("video_url") or data.get("url")
+
+
+async def _call_siliconflow_video(
+    action: str,
+    prompt: str,
+    api_key: str,
+    image_b64: Optional[str] = None,
+) -> str | None:
+    """Call SiliconFlow video generation endpoints (CogVideoX)."""
+    if not api_key:
+        raise APIRunnerError("SILICONFLOW_API_KEY not set for SiliconFlow video")
+
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        endpoint = "https://api.siliconflow.cn/v1/video/submit"
+        payload: Dict[str, Any] = {
+            "model": "THUDM/CogVideoX-5b",
+            "prompt": prompt,
+        }
+        if action == "img2video" and image_b64:
+            payload["image"] = f"data:image/png;base64,{image_b64}"
+
+        response = await client.post(endpoint, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        # In SiliconFlow async video, url is returned in uri or results
+        if "uri" in data:
+            return data["uri"]
+        if "data" in data and isinstance(data["data"], dict):
+            return data["data"].get("url")
+        return data.get("url")
+
+
+
 # ---------------------------------------------------------------------------
 # Input node: passthrough (no API call needed)
 # ---------------------------------------------------------------------------

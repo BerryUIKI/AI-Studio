@@ -14,6 +14,11 @@ interface CreativeState {
   referenceImage: ImageCardData | null;
   inpaintModalOpen: boolean;
   upscaleModalOpen: boolean;
+  videoModalOpen: boolean;
+  fps: number;
+  numFrames: number;
+  motionBucketId: number;
+  durationSeconds: number;
   isGenerating: boolean;
   error: string | null;
 
@@ -23,8 +28,12 @@ interface CreativeState {
   setEngineId: (id: string) => void;
   setModel: (m: string) => void;
   setReferenceImage: (img: ImageCardData | null) => void;
+  setFps: (fps: number) => void;
+  setNumFrames: (frames: number) => void;
+  setMotionBucketId: (mb: number) => void;
   openInpaint: (img: ImageCardData) => void;
   openUpscale: (img: ImageCardData) => void;
+  openImg2Video: (img: ImageCardData) => void;
   closeModals: () => void;
   randomizeSeed: () => void;
   executeCreativeAction: (override?: Partial<CreativeActionRequest>) => Promise<CreativeActionResult | null>;
@@ -43,6 +52,11 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   referenceImage: null,
   inpaintModalOpen: false,
   upscaleModalOpen: false,
+  videoModalOpen: false,
+  fps: 16,
+  numFrames: 25,
+  motionBucketId: 127,
+  durationSeconds: 3.0,
   isGenerating: false,
   error: null,
 
@@ -52,9 +66,13 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   setEngineId: (engineId) => set({ engineId }),
   setModel: (model) => set({ model }),
   setReferenceImage: (referenceImage) => set({ referenceImage }),
+  setFps: (fps) => set({ fps }),
+  setNumFrames: (numFrames) => set({ numFrames }),
+  setMotionBucketId: (motionBucketId) => set({ motionBucketId }),
   openInpaint: (img) => set({ referenceImage: img, inpaintModalOpen: true }),
   openUpscale: (img) => set({ referenceImage: img, upscaleModalOpen: true }),
-  closeModals: () => set({ inpaintModalOpen: false, upscaleModalOpen: false }),
+  openImg2Video: (img) => set({ referenceImage: img, videoModalOpen: true }),
+  closeModals: () => set({ inpaintModalOpen: false, upscaleModalOpen: false, videoModalOpen: false }),
   randomizeSeed: () => set({ seed: Math.floor(Math.random() * 2147483647) }),
 
   executeCreativeAction: async (override) => {
@@ -73,6 +91,10 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       cfg_scale: s.cfgScale,
       seed: s.seed,
       input_image_id: s.referenceImage?.assetId,
+      fps: s.fps,
+      num_frames: s.numFrames,
+      motion_bucket_id: s.motionBucketId,
+      duration_seconds: s.durationSeconds,
       ...override,
     };
 
@@ -88,20 +110,23 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       }
 
       const result: CreativeActionResult = await resp.json();
-      if (!result.success || !result.image_url) {
-        throw new Error(result.error_message || 'Image generation failed');
+      if (!result.success || (!result.image_url && !result.video_url)) {
+        throw new Error(result.error_message || 'Generation failed');
       }
 
-      // Add as ImageCard on canvas
+      // Add as ImageCard / VideoCard on canvas
       const canvasStore = useCanvasStore.getState();
       const existingNodes = canvasStore.nodes;
       const xOffset = 80 + (existingNodes.length % 5) * 360;
       const yOffset = 80 + Math.floor(existingNodes.length / 5) * 420;
 
-      const newCardId = `image_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const isVideo = Boolean(result.video_url || action === 'txt2video' || action === 'img2video');
+      const newCardId = `${isVideo ? 'video' : 'image'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const cardData: ImageCardData = {
         assetId: result.asset_id,
-        imageUrl: result.image_url,
+        imageUrl: result.image_url || result.video_url || '',
+        videoUrl: result.video_url,
+        mediaType: isVideo ? 'video' : 'image',
         width: result.width,
         height: result.height,
         provenance: result.provenance,

@@ -17,6 +17,7 @@ import { FlowCanvas } from './components/canvas/FlowCanvas';
 import { CreationDock } from './components/canvas/CreationDock';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
+import { VideoModal } from './components/canvas/VideoModal';
 import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
 import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
 import { useCanvasStore } from './stores/useCanvasStore';
@@ -238,6 +239,7 @@ export default function App() {
       {/* Contextual Action Modals */}
       <InpaintModal />
       <UpscaleModal />
+      <VideoModal />
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
       <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
     </div>

@@ -80,13 +80,25 @@ class AssetStore:
         timeout: float = 30.0,
     ) -> AssetRecord:
         """Download remote image and persist into managed asset store."""
+        return await self.save_media_from_url(url, filename=filename, media_type="image", project_id=project_id, timeout=timeout)
+
+    async def save_media_from_url(
+        self,
+        url: str,
+        filename: Optional[str] = None,
+        media_type: str = "image",
+        project_id: Optional[str] = None,
+        timeout: float = 60.0,
+    ) -> AssetRecord:
+        """Download remote image or video and persist into managed asset store."""
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.get(url)
             resp.raise_for_status()
             data = resp.content
 
-        name = filename or Path(url.split("?")[0]).name or f"image_{uuid.uuid4().hex[:8]}.png"
-        return await self.save_bytes(data=data, filename=name, media_type="image", project_id=project_id)
+        default_ext = ".mp4" if "video" in media_type else ".png"
+        name = filename or Path(url.split("?")[0]).name or f"media_{uuid.uuid4().hex[:8]}{default_ext}"
+        return await self.save_bytes(data=data, filename=name, media_type=media_type, project_id=project_id)
 
     async def get_asset(self, asset_id: str) -> Optional[AssetRecord]:
         conn = await self.manager.get_connection()
