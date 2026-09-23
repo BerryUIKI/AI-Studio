@@ -13,6 +13,8 @@ dist/
 dist-ssr/
 build/
 *.local
+target/
+launcher/target/
 
 # Python
 __pycache__/
