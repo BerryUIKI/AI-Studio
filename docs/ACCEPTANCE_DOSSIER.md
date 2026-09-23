@@ -8,8 +8,8 @@
 
 ## 1. Release Package Artifact & Exact Commit
 
-- **Exact Git Review Commit (`dev`)**: [`4af27ec20ef8db25d9e0e46e5b437de5096ee1b9`](https://github.com/BerryUIKI/AI-Studio/commit/4af27ec20ef8db25d9e0e46e5b437de5096ee1b9)
-- **Preceding Integration Commit (`dev`)**: [`674611827de2a20854e55c9dd509dda9fb746de4`](https://github.com/BerryUIKI/AI-Studio/commit/674611827de2a20854e55c9dd509dda9fb746de4)
+- **Exact Git Review Commit (`dev`)**: [`befb14d8775f0a05a415ff6957db12ca87596ff1`](https://github.com/BerryUIKI/AI-Studio/commit/befb14d8775f0a05a415ff6957db12ca87596ff1)
+- **Preceding Integration Commit (`dev`)**: [`c35f3b177265a0445d4df44b2609071dc015502c`](https://github.com/BerryUIKI/AI-Studio/commit/c35f3b177265a0445d4df44b2609071dc015502c)
 - **Primary Package Artifact**:
   - **Archive**: `dist/Berry-AI-Studio-v0.1.0-windows-x64.zip` (18.9 MB)
   - **Unpacked Distribution Directory**: `dist/Berry-AI-Studio-v0.1.0-windows-x64/`
@@ -50,7 +50,7 @@ All changes have been developed on focused feature branches and integrated into 
 | **[PR #17](https://github.com/BerryUIKI/AI-Studio/pull/17)** | `docs/dossier-roadmap-sync` | `docs: synchronize acceptance dossier and roadmap post v0.1 with dev integration commits` | 3/3 Passed | [`0a59aba`](https://github.com/BerryUIKI/AI-Studio/commit/0a59aba) |
 | **[PR #18](https://github.com/BerryUIKI/AI-Studio/pull/18)** | `feature/repair-agent-safety` | `fix(workflow): enforce model family guards and ambiguity blocking in workflow repair` | 3/3 Passed | [`3cf860a`](https://github.com/BerryUIKI/AI-Studio/commit/3cf860a) |
 | **[PR #19](https://github.com/BerryUIKI/AI-Studio/pull/19)** | `feature/hardware-matrix-realism` | `fix(hardware): accurately classify AMD, Intel, and Apple Silicon as candidate or source-compatible` | 3/3 Passed | [`c35f3b1`](https://github.com/BerryUIKI/AI-Studio/commit/c35f3b1) |
-| **[PR #20](https://github.com/BerryUIKI/AI-Studio/pull/20)** | `feature/video-format-dossier-alignment` | `fix(video): support video containers and animated webp, fix MIME type, align dossier evidence` | 3/3 Passed | Pending |
+| **[PR #20](https://github.com/BerryUIKI/AI-Studio/pull/20)** | `feature/video-format-dossier-alignment` | `fix(video): support video containers and animated webp, fix MIME type, align dossier evidence` | 3/3 Passed | [`befb14d`](https://github.com/BerryUIKI/AI-Studio/commit/befb14d) |
 
 ---
 
