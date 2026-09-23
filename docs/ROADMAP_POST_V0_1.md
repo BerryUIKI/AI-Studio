@@ -53,7 +53,9 @@ This roadmap operationalizes the long-term approved technical directions for Ber
     - AnimateDiff SD1.5 / SDXL macro subgraphs (`AnimateDiffLoaderWithContext`, `KSampler`, `VHS_VideoCombine` / `SaveAnimatedWEBP`).
 - **Technical Boundaries**:
   - Video port type conforms to the 5-type contract (`video`).
-  - Output stored in `AssetStore` with media type `video/mp4` or `video/webm`, content-addressed via SHA-256.
+  - Output stored in `AssetStore` with media type `video/mp4`, `video/webm`, or `image/webp` (for animated WebP from standard ComfyUI). Content-addressed via SHA-256.
+  - Video playback in GUI: native `<video>` for MP4/WebM containers; `<img>` with "Animated WebP" badge for animated WebP outputs.
+  - Export: downloads preserve actual container extension (`.mp4`, `.webm`, or `.webp`).
   - Deterministic dirty-check caching accounts for video-specific parameters: `motion_bucket_id`, `fps`, `num_frames`, `duration`.
 - **Data & Project Compatibility**:
   - SQLite database persists video assets and execution records. Project schema v1 loads seamlessly; canvas renders video cards.
@@ -107,11 +109,12 @@ This roadmap operationalizes the long-term approved technical directions for Ber
   - The UI presents the plan with an **"Approve & Run"** button and editable fields.
   - The user can adjust parameters or approve execution; the Agent dispatches the action to `CreativeRunner` and presents results with next-step suggestions.
 - **Supported Capability Matrix**:
-  - Natural-language mapping to all creative actions (txt2img, img2img, inpaint, upscale, txt2video).
-  - Intent classification, parameter extraction, and template matching.
+  - Deterministic keyword and regex mapping to creative actions (txt2img, img2img, inpaint, upscale, txt2video, img2video).
+  - Parameter extraction (aspect ratios, step count, seeds, engines) and template recommendation.
 - **Technical Boundaries**:
-  - Backend `AgentService` with rule-based and LLM-assisted intent resolution.
+  - Backend `AgentService` with rule-based and regex intent resolution; does not claim general unconstrained natural-language understanding or arbitrary workflow synthesis.
   - Strict human-in-the-loop gate: execution requires user approval token.
+  - Transparent plan disclosure with cost, engine, and parameter visibility.
   - Never mutates engine files or executes uninspected external commands.
 - **Data & Project Compatibility**:
   - Conversation sessions and generated proposals are persisted in project SQLite tables.
@@ -120,35 +123,37 @@ This roadmap operationalizes the long-term approved technical directions for Ber
   - UI displays proposal, parameters, and confirmation dialog.
   - Execution only dispatches upon explicit user confirmation.
 - **Explicit Exclusions**:
-  - Autonomous loop execution without user confirmation; silent billing against cloud accounts.
+  - Unbounded conversational reasoning without explicit action templates; autonomous loop execution without user confirmation; silent billing against cloud accounts.
 
 ---
 
 ### M10: Agent-Assisted Construction, Validation, Repair, and Execution of ComfyUI Workflows
 
 - **User Journey**:
-  - Users can import complex ComfyUI workflows or ask the Agent to *"Add face detailing to my workflow"* or *"Diagnose why this workflow fails"*.
+  - Users can import complex ComfyUI workflows or ask the Agent to *"Diagnose why this workflow fails"*.
   - The Agent analyzes the ComfyUI DAG:
     - Validates node connections against port types (`MODEL`, `CLIP`, `VAE`, `LATENT`, `IMAGE`).
     - Checks for missing custom node classes and missing checkpoint/LoRA models.
     - Identifies topological cycles or disconnected subgraphs.
-  - If errors exist, the Agent proposes a concrete **Repair Diff** (e.g. *"Node 8 (VAEDecode) is missing VAE input; connect from Node 4 [slot 2]"*).
+  - If errors exist, the Agent proposes a concrete **Repair Diff** (e.g. *"Node 8 (VAEDecode) is missing VAE input; connect from unambiguous Node 4 [slot 2]"*).
+  - **Ambiguity Guards**: When multiple potential sources exist for an input slot (e.g., multiple VAE loaders or EmptyLatentImage nodes), automatic reconnection is blocked (`substitution_blocked`) rather than guessing, preventing corrupted dataflow.
+  - **Model Family Guards**: Missing checkpoints are substituted only within the exact same architecture family (`sd15`, `sdxl`, `flux`, `svd`); cross-family or unknown substitutions are strictly blocked.
   - The user inspects the visual diff and accepts the repair.
   - Once validated, the workflow can be executed directly or registered into the `TemplateRegistry`.
 - **Supported Capability Matrix**:
-  - ComfyUI DAG syntax parser, topological sort validator, and port type-checker.
-  - Common pattern repairs: missing VAE decode, mismatched latent dimensions, missing LoRA bypass.
-  - Model dependency resolver: checks against indexed local models.
+  - ComfyUI DAG syntax parser, topological sort cycle detector, and port type-checker.
+  - Safe pattern repairs: unambiguous single-source slot reconnections, same-family model substitution.
+  - Model dependency resolver: checks against indexed local models with family inference.
 - **Technical Boundaries**:
   - Pure Python DAG analysis engine in `backend/app/core/workflow_validator.py` and `backend/app/core/workflow_repair.py`.
   - Sandboxed validation without running untrusted Python node code.
 - **Data & Project Compatibility**:
   - Validated workflows can be saved as custom templates in `TemplateRegistry`.
 - **Acceptance Criteria**:
-  - Automated tests verify detection of broken connections, missing models, and invalid node types.
-  - Repair engine fixes broken workflows and produces valid, executable graphs.
+  - Automated tests verify detection of broken connections, missing models, cycles, and type mismatches.
+  - Repair engine fixes broken workflows safely and blocks ambiguous or cross-family mutations.
 - **Explicit Exclusions**:
-  - Arbitrary Python code execution inside custom nodes; automated downloading of untrusted git repositories.
+  - Arbitrary Python code execution inside custom nodes; automated downloading of untrusted git repositories; guessing ambiguous wiring.
 
 ---
 
@@ -158,12 +163,12 @@ This roadmap operationalizes the long-term approved technical directions for Ber
   - Users with AMD Radeon or Intel Arc discrete GPUs run Berry AI Studio.
   - The Environment Manager detects the GPU hardware, reports detected VRAM, and displays the appropriate acceleration backend (DirectML / ROCm / OneAPI IPEX).
   - Engine supervisors automatically pass vendor-optimized launch flags to ComfyUI (e.g., `--directml`, `--use-split-cross-attention`, `--lowvram`).
-  - Unsupported or untested configurations display clear performance caveats and recommendation to use Cloud BYOK if local performance is inadequate.
+  - Candidate configurations are clearly labeled as "Candidate Architecture (Unverified on Physical Hardware in Current Session)" with guidance to use Cloud BYOK if local performance is inadequate.
 - **Supported Capability Matrix**:
-  - *Reference Hardware*:
+  - *Candidate Reference Hardware*:
     - AMD Radeon RX 7900 XTX / 7800 XT / 6700 XT (Windows DirectML, Linux ROCm 6.x).
     - Intel Arc A770 / A750 (Windows DirectML, Linux IPEX/OneAPI).
-  - *Status Classification*: Explicitly distinguished as "Verified on Reference Hardware" vs. "Experimental / DirectML Emulated".
+  - *Status Classification*: Explicitly distinguished as "Verified on Physical Hardware" (NVIDIA CUDA) vs. "Candidate Architecture (Unverified on Physical Hardware in Current Session)" vs. "Experimental / DirectML Emulated".
 - **Technical Boundaries**:
   - Extend `backend/app/runtime/hardware.py` to detect AMD GPUs via `rocm-smi` (Linux) and WMI `Win32_VideoController` (Windows), and Intel Arc GPUs via WMI.
   - Update `HardwareReadiness` schema with vendor classification (`nvidia`, `amd`, `intel`, `apple_silicon`, `cpu_only`).
@@ -173,9 +178,9 @@ This roadmap operationalizes the long-term approved technical directions for Ber
 - **Acceptance Criteria**:
   - Hardware detector correctly identifies AMD and Intel GPUs and reports VRAM.
   - Engine supervisor injects `--directml` or vendor flags when non-NVIDIA GPU is selected.
-  - `docs/SUPPORT_MATRIX.md` documents verified vs. unverified combinations.
+  - `docs/SUPPORT_MATRIX.md` documents verified vs. candidate and unverified combinations without claiming physical verification for unverified hardware.
 - **Explicit Exclusions**:
-  - Custom kernel compilation; driver installation scripts; obsolete legacy GPUs lacking FP16 support.
+  - Custom kernel compilation; driver installation scripts; claiming physical hardware verification without physical generation run logs.
 
 ---
 

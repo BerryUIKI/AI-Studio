@@ -698,7 +698,11 @@ async def get_asset_content(asset_id: str) -> FileResponse:
     abs_path = asset_store.get_absolute_path(rec)
     if not abs_path.is_file():
         raise HTTPException(status_code=404, detail="Asset file missing on disk")
-    return FileResponse(abs_path, media_type="image/png")
+
+    import mimetypes
+    guessed_type, _ = mimetypes.guess_type(str(abs_path))
+    content_type = guessed_type or ("video/mp4" if rec.media_type == "video" else "image/png")
+    return FileResponse(abs_path, media_type=content_type)
 
 
 @app.post("/api/v1/workflow/cancel/{run_id}")

@@ -47,25 +47,35 @@ All changes have been developed on focused feature branches and integrated into 
 | **[PR #14](https://github.com/BerryUIKI/AI-Studio/pull/14)** | `feature/m10-workflow-repair` | `feat(comfy): workflow validation and automated repair engine (M10)` | 3/3 Passed | [`60c3620`](https://github.com/BerryUIKI/AI-Studio/commit/60c3620) |
 | **[PR #15](https://github.com/BerryUIKI/AI-Studio/pull/15)** | `feature/m11-discrete-gpus` | `feat(hardware): support non-NVIDIA discrete GPUs with DirectML and launch flag injection (M11)` | 3/3 Passed | [`7f700b2`](https://github.com/BerryUIKI/AI-Studio/commit/7f700b2) |
 | **[PR #16](https://github.com/BerryUIKI/AI-Studio/pull/16)** | `feature/m12-cross-platform` | `feat(platform): cross-platform desktop adapters for macOS Metal and Linux (M12)` | 3/3 Passed | [`2551796`](https://github.com/BerryUIKI/AI-Studio/commit/2551796) |
+| **[PR #17](https://github.com/BerryUIKI/AI-Studio/pull/17)** | `docs/dossier-roadmap-sync` | `docs: synchronize acceptance dossier and roadmap post v0.1 with dev integration commits` | 3/3 Passed | [`0a59aba`](https://github.com/BerryUIKI/AI-Studio/commit/0a59aba) |
+| **[PR #18](https://github.com/BerryUIKI/AI-Studio/pull/18)** | `feature/repair-agent-safety` | `fix(workflow): enforce model family guards and ambiguity blocking in workflow repair` | 3/3 Passed | [`3cf860a`](https://github.com/BerryUIKI/AI-Studio/commit/3cf860a) |
+| **[PR #19](https://github.com/BerryUIKI/AI-Studio/pull/19)** | `feature/hardware-matrix-realism` | `fix(hardware): accurately classify AMD, Intel, and Apple Silicon as candidate or source-compatible` | 3/3 Passed | [`c35f3b1`](https://github.com/BerryUIKI/AI-Studio/commit/c35f3b1) |
+| **[PR #20](https://github.com/BerryUIKI/AI-Studio/pull/20)** | `feature/video-format-dossier-alignment` | `fix(video): support video containers and animated webp, fix MIME type, align dossier evidence` | 3/3 Passed | Pending |
 
 ---
 
-## 3. Supported Versions & Hardware
+## 3. Supported Versions & Hardware Evidence Tiers
 
-### Operating Systems
-- **Windows 10 / 11 (64-bit)**: Primary target platform for portable release distribution.
-- **Cross-Platform Core**: macOS / Linux supported for source checkouts; verified through core portable test suite.
+### Operating Systems & Platform Verification Status
+- **Windows 10 / 11 (64-bit)**: **Physically Verified**. Tested on Windows 11 host with native Rust launcher, ComfyUI engine supervisor, single-instance Win32 mutex, and local inference.
+- **macOS (Apple Silicon, Metal MPS)**: **Source Compatible**. Directory paths, browser launcher commands, Unix domain socket single-instance checks, and Metal fp16 flags implemented and unit-tested; native macOS binary bundling and physical Apple Silicon execution remain unverified in this session.
+- **Linux (Ubuntu 22.04+)**: **Source Compatible**. Supervisor process handling, Unix domain socket locking, and headless CLI generation implemented and unit-tested; native Linux binary packaging and physical non-NVIDIA execution remain unverified in this session.
 
-### Hardware Tiers
+### Hardware Tiers & Real Evidence Separation
 - **Tier 1 (Cloud-Only / Featherweight)**:
   - **GPU**: None required (Zero GPU, Zero PyTorch on host).
   - **RAM**: 4 GB RAM minimum.
   - **Storage**: < 500 MB disk footprint.
-  - **Mode**: BYOK Cloud APIs (OpenAI, Fal.ai, SiliconFlow).
-- **Tier 2 (NVIDIA Local Inference)**:
-  - **GPU**: NVIDIA RTX (Turing, Ampere, Ada Lovelace, Blackwell) with minimum 6 GB VRAM (8 GB+ recommended).
-  - **Driver**: NVIDIA Driver 535+ with CUDA 12.1+.
-  - **Engines**: ComfyUI (managed or external), Stable Diffusion WebUI (AUTOMATIC1111).
+  - **Mode**: BYOK Cloud APIs (OpenAI, Fal.ai, SiliconFlow). Real API calls verified.
+- **Tier 2 (Physically Verified NVIDIA CUDA)**:
+  - **GPU**: NVIDIA RTX (RTX 3060 12GB Ampere, driver 572.70, CUDA 12.8 physically verified on host rig).
+  - **Engines**: ComfyUI (managed and external), Stable Diffusion WebUI (AUTOMATIC1111).
+- **Tier 3 (Candidate Architecture - Unverified Physical Non-NVIDIA Discrete GPUs)**:
+  - **Hardware**: AMD Radeon (DirectML / ROCm) and Intel Arc (DirectML / OneAPI IPEX).
+  - **Status**: Detection and launch flag injection implemented and verified via unit tests; physical generation unverified in this session.
+- **Tier 4 (Source-Compatible Desktop Adapters - Unverified Native Build)**:
+  - **Hardware**: Apple Silicon (MPS Metal).
+  - **Status**: Platform adapters implemented and unit-tested; native binary compilation and physical Mac runs unverified in this session.
 
 ---
 
@@ -138,6 +148,18 @@ cargo run --manifest-path launcher/Cargo.toml
 3. **Task Cancellation**:
    - Local engine cancellation dispatches interrupt signals (`/interrupt` on ComfyUI, `/sdapi/v1/interrupt` on SD WebUI).
    - Cloud task cancellation immediately flags the task as cancelled locally, but truthfully discloses: `"Cloud cancellation requested locally. Note: external cloud providers may continue asynchronous inference or incur compute charges."`
+4. **Video Generation & Container Formats**:
+   - Fal.ai (Fast SVD) and SiliconFlow (CogVideoX) output native MP4 (`video/mp4`, H.264).
+   - Standard ComfyUI (AnimateDiff/SVD) without custom nodes outputs animated WebP (`image/webp`) via `SaveAnimatedWEBP`. If `VHS_VideoCombine` with ffmpeg is installed, ComfyUI outputs native MP4.
+   - In the frontend canvas, MP4 and WebM containers render natively in `<video controls loop>`, while animated WebP renders via `<img>` with an "Animated WebP" badge.
+   - Downloads and exports strictly preserve the native container extension (`.mp4`, `.webm`, or `.webp`).
+5. **Conversational Agent Boundaries**:
+   - The assistant operates via deterministic keyword and regular expression intent matching against predefined creative action schemas.
+   - It does not claim general unconstrained natural-language reasoning or autonomous arbitrary workflow synthesis.
+   - All execution requires explicit user review and approval via the proposal confirmation gate.
+6. **Workflow Repair Ambiguity & Compatibility Guards**:
+   - The ComfyUI repair engine automatically reconnects slots only when an unambiguous single source exists in the DAG. If multiple sources exist, automatic connection is blocked (`substitution_blocked`) to avoid graph corruption.
+   - Checkpoint substitution is strictly constrained to matching architecture families (`sd15`, `sdxl`, `flux`, `svd`). Unknown or cross-family substitutions are blocked.
 
 ---
 
