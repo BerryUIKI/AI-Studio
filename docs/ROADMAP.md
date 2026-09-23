@@ -68,9 +68,15 @@ Exit: all in-scope requirements verified or explicitly returned to the product o
 
 Exit: L01–L12 in [Launcher and Environment Manager](LAUNCHER_MANAGER_REQUIREMENTS.md) have recorded Windows evidence. Earlier M0–M5 claims do not substitute for this gate.
 
-## Later Roadmap
+## Later Roadmap (Post-v0.1)
 
-Video generation, richer templates, Agent-assisted existing workflows then automated workflow construction/repair, clarified CLI integration, non-NVIDIA discrete GPU inference, and additional OS distributions.
+For the detailed, operationalized post-v0.1 specifications across M7–M12, see [`docs/ROADMAP_POST_V0_1.md`](ROADMAP_POST_V0_1.md).
+- **M7**: Video generation and usable video creation journey.
+- **M8**: Documented unified Berry CLI for creation and environment management.
+- **M9**: Conversational Agent control of existing workflows and engines.
+- **M10**: Agent-assisted construction, validation, repair, and execution of ComfyUI workflows.
+- **M11**: Local inference on selected non-NVIDIA discrete GPUs (AMD Radeon DirectML/ROCm, Intel Arc OneAPI/DirectML).
+- **M12**: Cross-platform desktop adapters (macOS Apple Silicon Metal MPS and Linux).
 
 ## Evidence Rules
 
