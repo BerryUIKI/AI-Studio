@@ -1,6 +1,6 @@
 # Git Branching Strategy & Release Specification
 
-This document establishes the official Git branching model, branch governance, commit standards, and release workflows for the **AI-Workflow** repository.
+This document establishes the official Git branching model, branch governance, commit standards, and release workflows for the **Berry AI Studio** repository.
 
 ---
 
@@ -47,6 +47,8 @@ All temporary branches must branch off the appropriate source and follow the sta
 ---
 
 ## 3. Commit Message Standards (Conventional Commits)
+
+Write all commit messages and pull request titles and descriptions in English.
 
 All commits across all branches must follow the [Conventional Commits v1.0.0](https://www.conventionalcommits.org/) specification:
 

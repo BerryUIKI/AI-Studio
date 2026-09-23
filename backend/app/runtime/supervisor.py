@@ -2,8 +2,8 @@
 Sandboxed ComfyUI Runtime Process Supervisor.
 
 Manages isolated execution of the local ComfyUI engine in a dedicated,
-hermetic application directory (~/.ai-workflow/engine).
-Guarantees zero system environment pollution.
+hermetic application directory (~/.ai-workflow/engine or %LOCALAPPDATA%/AI-Workflow/engine).
+Guarantees zero system environment pollution and strictly disallows host Python fallback.
 """
 
 import os
@@ -52,23 +52,55 @@ class ComfySupervisor:
         main_py = self.comfy_dir / "main.py"
         return main_py.is_file()
 
+    def get_python_bin(self) -> Path:
+        """Return the expected path to the isolated virtualenv python binary."""
+        if sys.platform == "win32":
+            return self.runtime_dir / "Scripts" / "python.exe"
+        return self.runtime_dir / "bin" / "python"
+
+    def has_isolated_env(self) -> bool:
+        """Check if the sandboxed isolated virtual environment is ready."""
+        return self.get_python_bin().is_file()
+
+    def _verify_process_identity(self, pid: int) -> bool:
+        """Verify the process at pid is actually python/comfy, avoiding recycled PID collision."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+                if not handle:
+                    return False
+                buf = ctypes.create_unicode_buffer(1024)
+                size = wintypes.DWORD(1024)
+                success = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
+                kernel32.CloseHandle(handle)
+                if success:
+                    exe_name = buf.value.lower()
+                    return "python" in exe_name
+                return False
+            except Exception:
+                return False
+        else:
+            try:
+                proc_cmdline = Path(f"/proc/{pid}/cmdline")
+                if proc_cmdline.is_file():
+                    content = proc_cmdline.read_text(encoding="latin1", errors="ignore").lower()
+                    return "python" in content
+                os.kill(pid, 0)
+                return True
+            except OSError:
+                return False
+
     def get_pid(self) -> Optional[int]:
-        """Read active PID from the supervisor PID file if process is alive."""
+        """Read active PID from the supervisor PID file if process is alive and verified."""
         if not self.pid_file.is_file():
             return None
 
         try:
             pid = int(self.pid_file.read_text(encoding="utf-8").strip())
-            # Verify if process is alive
-            if sys.platform == "win32":
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-                if handle != 0:
-                    kernel32.CloseHandle(handle)
-                    return pid
-            else:
-                os.kill(pid, 0)
+            if self._verify_process_identity(pid):
                 return pid
         except (ValueError, OSError):
             pass
@@ -86,20 +118,35 @@ class ComfySupervisor:
         pid = self.get_pid()
         return {
             "installed": self.is_installed(),
+            "isolated_env_ready": self.has_isolated_env(),
             "running": pid is not None,
             "pid": pid,
             "port": self.port,
             "engine_dir": str(self.engine_dir),
+            "runtime_dir": str(self.runtime_dir),
             "comfy_dir": str(self.comfy_dir),
             "models_dir": str(self.models_dir),
         }
 
     def start(self) -> Dict[str, Any]:
-        """Launch the isolated ComfyUI process."""
+        """Launch the isolated ComfyUI process strictly inside its hermetic environment."""
         if not self.is_installed():
             return {
                 "success": False,
+                "code": "NOT_INSTALLED",
                 "message": f"ComfyUI is not installed in {self.comfy_dir}. Run installer first.",
+            }
+
+        python_bin = self.get_python_bin()
+        if not python_bin.is_file():
+            # STRICT REQUIREMENT: Zero host Python fallback!
+            return {
+                "success": False,
+                "code": "ENV_MISSING",
+                "message": (
+                    f"Sandboxed virtual environment not found at {python_bin}. "
+                    "Run the isolated installer to set up the engine runtime without host pollution."
+                ),
             }
 
         if self.is_running():
@@ -108,16 +155,6 @@ class ComfySupervisor:
                 "message": f"ComfyUI is already running (PID: {self.get_pid()})",
                 "pid": self.get_pid(),
             }
-
-        # Resolve isolated python executable
-        if sys.platform == "win32":
-            python_bin = self.runtime_dir / "Scripts" / "python.exe"
-        else:
-            python_bin = self.runtime_dir / "bin" / "python"
-
-        if not python_bin.is_file():
-            # Fallback to current virtualenv python if sandboxed venv is uninitialized
-            python_bin = Path(sys.executable)
 
         cmd = [
             str(python_bin),
@@ -155,10 +192,17 @@ class ComfySupervisor:
             }
 
     def stop(self) -> Dict[str, Any]:
-        """Terminate the managed ComfyUI process."""
+        """Terminate the managed ComfyUI process with process identity verification."""
         pid = self.get_pid()
         if pid is None:
             return {"success": True, "message": "ComfyUI is not running"}
+
+        if not self._verify_process_identity(pid):
+            self._clean_pid_file()
+            return {
+                "success": False,
+                "message": f"Process {pid} is not a verified ComfyUI process; refusing to kill.",
+            }
 
         try:
             if sys.platform == "win32":

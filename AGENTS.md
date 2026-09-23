@@ -1,10 +1,14 @@
 # AI Agent Guidelines & Coding Standards (AGENTS.md)
 
-Welcome, AI Coding Agent (Antigravity, Claude Code, Cursor, GitHub Copilot, Devin, etc.). This document outlines the architectural invariants, operational rules, coding standards, and decision-making framework for working inside the **AI-Workflow** repository.
+Welcome, AI Coding Agent (Antigravity, Claude Code, Cursor, GitHub Copilot, Devin, etc.). This document outlines the architectural invariants, operational rules, coding standards, and decision-making framework for working inside the **Berry AI Studio** repository.
 
 ---
 
 ## 1. Core Principles & Non-Negotiable Invariants
+
+### Current Product Baseline
+
+Read `docs/PRODUCT_VISION.md`, `docs/PRD.md`, `docs/ARCHITECTURE.md`, and `docs/ROADMAP.md` before implementation. The primary canvas is a creative workspace with selection-based actions; users must not need to wire nodes to complete the image workflow. The five-type contract below applies to execution ports, not presentation objects. API-first preserves cloud-only operation while the first release also supports optional NVIDIA local engines. Do not treat historical prototype completion claims as product acceptance.
 
 1. **Simplicity Over Exposing Internal Complexity**:
    - ComfyUI's greatest pitfall is user overwhelm (spaghetti wires, latent/clip/vae micro-management).
@@ -29,7 +33,7 @@ Welcome, AI Coding Agent (Antigravity, Claude Code, Cursor, GitHub Copilot, Devi
 ## 2. Codebase Organization
 
 ```text
-AI-Workflow/
+AI-Studio/
 ├── frontend/                     # React 18+ / Vite / Tailwind / @xyflow/react
 │   ├── src/
 │   │   ├── components/
@@ -107,6 +111,10 @@ async def execute_flux_node(inputs: dict, params: dict, context: ExecutionContex
 ---
 
 ## 4. Coding Conventions & Best Practices
+
+### Project Language
+- All project documentation, PR titles and descriptions, commit messages, issues, release notes, code comments, and other project-facing written artifacts must use English.
+- Discussions may use the user's preferred language; record their outcomes in English in the repository.
 
 ### Python (Backend)
 - **Runtime**: Python 3.10+ required.

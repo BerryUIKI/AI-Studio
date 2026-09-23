@@ -64,7 +64,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
         <div className="flex items-center gap-1.5">
           {getStatusBadge()}
           <button
-            onClick={() => runWorkflow()}
+            onClick={() => runWorkflow(id)}
             title="Run this node"
             className="p-1 rounded hover:bg-slate-700/60 text-slate-400 hover:text-indigo-400 transition"
           >

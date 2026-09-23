@@ -1,63 +1,67 @@
-# Project Roadmap & Milestones
+# Berry AI Studio Implementation Roadmap
 
-This roadmap outlines the phased development path for **AI-Workflow**, moving from a lightweight MVP to a multi-modal, dual-engine production studio.
+Date: 2026-09-23. This roadmap supersedes historical milestone completion claims.
+No milestone below is marked accepted based on the existing prototype.
 
----
+## M0 — Baseline and Implementation Decisions
 
-## Milestone 1: MVP Core ✅ (Active)
-*Goal: Deliver a lightning-fast visual canvas that executes cloud-based multimodal workflows with zero local GPU setup.*
+- Read the approved vision/PRD, inspect current code and preserve local edits.
+- Reproduce available tests/builds; record actual results and missing checks.
+- Select reference engine versions, workflows, models and BYOK providers using official documentation.
+- Document capability coverage for four image actions, packaging approach and platform boundaries.
+- Break implementation into focused tasks/PRs targeting dev.
 
-- [x] Initial repository setup & engineering governance documentation.
-- [x] Git branching model (`main` release, `dev` integration) and CI standards.
-- [x] Frontend ReactFlow canvas implementation with dark-mode aesthetic (`@xyflow/react`, Tailwind CSS, Zustand state management).
-- [x] Base node library (Pydantic v2 schemas, in-memory registry, REST endpoint `/api/v1/nodes`):
-  - `input.text` — Text / Prompt Input
-  - `text.llm` — LLM Prompt Expander (OpenAI / DeepSeek / SiliconFlow compatible)
-  - `image.generate` — Cloud Image Generator (FLUX / SDXL via Fal.ai or SiliconFlow)
-  - `output.preview` — Media Preview Card
-- [x] Core DAG engine with topological sorting (Kahn's algorithm) and cycle detection.
-- [x] Deterministic dirty-checking and output caching via SHA-256 node hashing (`/api/v1/workflow/plan`).
-- [x] **Cloud API execution runner** (`api_runner.py`): OpenAI-compatible LLM, FLUX/SDXL/DALL-E image, and passthrough input drivers.
-- [x] **WebSocket real-time streaming** (`/ws/workflow/run`): Streams `NodeStatus`, `NodeOutput`, `GraphFinished` events to the canvas.
-- [x] **Single-node isolated execution**: `▶ Run this node` wired via WebSocket with upstream dependency auto-resolution.
+Exit: traceable implementation plan, current baseline, and documented reference integration matrix. Missing external access is explicit.
 
-> **Milestone 1 is complete.** 14/14 backend tests passing. Frontend canvas renders live status badges.
+## M1 — Reliable Core and Persistent Projects
 
+- Repair real output retrieval, missing preview handling, targeted execution, cache correctness and failure propagation.
+- Add task/run identities, immutable submissions, truthful status, cancellation semantics and restart recovery.
+- Persist projects/assets/history/cache with versioned schemas.
+- Add semantic cache and DAG regression tests.
 
----
+Exit: fixture-backed end-to-end task/persistence tests pass; no fake outputs or false completion; no claim of real integration acceptance yet.
 
-## Milestone 2: ComfyUI Bridge & Isolated Sandboxed Runtime ✅ (Complete)
-*Goal: Provide seamless local acceleration without UI spaghetti or host environment pollution.*
+## M2 — Engines and Model Readiness
 
-- [x] **External ComfyUI bridge driver** (`comfy_runner.py` connecting to `http://localhost:8188` with health probes & model discovery).
-- [x] **Subgraph Macro Compiler** (`macro_compiler.py`):
-  - Automatically translates high-level `image.comfy.txt2img` node into ComfyUI's 6-node prompt DAG (Checkpoint, EmptyLatent, CLIP Pos/Neg, KSampler, VAE, SaveImage) with optional LoRA chaining.
-- [x] **In-App Isolated ComfyUI Runtime Supervisor** (`supervisor.py`):
-  - Hermetic application directory layout (`~/.ai-workflow/engine/` or `%LOCALAPPDATA%/AI-Workflow/engine/`).
-  - Background process supervisor with PID tracking, graceful shutdown, and zero host environment pollution.
-- [x] **Mixed-mode workflows on Canvas**:
-  - Cloud LLM for scripting + Local ComfyUI for image rendering on the same canvas.
-  - WebSocket streaming execution, real-time node badges, and output image previews.
+- Add separate isolated installers and lifecycle adapters for ComfyUI and Stable Diffusion WebUI.
+- Connect existing engines without unintended mutation or process ownership.
+- Add hardware/storage readiness, model scanning/import/roots and compatibility/dependency guidance.
+- Remove host-Python fallback; handle interrupted setup.
 
-> **Milestone 2 is complete.** 28/28 backend tests passing. Frontend production build verified.
+Exit: documented clean Windows and existing-installation smoke tests; library originals remain intact; engine failures are actionable.
 
----
+## M3 — Primary Canvas and Image Creation
 
-## Milestone 3: Multimodal Expansion & Flow Logic
-*Goal: Support complete multimedia creation pipelines (Audio, Video, Batch data).*
+- Implement canvas import/placement/selection/contextual creation and durable layouts.
+- Deliver text-to-image, image-to-image, mask-based inpainting and upscaling using curated mappings.
+- Add native entry points, result provenance, history and export.
+- Provide newcomer-friendly controls without required node wiring.
 
-- [ ] Voice synthesis node (ElevenLabs / CosyVoice / Azure Speech API).
-- [ ] Video generation node (Kling, Runway Gen-3, Luma Dream Machine API).
-- [ ] Universal HTTP / Webhook node (call arbitrary REST endpoints with JSONPath extraction).
-- [ ] Batch processing & Table input node (generate variations across CSV/JSON rows).
-- [ ] Storyboard View (timeline-based sequential layout for video and storyboard creators).
+Exit: approved local image journey passes on a documented NVIDIA configuration; both engines perform real Berry-driven generation.
 
----
+## M4 — Cloud-Only Creation
 
-## Milestone 4: Ecosystem, Templates & Desktop Packaging
-*Goal: Enable frictionless sharing and one-click desktop distribution.*
+- Add provider selection, secure BYOK setup, capability discovery and reference image action coverage.
+- Reuse projects, canvas, tasks, history and assets.
+- Expose upload/execution location; use truthful cancellation and retry semantics.
+- Verify startup and creation without torch/local engines.
 
-- [ ] Workflow preset library (one-click import of pre-built production workflows).
-- [ ] Community export/import format (`.flow.json`) with asset bundling.
-- [ ] Lightweight cross-platform desktop application packaging via **Tauri** (Windows, macOS, Linux).
-- [ ] Granular API token usage metrics and cost estimation calculator.
+Exit: real cloud-only image journey passes with explicitly authorized test credentials/spend; mocks alone do not satisfy this gate.
+
+## M5 — Release Readiness
+
+- Complete Windows packaging/onboarding and documented prerequisites.
+- Run PRD release scenarios, failure recovery, secret redaction and asset/cache checks.
+- Run portable core CI on Windows and a non-Windows OS; document unsupported release targets.
+- Publish an English support matrix, known limitations, user setup guide and test evidence.
+
+Exit: all in-scope requirements verified or explicitly returned to the product owner as release blockers. Do not silently defer approved scope.
+
+## Later Roadmap
+
+Video generation, richer templates, Agent-assisted existing workflows then automated workflow construction/repair, clarified CLI integration, non-NVIDIA discrete GPU inference, and additional OS distributions.
+
+## Evidence Rules
+
+Keep a requirement-to-test mapping for R01–R18. Each milestone report lists delivered behavior, tests executed, actual results, remaining risks and blockers. External hardware/API tests not run must be labeled unverified. Historical test counts and checked boxes are not current evidence.

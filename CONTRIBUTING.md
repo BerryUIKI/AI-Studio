@@ -1,6 +1,6 @@
-# Contributing to AI-Workflow
+# Contributing to Berry AI Studio
 
-First off, thank you for considering contributing to **AI-Workflow**! Open-source thrives because of community members like you.
+First off, thank you for considering contributing to **Berry AI Studio**! Open-source thrives because of community members like you.
 
 This document outlines the workflow and quality guidelines for contributing code, documentation, and workflow presets.
 
@@ -34,8 +34,8 @@ Before opening a PR, please read our complete [Branching Strategy Specification]
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/BerryUIKI/AI-Workflow.git
-cd AI-Workflow
+git clone https://github.com/BerryUIKI/AI-Studio.git
+cd AI-Studio
 git checkout dev
 ```
 
@@ -67,6 +67,8 @@ The backend API and WebSocket server will be available at `http://localhost:8000
 ---
 
 ## Contribution Workflow
+
+Use English for all project documentation, PR titles and descriptions, commit messages, issues, release notes, code comments, and other project-facing written artifacts.
 
 1. **Check Issues**: Check existing GitHub Issues or start a discussion before making substantial architectural changes.
 2. **Branch from `dev`**:
