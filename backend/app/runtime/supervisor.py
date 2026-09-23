@@ -156,6 +156,9 @@ class ComfySupervisor:
                 "pid": self.get_pid(),
             }
 
+        from app.runtime.hardware import get_hardware_launch_flags
+        hw_flags = get_hardware_launch_flags()
+
         cmd = [
             str(python_bin),
             str(self.comfy_dir / "main.py"),
@@ -167,6 +170,7 @@ class ComfySupervisor:
             str(self.engine_dir / "input"),
             "--output-directory",
             str(self.engine_dir / "output"),
+            *hw_flags,
         ]
 
         try:
