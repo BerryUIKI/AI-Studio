@@ -1,4 +1,4 @@
-//! Single instance guard using Windows Named Mutex (L03).
+//! Single instance guard: Windows Named Mutex on Windows, Unix domain socket on macOS/Linux (L03, M12).
 
 #[cfg(windows)]
 pub struct SingleInstanceGuard {
@@ -31,7 +31,17 @@ impl Drop for SingleInstanceGuard {
 }
 
 #[cfg(not(windows))]
-pub struct SingleInstanceGuard;
+pub struct SingleInstanceGuard {
+    _listener: std::os::unix::net::UnixListener,
+    sock_path: std::path::PathBuf,
+}
+
+#[cfg(not(windows))]
+impl Drop for SingleInstanceGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.sock_path);
+    }
+}
 
 /// Try to acquire the single instance lock.
 /// Returns `Some(guard)` if this is the only instance, or `None` if an instance is already running.
@@ -63,7 +73,68 @@ pub fn try_acquire_single_instance(mutex_name: &str) -> Option<SingleInstanceGua
 
     #[cfg(not(windows))]
     {
-        let _ = mutex_name;
-        Some(SingleInstanceGuard)
+        use std::env;
+        use std::os::unix::net::{UnixListener, UnixStream};
+
+        let tmp_dir = env::var_os("TMPDIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+        let clean_name = mutex_name.replace('\\', "_").replace('/', "_");
+        let sock_path = tmp_dir.join(format!("{}.sock", clean_name));
+
+        // If file exists, test if a live process is listening
+        if sock_path.exists() {
+            if UnixStream::connect(&sock_path).is_ok() {
+                // Active process exists
+                return None;
+            }
+            // Stale socket, remove it
+            let _ = std::fs::remove_file(&sock_path);
+        }
+
+        match UnixListener::bind(&sock_path) {
+            Ok(listener) => Some(SingleInstanceGuard {
+                _listener: listener,
+                sock_path,
+            }),
+            Err(_) => None,
+        }
+    }
+}
+
+/// Cross-platform browser launcher (Windows cmd start, macOS open, Linux xdg-open).
+pub fn open_browser(url: &str) {
+    #[cfg(windows)]
+    {
+        let _ = std::process::Command::new("cmd").args(["/c", "start", "", url]).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+    #[cfg(all(not(windows), not(target_os = "macos")))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_single_instance_acquisition() {
+        let name = "Berry_Test_Single_Instance_Mutex";
+        let guard1 = try_acquire_single_instance(name);
+        assert!(guard1.is_some());
+
+        // Second acquisition while guard1 is held should return None
+        let guard2 = try_acquire_single_instance(name);
+        assert!(guard2.is_none());
+
+        // Dropping guard1 should allow subsequent acquisition
+        drop(guard1);
+        let guard3 = try_acquire_single_instance(name);
+        assert!(guard3.is_some());
     }
 }

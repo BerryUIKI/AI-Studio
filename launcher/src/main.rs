@@ -145,14 +145,7 @@ fn main() {
             "manager" => {
                 let url = format!("http://127.0.0.1:{}/#manager", port);
                 println!("Opening Environment Manager: {}", url);
-                #[cfg(windows)]
-                {
-                    let _ = std::process::Command::new("cmd").args(["/c", "start", "", &url]).spawn();
-                }
-                #[cfg(not(windows))]
-                {
-                    let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
-                }
+                single_instance::open_browser(&url);
             }
 
             "engine" => {
@@ -305,14 +298,7 @@ fn main() {
             // Another launcher process is already active: focus existing workspace
             println!("[*] Berry AI Studio is already running — focusing active workspace.");
             let url = format!("http://127.0.0.1:{}", port);
-            #[cfg(windows)]
-            {
-                let _ = std::process::Command::new("cmd").args(["/c", "start", "", &url]).spawn();
-            }
-            #[cfg(not(windows))]
-            {
-                let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
-            }
+            single_instance::open_browser(&url);
             return;
         }
     };
@@ -322,14 +308,7 @@ fn main() {
         PortStatus::OccupiedByBerry => {
             println!("[*] Active Berry instance detected on port {} — opening workspace.", port);
             let url = format!("http://127.0.0.1:{}", port);
-            #[cfg(windows)]
-            {
-                let _ = std::process::Command::new("cmd").args(["/c", "start", "", &url]).spawn();
-            }
-            #[cfg(not(windows))]
-            {
-                let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
-            }
+            single_instance::open_browser(&url);
             return;
         }
         PortStatus::OccupiedByNonBerry => {
