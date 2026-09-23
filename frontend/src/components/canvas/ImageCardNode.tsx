@@ -11,12 +11,18 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const { nodes } = useCanvasStore();
 
   const isVideo = cardData.mediaType === 'video' || Boolean(cardData.videoUrl);
+  const targetMediaUrl = cardData.videoUrl || cardData.imageUrl || '';
+  const isVideoContainer = targetMediaUrl.toLowerCase().match(/\.(mp4|webm|mov)(\?|#|$)/) !== null;
 
   const handleExport = (e: React.MouseEvent) => {
     e.stopPropagation();
     const link = document.createElement('a');
-    link.href = cardData.videoUrl || cardData.imageUrl;
-    const ext = isVideo ? 'mp4' : 'png';
+    link.href = targetMediaUrl;
+    let ext = isVideo ? (isVideoContainer ? 'mp4' : 'webp') : 'png';
+    const match = targetMediaUrl.match(/\.([a-zA-Z0-9]+)(?:\?|#|$)/);
+    if (match && ['mp4', 'webm', 'mov', 'png', 'jpg', 'jpeg', 'webp', 'gif'].includes(match[1].toLowerCase())) {
+      ext = match[1].toLowerCase();
+    }
     link.download = `${cardData.label || 'berry_asset'}.${ext}`;
     document.body.appendChild(link);
     link.click();
@@ -111,9 +117,9 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
 
       {/* Media Preview Container */}
       <div className="relative bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[360px] overflow-hidden">
-        {isVideo ? (
+        {isVideo && (isVideoContainer || !targetMediaUrl.toLowerCase().match(/\.(webp|gif)(\?|#|$)/)) ? (
           <video
-            src={cardData.videoUrl || cardData.imageUrl}
+            src={targetMediaUrl}
             controls
             loop
             playsInline
@@ -121,11 +127,16 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
           />
         ) : (
           <img
-            src={cardData.imageUrl}
+            src={targetMediaUrl || cardData.imageUrl}
             alt={cardData.label || 'Generated creative asset'}
-            className="w-full h-auto object-contain select-none pointer-events-none"
+            className="w-full h-auto object-contain select-none"
             loading="lazy"
           />
+        )}
+        {isVideo && !isVideoContainer && (
+          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-purple-950/80 backdrop-blur text-[10px] font-medium text-purple-300 border border-purple-800/60">
+            Animated WebP
+          </div>
         )}
         {p && (
           <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/75 backdrop-blur text-[10px] font-mono text-slate-300 border border-slate-800">
