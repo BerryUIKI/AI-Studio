@@ -73,3 +73,12 @@ chmod +x ./berry
 # Headless generation
 ./berry run txt2img --prompt "Cinematic desert landscape" --output ./desert.png
 ```
+
+---
+
+## 5. Verification Boundaries & Real Evidence Status
+
+- **Windows 11 (x86_64, NVIDIA CUDA)**: **Verified**. Physical runs conducted for Rust launcher build, single-instance mutex, hermetic engine supervision, browser workspace launch, and SD 1.5 local generation via ComfyUI with NVIDIA RTX 3060 12GB.
+- **macOS (Apple Silicon, Metal MPS)**: **Source Compatible**. Directory paths, browser launcher commands, Unix domain socket single-instance checks, and Metal fp16 flags implemented and unit-tested; native macOS binary bundling and physical Apple Silicon execution remain unverified in this session.
+- **Linux (x86_64, ROCm / CUDA / OneAPI)**: **Source Compatible**. Supervisor process handling, Unix domain socket locking, and headless CLI generation implemented and unit-tested; native Linux binary packaging and physical AMD/Intel hardware execution remain unverified in this session.
+

@@ -92,7 +92,7 @@ def test_hardware_launch_flags_matrix():
 
 @pytest.mark.asyncio
 async def test_readiness_with_amd_reference_hardware(monkeypatch):
-    """Readiness assessment correctly classifies verified AMD Radeon reference hardware."""
+    """Readiness assessment classifies AMD Radeon reference hardware as candidate_unverified."""
     mock_amd = [
         GpuInfo(
             index=0,
@@ -101,7 +101,7 @@ async def test_readiness_with_amd_reference_hardware(monkeypatch):
             vram_free_mb=14000,
             vendor="amd",
             backend="directml",
-            status_classification="verified",
+            status_classification="candidate_unverified",
         )
     ]
     monkeypatch.setattr("app.runtime.hardware.detect_all_gpus", lambda: mock_amd)
@@ -112,14 +112,14 @@ async def test_readiness_with_amd_reference_hardware(monkeypatch):
     assert readiness.has_nvidia_gpu is False
     assert readiness.gpu_vendor == "amd"
     assert readiness.acceleration_backend == "directml"
-    assert readiness.status_classification == "verified"
+    assert readiness.status_classification == "candidate_unverified"
     assert readiness.ready_for_local_inference is True
-    assert "AMD Reference Hardware" in readiness.summary_message
+    assert "Candidate Architecture" in readiness.summary_message
 
 
 @pytest.mark.asyncio
 async def test_readiness_with_intel_arc_hardware(monkeypatch):
-    """Readiness assessment correctly classifies verified Intel Arc reference hardware."""
+    """Readiness assessment classifies Intel Arc reference hardware as candidate_unverified."""
     mock_intel = [
         GpuInfo(
             index=0,
@@ -128,7 +128,7 @@ async def test_readiness_with_intel_arc_hardware(monkeypatch):
             vram_free_mb=15000,
             vendor="intel",
             backend="directml",
-            status_classification="verified",
+            status_classification="candidate_unverified",
         )
     ]
     monkeypatch.setattr("app.runtime.hardware.detect_all_gpus", lambda: mock_intel)
@@ -138,9 +138,38 @@ async def test_readiness_with_intel_arc_hardware(monkeypatch):
     assert readiness.has_discrete_gpu is True
     assert readiness.gpu_vendor == "intel"
     assert readiness.acceleration_backend == "directml"
+    assert readiness.status_classification == "candidate_unverified"
+    assert readiness.ready_for_local_inference is True
+    assert "Candidate Architecture" in readiness.summary_message
+
+
+@pytest.mark.asyncio
+async def test_readiness_with_verified_nvidia_hardware(monkeypatch):
+    """Readiness assessment classifies NVIDIA CUDA with physical evidence as verified."""
+    mock_nvidia = [
+        GpuInfo(
+            index=0,
+            name="NVIDIA GeForce RTX 3060",
+            vram_total_mb=12288,
+            vram_free_mb=10000,
+            driver_version="572.70",
+            vendor="nvidia",
+            backend="cuda",
+            status_classification="verified",
+        )
+    ]
+    monkeypatch.setattr("app.runtime.hardware.detect_all_gpus", lambda: mock_nvidia)
+
+    readiness: HardwareReadiness = await check_hardware_readiness()
+
+    assert readiness.has_discrete_gpu is True
+    assert readiness.has_nvidia_gpu is True
+    assert readiness.gpu_vendor == "nvidia"
+    assert readiness.acceleration_backend == "cuda"
     assert readiness.status_classification == "verified"
     assert readiness.ready_for_local_inference is True
-    assert "Intel Arc Reference Hardware" in readiness.summary_message
+    assert "Ready: NVIDIA GeForce RTX 3060" in readiness.summary_message
+
 
 
 @pytest.mark.asyncio
