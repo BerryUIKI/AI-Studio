@@ -18,6 +18,7 @@ import { CreationDock } from './components/canvas/CreationDock';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { VideoModal } from './components/canvas/VideoModal';
+import { AgentPanel } from './components/agent/AgentPanel';
 import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
 import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
 import { useCanvasStore } from './stores/useCanvasStore';
@@ -42,6 +43,7 @@ export default function App() {
   const [showNodePalette, setShowNodePalette] = useState<boolean>(false);
   const [showCloudModal, setShowCloudModal] = useState<boolean>(false);
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
+  const [showAgentPanel, setShowAgentPanel] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { nodes, clearCanvas, runWorkflow, isExecuting } = useCanvasStore();
@@ -152,6 +154,20 @@ export default function App() {
             <span>Environment</span>
           </button>
 
+          {/* Conversational Agent Assistant Button */}
+          <button
+            onClick={() => setShowAgentPanel(!showAgentPanel)}
+            title="Conversational AI Assistant (Natural Language Workflows & Human-in-the-Loop)"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+              showAgentPanel
+                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-sm shadow-indigo-500/20'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Agent</span>
+          </button>
+
           {/* Toggle Node Palette for Power Users */}
           <button
             onClick={() => setShowNodePalette(!showNodePalette)}
@@ -242,6 +258,7 @@ export default function App() {
       <VideoModal />
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
       <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
+      <AgentPanel isOpen={showAgentPanel} onClose={() => setShowAgentPanel(false)} />
     </div>
   );
 }

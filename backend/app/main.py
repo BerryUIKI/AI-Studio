@@ -25,6 +25,13 @@ from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
 from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
 from app.runners.creative_runner import creative_runner
+from app.core.agent_service import AgentService
+from app.schemas.agent import (
+    AgentChatRequest,
+    AgentChatResponse,
+    AgentExecuteProposalRequest,
+    AgentProposal,
+)
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.engine_manager import engine_manager
@@ -540,6 +547,31 @@ async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRe
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}")
     return await asset_store.save_bytes(data, filename=req.filename, media_type=req.media_type)
+
+
+agent_service = AgentService(
+    model_catalog=model_store,
+    credential_manager=credentials_manager,
+    creative_runner=creative_runner,
+)
+
+
+@app.post("/api/v1/agent/chat", response_model=AgentChatResponse)
+async def agent_chat_endpoint(req: AgentChatRequest) -> AgentChatResponse:
+    """Conversational Agent chat endpoint: processes natural language intent and formulates a transparent action plan (M9)."""
+    return await agent_service.process_chat(req)
+
+
+@app.post("/api/v1/agent/execute", response_model=List[CreativeActionResult])
+async def agent_execute_proposal_endpoint(req: AgentExecuteProposalRequest) -> List[CreativeActionResult]:
+    """Execute an approved Agent proposal under strict human-in-the-loop confirmation (M9)."""
+    try:
+        return await agent_service.execute_proposal(req.proposal, project_id=req.project_id)
+    except PermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 
