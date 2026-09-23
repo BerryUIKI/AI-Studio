@@ -39,6 +39,14 @@ All changes have been developed on focused feature branches and integrated into 
 | **[PR #6](https://github.com/BerryUIKI/AI-Studio/pull/6)** | `docs/m0-m6-delivery-handoff` | `docs(handoff): finalize M0-M6 delivery handoff and verification boundaries` | 3/3 Passed | [`da70036`](https://github.com/BerryUIKI/AI-Studio/commit/da70036) |
 | **[PR #7](https://github.com/BerryUIKI/AI-Studio/pull/7)** | `feature/cancellation-and-cloud-actions` | `feat(creative): implement task cancellation, engine interrupt, and cloud actions (R07-R09, R14, L07)` | 3/3 Passed | [`6746118`](https://github.com/BerryUIKI/AI-Studio/commit/6746118) |
 | **[PR #8](https://github.com/BerryUIKI/AI-Studio/pull/8)** | `docs/acceptance-dossier-m0-m6` | `docs(dossier): add Berry AI Studio v0.1 unified product acceptance dossier` | 3/3 Passed | [`4af27ec`](https://github.com/BerryUIKI/AI-Studio/commit/4af27ec) |
+| **[PR #9](https://github.com/BerryUIKI/AI-Studio/pull/9)** | `docs/update-acceptance-commit` | `docs: synchronize acceptance dossier commit hash with dev HEAD` | 3/3 Passed | [`4bd648a`](https://github.com/BerryUIKI/AI-Studio/commit/4bd648a) |
+| **[PR #10](https://github.com/BerryUIKI/AI-Studio/pull/10)** | `docs/post-v0-1-roadmap` | `docs(roadmap): define post-v0.1 milestones M7-M12` | 3/3 Passed | [`809312f`](https://github.com/BerryUIKI/AI-Studio/commit/809312f) |
+| **[PR #11](https://github.com/BerryUIKI/AI-Studio/pull/11)** | `feature/m7-video-generation` | `feat(video): implement M7 video generation, ComfyUI macros, cloud calling, and canvas video cards` | 3/3 Passed | [`64cd55c`](https://github.com/BerryUIKI/AI-Studio/commit/64cd55c) |
+| **[PR #12](https://github.com/BerryUIKI/AI-Studio/pull/12)** | `feature/m8-unified-cli` | `feat(cli): unified headless CLI for creative execution and system management (M8)` | 3/3 Passed | [`8e394dd`](https://github.com/BerryUIKI/AI-Studio/commit/8e394dd) |
+| **[PR #13](https://github.com/BerryUIKI/AI-Studio/pull/13)** | `feature/m9-agent-control` | `feat(agent): conversational agent workflow control with transparent proposals (M9)` | 3/3 Passed | [`1260722`](https://github.com/BerryUIKI/AI-Studio/commit/1260722) |
+| **[PR #14](https://github.com/BerryUIKI/AI-Studio/pull/14)** | `feature/m10-workflow-repair` | `feat(comfy): workflow validation and automated repair engine (M10)` | 3/3 Passed | [`60c3620`](https://github.com/BerryUIKI/AI-Studio/commit/60c3620) |
+| **[PR #15](https://github.com/BerryUIKI/AI-Studio/pull/15)** | `feature/m11-discrete-gpus` | `feat(hardware): support non-NVIDIA discrete GPUs with DirectML and launch flag injection (M11)` | 3/3 Passed | [`7f700b2`](https://github.com/BerryUIKI/AI-Studio/commit/7f700b2) |
+| **[PR #16](https://github.com/BerryUIKI/AI-Studio/pull/16)** | `feature/m12-cross-platform` | `feat(platform): cross-platform desktop adapters for macOS Metal and Linux (M12)` | 3/3 Passed | [`2551796`](https://github.com/BerryUIKI/AI-Studio/commit/2551796) |
 
 ---
 
