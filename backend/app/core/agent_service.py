@@ -159,6 +159,17 @@ class AgentService:
             history.append(assistant_msg)
             return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
 
+        if any(w in msg_lower for w in ["validate workflow", "repair workflow", "diagnose workflow", "check graph"]):
+            content = (
+                "Berry Studio includes an automated ComfyUI DAG validator and repair engine (M10). "
+                "You can submit workflows via `/api/v1/workflow/validate` to inspect topological cycles, "
+                "missing MODEL/CLIP/VAE connections, and missing checkpoint dependencies. "
+                "The repair engine automatically reconnects broken links and substitutes indexed checkpoints."
+            )
+            assistant_msg = AgentChatMessage(role="assistant", content=content)
+            history.append(assistant_msg)
+            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
+
         # Detect intent
         is_video = any(w in msg_lower for w in ["video", "animate", "animation", "motion", "clip"])
         is_upscale = any(w in msg_lower for w in ["upscale", "super resolution", "enlarge", "2x", "4x"])

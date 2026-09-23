@@ -32,6 +32,12 @@ from app.schemas.agent import (
     AgentExecuteProposalRequest,
     AgentProposal,
 )
+from app.core.workflow_validator import WorkflowValidator
+from app.core.workflow_repair import WorkflowRepairer
+from app.schemas.workflow_analysis import (
+    WorkflowValidationReport,
+    WorkflowRepairResult,
+)
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.engine_manager import engine_manager
@@ -571,6 +577,23 @@ async def agent_execute_proposal_endpoint(req: AgentExecuteProposalRequest) -> L
         raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+workflow_validator = WorkflowValidator(model_catalog=model_store)
+workflow_repairer = WorkflowRepairer(model_catalog=model_store)
+
+
+@app.post("/api/v1/workflow/validate", response_model=WorkflowValidationReport)
+async def validate_comfy_workflow(workflow: Dict[str, Any]) -> WorkflowValidationReport:
+    """Validate a ComfyUI prompt workflow DAG, verifying port types, required slots, and model dependencies (M10)."""
+    return workflow_validator.validate(workflow)
+
+
+@app.post("/api/v1/workflow/repair", response_model=WorkflowRepairResult)
+async def repair_comfy_workflow(workflow: Dict[str, Any]) -> WorkflowRepairResult:
+    """Repair broken links, missing slots, and missing checkpoints in a ComfyUI workflow DAG (M10)."""
+    return workflow_repairer.repair(workflow)
+
 
 
 
