@@ -161,14 +161,7 @@ impl BackendSupervisor {
     pub fn open_workspace(&self) {
         let url = format!("http://127.0.0.1:{}", self.port);
         println!("[*] Opening creative workspace in default browser: {}", url);
-        #[cfg(windows)]
-        {
-            let _ = Command::new("cmd").args(["/c", "start", "", &url]).spawn();
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = Command::new("xdg-open").arg(&url).spawn();
-        }
+        crate::single_instance::open_browser(&url);
     }
 
     /// Wait for child process.
