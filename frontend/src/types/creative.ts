@@ -1,4 +1,4 @@
-export type CreativeActionType = 'txt2img' | 'img2img' | 'inpaint' | 'upscale';
+export type CreativeActionType = 'txt2img' | 'img2img' | 'inpaint' | 'upscale' | 'txt2video' | 'img2video';
 
 export interface GenerationProvenance {
   action: CreativeActionType;
@@ -14,6 +14,10 @@ export interface GenerationProvenance {
   source_asset_id?: string;
   mask_asset_id?: string;
   execution_time_ms?: number;
+  fps?: number;
+  num_frames?: number;
+  duration_seconds?: number;
+  motion_bucket_id?: number;
 }
 
 export interface CreativeActionRequest {
@@ -33,6 +37,10 @@ export interface CreativeActionRequest {
   mask_image_id?: string;
   upscale_factor?: number;
   upscaler_name?: string;
+  fps?: number;
+  num_frames?: number;
+  motion_bucket_id?: number;
+  duration_seconds?: number;
 }
 
 export interface CreativeActionResult {
@@ -40,8 +48,11 @@ export interface CreativeActionResult {
   task_id: string;
   asset_id?: string;
   image_url?: string;
+  video_url?: string;
   width: number;
   height: number;
+  duration_seconds?: number;
+  fps?: number;
   provenance?: GenerationProvenance;
   is_cached?: boolean;
   error_message?: string;
@@ -50,6 +61,8 @@ export interface CreativeActionResult {
 export interface ImageCardData {
   assetId?: string;
   imageUrl: string;
+  videoUrl?: string;
+  mediaType?: 'image' | 'video';
   width: number;
   height: number;
   provenance?: GenerationProvenance;

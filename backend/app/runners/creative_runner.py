@@ -21,16 +21,20 @@ from app.core.cache import cache_store
 from app.runners.api_runner import (
     _call_fal_ai,
     _call_fal_ai_action,
+    _call_fal_ai_video,
     _call_openai_images,
     _call_openai_inpaint,
     _call_siliconflow,
+    _call_siliconflow_video,
 )
 from app.runners.comfy_runner import comfy_client
 from app.runners.macro_compiler import (
     ASPECT_RATIO_DIMENSIONS,
     build_comfy_img2img_graph,
+    build_comfy_img2video_graph,
     build_comfy_inpaint_graph,
     build_comfy_txt2img_graph,
+    build_comfy_txt2video_graph,
     build_comfy_upscale_graph,
 )
 from app.runners.webui_runner import WebUIRunner
@@ -65,6 +69,10 @@ def compute_creative_cache_hash(req: CreativeActionRequest, input_hash: str = ""
         "mask_hash": mask_hash,
         "upscale_factor": req.upscale_factor,
         "upscaler_name": req.upscaler_name,
+        "fps": req.fps,
+        "num_frames": req.num_frames,
+        "motion_bucket_id": req.motion_bucket_id,
+        "duration_seconds": req.duration_seconds,
     }
     raw = json.dumps(canonical_payload, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -141,14 +149,19 @@ class CreativeRunner:
         # Check deterministic cache
         cache_key = compute_creative_cache_hash(req, input_hash, mask_hash)
         cached_result = await cache_store.get_async(cache_key)
+        is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
+
         if cached_result:
             return CreativeActionResult(
                 success=True,
                 task_id=task_id,
                 asset_id=cached_result.get("asset_id"),
-                image_url=cached_result.get("image_url"),
+                image_url=cached_result.get("image_url") if not is_video else None,
+                video_url=cached_result.get("video_url") or (cached_result.get("image_url") if is_video else None),
                 width=cached_result.get("width", req.width),
                 height=cached_result.get("height", req.height),
+                duration_seconds=cached_result.get("duration_seconds", req.duration_seconds if is_video else None),
+                fps=cached_result.get("fps", req.fps if is_video else None),
                 provenance=GenerationProvenance.model_validate(cached_result["provenance"]),
                 is_cached=True,
             )
@@ -164,6 +177,8 @@ class CreativeRunner:
         # Dispatch based on engine
         try:
             if "webui" in req.engine_id:
+                if is_video:
+                    raise ValueError("WebUI engine currently does not support native video generation. Use ComfyUI or Cloud.")
                 runner = WebUIRunner()
                 action_data = await runner.execute_action(req)
                 asset_id = action_data["asset_id"]
@@ -215,15 +230,22 @@ class CreativeRunner:
                 source_asset_id=req.input_image_id,
                 mask_asset_id=req.mask_image_id,
                 execution_time_ms=elapsed_ms,
+                fps=req.fps if is_video else None,
+                num_frames=req.num_frames if is_video else None,
+                duration_seconds=req.duration_seconds if is_video else None,
+                motion_bucket_id=req.motion_bucket_id if is_video else None,
             )
 
             result = CreativeActionResult(
                 success=True,
                 task_id=task_id,
                 asset_id=asset_id,
-                image_url=image_url,
+                image_url=image_url if not is_video else None,
+                video_url=image_url if is_video else None,
                 width=out_w,
                 height=out_h,
+                duration_seconds=req.duration_seconds if is_video else None,
+                fps=req.fps if is_video else None,
                 provenance=provenance,
                 is_cached=False,
             )
@@ -231,9 +253,12 @@ class CreativeRunner:
             # Store in cache
             cache_payload = {
                 "asset_id": asset_id,
-                "image_url": image_url,
+                "image_url": image_url if not is_video else None,
+                "video_url": image_url if is_video else None,
                 "width": out_w,
                 "height": out_h,
+                "duration_seconds": req.duration_seconds if is_video else None,
+                "fps": req.fps if is_video else None,
                 "provenance": provenance.model_dump(),
             }
             await cache_store.set_async(cache_key, cache_payload)
@@ -304,6 +329,34 @@ class CreativeRunner:
                 image_filename=input_file.name,
                 upscaler_model=req.upscaler_name or "RealESRGAN_x4plus.pth",
             )
+        elif req.action == CreativeActionType.IMG2VIDEO:
+            if not input_file:
+                raise ValueError("Source image required for ComfyUI img2video")
+            prompt_graph = build_comfy_img2video_graph(
+                image_filename=input_file.name,
+                checkpoint=req.model if "svd" in req.model.lower() else "svd_xt.safetensors",
+                width=req.width,
+                height=req.height,
+                video_frames=req.num_frames,
+                fps=req.fps,
+                motion_bucket_id=req.motion_bucket_id,
+                seed=req.seed,
+                steps=req.steps,
+                cfg=req.cfg_scale,
+            )
+        elif req.action == CreativeActionType.TXT2VIDEO:
+            prompt_graph = build_comfy_txt2video_graph(
+                prompt=req.prompt,
+                negative_prompt=req.negative_prompt,
+                checkpoint=req.model,
+                width=req.width,
+                height=req.height,
+                video_frames=req.num_frames,
+                fps=req.fps,
+                seed=req.seed,
+                steps=req.steps,
+                cfg=req.cfg_scale,
+            )
         else:
             raise ValueError(f"Unsupported action: {req.action}")
 
@@ -315,7 +368,7 @@ class CreativeRunner:
 
         outputs = await comfy_client.poll_history_outputs(prompt_id)
         if not outputs:
-            raise RuntimeError("ComfyUI finished with no output images")
+            raise RuntimeError("ComfyUI finished with no output media")
 
         first_img = outputs[0]
         # Download and store in local asset store
@@ -324,7 +377,12 @@ class CreativeRunner:
         img_type = first_img.get("type", "output")
         view_url = f"{comfy_client.base_url}/view?filename={filename}&subfolder={subfolder}&type={img_type}"
 
-        asset = await asset_store.save_image_from_url(view_url, filename=filename or "comfy_output.png")
+        is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
+        if is_video:
+            asset = await asset_store.save_media_from_url(view_url, filename=filename or "comfy_video.webp", media_type="video")
+        else:
+            asset = await asset_store.save_image_from_url(view_url, filename=filename or "comfy_output.png")
+
         return {
             "asset_id": asset.id,
             "image_url": f"/api/v1/assets/{asset.id}/content",
@@ -419,6 +477,48 @@ class CreativeRunner:
                 denoise=req.denoise,
             )
 
+        elif req.action == CreativeActionType.IMG2VIDEO:
+            if not image_b64:
+                raise ValueError("Source image is required for cloud img2video.")
+            key = credentials_manager.get_key(CloudProviderId.FAL)
+            if not key:
+                raise RuntimeError(
+                    "Cloud img2video requires a Fal.ai BYOK key (Fast SVD). "
+                    "Configure Fal.ai in Cloud Providers or use local ComfyUI."
+                )
+            remote_url = await _call_fal_ai_video(
+                action="img2video",
+                prompt=req.prompt,
+                api_key=key,
+                image_b64=image_b64,
+                fps=req.fps,
+                num_frames=req.num_frames,
+                motion_bucket_id=req.motion_bucket_id,
+            )
+
+        elif req.action == CreativeActionType.TXT2VIDEO:
+            key_fal = credentials_manager.get_key(CloudProviderId.FAL)
+            if key_fal:
+                remote_url = await _call_fal_ai_video(
+                    action="txt2video",
+                    prompt=req.prompt,
+                    api_key=key_fal,
+                    fps=req.fps,
+                    num_frames=req.num_frames,
+                )
+            else:
+                key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
+                if not key_sf:
+                    raise RuntimeError(
+                        "No cloud API key configured for video generation. "
+                        "Configure a Fal.ai or SiliconFlow BYOK key in Cloud Settings."
+                    )
+                remote_url = await _call_siliconflow_video(
+                    action="txt2video",
+                    prompt=req.prompt,
+                    api_key=key_sf,
+                )
+
         else:
             # TXT2IMG
             if "flux" in model or req.engine_id == "cloud_fal":
@@ -447,9 +547,14 @@ class CreativeRunner:
                     remote_url = await _call_siliconflow(req.prompt, req.width, req.height, key)
 
         if not remote_url:
-            raise RuntimeError(f"Cloud provider returned no image URL for action {req.action}.")
+            raise RuntimeError(f"Cloud provider returned no media URL for action {req.action}.")
 
-        asset = await asset_store.save_image_from_url(remote_url, filename="cloud_output.png")
+        is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
+        if is_video:
+            asset = await asset_store.save_media_from_url(remote_url, filename="cloud_video.mp4", media_type="video")
+        else:
+            asset = await asset_store.save_image_from_url(remote_url, filename="cloud_output.png")
+
         return {
             "asset_id": asset.id,
             "image_url": f"/api/v1/assets/{asset.id}/content",

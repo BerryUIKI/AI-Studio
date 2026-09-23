@@ -1,4 +1,4 @@
-import { Dices, Sparkles, X, Loader2 } from 'lucide-react';
+import { Dices, Sparkles, Video, X, Loader2 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 
 export const CreationDock = () => {
@@ -76,23 +76,35 @@ export const CreationDock = () => {
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={!prompt.trim() || isGenerating}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium shadow-lg shadow-indigo-600/25 transition whitespace-nowrap"
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Creating...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4" />
-                <span>{referenceImage ? 'Vary Image' : 'Generate'}</span>
-              </>
-            )}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="submit"
+              disabled={!prompt.trim() || isGenerating}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium shadow-lg shadow-indigo-600/25 transition whitespace-nowrap"
+            >
+              {isGenerating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Creating...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  <span>{referenceImage ? 'Vary Image' : 'Generate Image'}</span>
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => executeCreativeAction({ action: referenceImage ? 'img2video' : 'txt2video' })}
+              disabled={!prompt.trim() || isGenerating}
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-600/90 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium shadow-lg shadow-purple-600/25 transition whitespace-nowrap"
+              title="Generate Video (Text-to-Video or Image-to-Video)"
+            >
+              <Video className="w-4 h-4" />
+              <span>Video</span>
+            </button>
+          </div>
         </form>
 
         {/* Controls Toolbar: Aspect Ratio, Engine, Seed */}

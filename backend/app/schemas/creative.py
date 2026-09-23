@@ -10,6 +10,8 @@ class CreativeActionType(str, Enum):
     IMG2IMG = "img2img"
     INPAINT = "inpaint"
     UPSCALE = "upscale"
+    TXT2VIDEO = "txt2video"
+    IMG2VIDEO = "img2video"
 
 
 class CreativeActionRequest(BaseModel):
@@ -25,10 +27,15 @@ class CreativeActionRequest(BaseModel):
     cfg_scale: float = 7.0
     seed: int = -1  # -1 for random
     denoise: float = 0.75  # For img2img and inpaint (0.0 to 1.0)
-    input_image_id: Optional[str] = None  # Reference asset ID for img2img / inpaint / upscale
+    input_image_id: Optional[str] = None  # Reference asset ID for img2img / inpaint / upscale / img2video
     mask_image_id: Optional[str] = None   # Binary mask asset ID for inpaint
     upscale_factor: float = 2.0           # 2.0 or 4.0
     upscaler_name: str = "R-ESRGAN 4x+"
+    # Video generation parameters (M7)
+    fps: int = 16
+    num_frames: int = 25
+    motion_bucket_id: int = 127
+    duration_seconds: float = 3.0
 
 
 class GenerationProvenance(BaseModel):
@@ -45,6 +52,11 @@ class GenerationProvenance(BaseModel):
     source_asset_id: Optional[str] = None
     mask_asset_id: Optional[str] = None
     execution_time_ms: Optional[float] = None
+    # Video-specific provenance
+    fps: Optional[int] = None
+    num_frames: Optional[int] = None
+    duration_seconds: Optional[float] = None
+    motion_bucket_id: Optional[int] = None
 
 
 class CreativeActionResult(BaseModel):
@@ -52,8 +64,11 @@ class CreativeActionResult(BaseModel):
     task_id: str
     asset_id: Optional[str] = None
     image_url: Optional[str] = None
+    video_url: Optional[str] = None
     width: int = 512
     height: int = 512
+    duration_seconds: Optional[float] = None
+    fps: Optional[int] = None
     provenance: Optional[GenerationProvenance] = None
     is_cached: bool = False
     error_message: Optional[str] = None
