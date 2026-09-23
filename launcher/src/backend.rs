@@ -20,8 +20,22 @@ impl BackendSupervisor {
         }
     }
 
-    /// Resolve Python executable inside isolated backend/.venv.
+    /// Resolve Python executable:
+    /// 1. Bundled release runtime (runtime/python/python.exe) - requires 0 host Python
+    /// 2. Isolated virtualenv (backend/.venv/Scripts/python.exe)
+    /// 3. Development fallback: bootstrap from host Python if running from source
     pub fn find_python_executable(&self) -> Result<PathBuf, String> {
+        // 1. Release distribution: check bundled hermetic Python runtime
+        let bundled_python = if cfg!(windows) {
+            self.root_dir.join("runtime").join("python").join("python.exe")
+        } else {
+            self.root_dir.join("runtime").join("python").join("bin").join("python")
+        };
+        if bundled_python.is_file() {
+            return Ok(bundled_python);
+        }
+
+        // 2. Pre-configured isolated virtual environment
         let venv_python = if cfg!(windows) {
             self.root_dir.join("backend").join(".venv").join("Scripts").join("python.exe")
         } else {

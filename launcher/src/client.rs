@@ -182,4 +182,11 @@ impl BerryClient {
         let mut resp = self.agent.get(&url).call().map_err(|e| format!("Failed to check updates: {}", e))?;
         resp.body_mut().read_json::<serde_json::Value>().map_err(|e| format!("JSON decode failed: {}", e))
     }
+
+    pub fn trigger_app_update(&self) -> Result<serde_json::Value, String> {
+        let url = format!("{}/api/v1/updates/app", self.base_url);
+        let mut resp = self.agent.post(&url).send_empty().map_err(|e| format!("Failed to update application: {}", e))?;
+        resp.body_mut().read_json::<serde_json::Value>().map_err(|e| format!("JSON decode failed: {}", e))
+    }
 }
+

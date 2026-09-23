@@ -50,7 +50,7 @@ fn print_help() {
     println!("  berry stop [--force]        Gracefully stop Berry AI Studio and active processes");
     println!("  berry engine <action> <type> Manage engine lifecycle (start, stop, install, update)");
     println!("  berry models <action> [...]  Manage model inventory (list, rescan, add, remove)");
-    println!("  berry update <check|engine>  Manage application and engine updates");
+    println!("  berry update <check|app|engine> Manage application and engine updates");
     println!("  berry help                  Show this help screen");
 }
 
@@ -229,11 +229,31 @@ fn main() {
 
             "update" => {
                 let updater = UpdateManager::new(&client);
-                if args.len() > 2 && args[2] == "engine" {
-                    let engine = if args.len() > 3 { &args[3] } else { "comfyui" };
-                    if let Err(e) = updater.update_engine(engine) {
-                        eprintln!("[ERROR] {}", e);
-                        std::process::exit(1);
+                if args.len() > 2 {
+                    match args[2].as_str() {
+                        "app" => {
+                            if let Err(e) = updater.update_app() {
+                                eprintln!("[ERROR] {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                        "engine" => {
+                            let engine = if args.len() > 3 { &args[3] } else { "comfyui" };
+                            if let Err(e) = updater.update_engine(engine) {
+                                eprintln!("[ERROR] {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                        "check" => {
+                            if let Err(e) = updater.check_updates() {
+                                eprintln!("[ERROR] {}", e);
+                                std::process::exit(1);
+                            }
+                        }
+                        other => {
+                            eprintln!("Unknown update target '{}'. Usage: berry update <check|app|engine [comfyui|webui]>", other);
+                            std::process::exit(1);
+                        }
                     }
                 } else {
                     if let Err(e) = updater.check_updates() {

@@ -65,4 +65,33 @@ impl<'a> UpdateManager<'a> {
 
         Ok(())
     }
+
+    pub fn update_app(&self) -> Result<(), String> {
+        println!("\nInitiating Berry AI Studio application update (L08)...");
+        let res = self.client.trigger_app_update()?;
+
+        let mode = res.get("mode").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let status = res.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+        let message = res.get("message").and_then(|v| v.as_str()).unwrap_or("");
+
+        println!("\n=== Application Update Result ===");
+        println!("Mode    : {}", mode);
+        println!("Status  : {}", status);
+        println!("Message : {}", message);
+
+        if let Some(details) = res.get("details").and_then(|v| v.as_str()) {
+            println!("Details : {}", details);
+        }
+
+        if let Some(url) = res.get("download_url").and_then(|v| v.as_str()) {
+            println!("Download Package : {}", url);
+        }
+
+        if let Some(notes) = res.get("notes").and_then(|v| v.as_str()) {
+            println!("Safety Notice    : {}", notes);
+        }
+
+        Ok(())
+    }
 }
+

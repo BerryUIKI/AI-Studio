@@ -330,6 +330,50 @@ async def check_all_updates() -> dict[str, Any]:
     }
 
 
+@app.post("/api/v1/updates/app")
+async def trigger_app_update() -> dict[str, Any]:
+    """
+    Check and report or trigger Berry application updates (L08).
+    Decoupled from inference engine updates.
+    """
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    is_git_repo = (repo_root / ".git").is_dir()
+
+    if is_git_repo:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "git", "pull", "--ff-only",
+                cwd=str(repo_root),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode == 0:
+                return {
+                    "mode": "git",
+                    "status": "updated",
+                    "message": "Application code updated successfully. Please restart Berry AI Studio.",
+                    "details": stdout.decode().strip(),
+                }
+            else:
+                return {
+                    "mode": "git",
+                    "status": "failed",
+                    "message": f"Git update failed: {stderr.decode().strip()}",
+                }
+        except Exception as e:
+            return {"mode": "git", "status": "error", "message": str(e)}
+    else:
+        return {
+            "mode": "packaged",
+            "status": "guidance",
+            "message": "In packaged Windows release mode, download the latest package to update.",
+            "download_url": "https://github.com/BerryUIKI/AI-Studio/releases",
+            "notes": "User projects, credentials, and models in %LOCALAPPDATA% are strictly preserved during updates.",
+        }
+
+
+
 
 # ---------------------------------------------------------------------------
 # Hardware & Engine Management Endpoints (M2)

@@ -129,6 +129,18 @@ export const CreationDock = () => {
               <option value="cloud">Cloud API (Zero GPU)</option>
             </select>
 
+            {/* Quick Models Inventory Link */}
+            <button
+              type="button"
+              onClick={() => {
+                window.location.hash = 'manager';
+              }}
+              title="Inspect local models, scan roots, and engine compatibility"
+              className="px-2 py-0.5 rounded-md bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 hover:text-purple-100 border border-purple-800/60 transition text-[11px] font-medium"
+            >
+              Models ↗
+            </button>
+
             {/* Seed Randomizer */}
             <button
               type="button"

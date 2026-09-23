@@ -84,7 +84,20 @@ Separate managed ComfyUI and WebUI environments. No global pip installs or fallb
 
 An installation manifest records engine version, environment, paths and completion state. Stage downloads/setup, report progress, and recover safely from interruption. Verify managed process identity before termination; never treat an arbitrary PID as sufficient ownership proof.
 
-The launcher may own Berry's backend process, but engine supervisors own managed ComfyUI/WebUI processes. External engines remain user-owned. Berry app updates and managed-engine updates are distinct operations; preserve models, projects, credentials and configuration. Track update state, compatibility and recovery before reporting success. See [Launcher and Environment Manager](LAUNCHER_MANAGER_REQUIREMENTS.md) for approved behavior.
+### Launcher & Manager Architecture Boundary
+- **Ownership**: The Rust launcher (`berry.exe`) supervises Berry's backend process and acts as the desktop entry point. The backend supervises managed engines (ComfyUI and WebUI) through its lifecycle manager. External engines remain entirely unmutated.
+- **Cross-Platform Separation**:
+  - *Windows Adapters*: Win32 Named Mutex (`Global\BerryAIStudioLauncherMutex`) for single-instance enforcement and browser focus; process creation flag `CREATE_NO_WINDOW (0x08000000)` for headless backend process management; `cmd /c start` for workspace launching.
+  - *Cross-Platform Core*: Standard TCP listener for readiness probing; HTTP client (`ureq`) interfacing with backend REST API; update and engine command routing.
+- **Python Resolution Hierarchy**:
+  1. `runtime/python/python.exe`: Bundled portable runtime (Zero-Python clean machine distribution).
+  2. `backend/.venv/Scripts/python.exe`: Pre-existing virtualenv.
+  3. Host system `python.exe`: Developer fallback only.
+- **Engine Update & Rollback Semantics**:
+  - Before an update begins, active tasks are verified to be zero.
+  - The supervisor snapshots the existing git commit (`git rev-parse HEAD`).
+  - Upon update failure, the engine working directory is restored to the previous commit (`git checkout <commit>`), preserving user models in `models/` and configurations.
+  - The rollback restores repository code; it does not roll back pip wheel modifications inside the virtualenv.
 
 Platform adapters contain Windows-specific process flags and paths. Model directories may be shared only when engine configuration and compatibility permit. Preserve legacy engine locations and environment variables unless an explicit migration is implemented.
 

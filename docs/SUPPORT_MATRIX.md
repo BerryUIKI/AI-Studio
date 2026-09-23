@@ -56,3 +56,12 @@ Target Platform: **Windows 10 / 11 (64-bit)** with portable core architecture.
 - **Engine Isolation**: Sandboxed virtual environments only. Never runs global `pip install` commands.
 - **Credential Storage**: Stored locally in `%LOCALAPPDATA%\BerryAIStudio\credentials.json`. Strictly redacted from logs, exports, and status endpoints.
 - **Asset Adoption**: All remote images (from cloud providers or ComfyUI `/view`) are immediately persisted locally in content-addressable storage (`assets/{hash[:2]}/{hash}.png`).
+
+---
+
+## 6. Packaging & Entry Points: Release vs Development Fallback
+
+| Flow | Target Audience | Prerequisites | Launch Mechanism | Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| **Distributed Windows Package** | End users / Clean machines | **Zero** (no host Python, no Node.js, no Git) | `berry.exe` (Rust binary) | Uses embedded Python in `runtime/python/` and pre-built frontend in `frontend/dist/`. 100% self-contained. |
+| **Source Developer Checkout** | Contributors / Developers | Python 3.10+, Node.js (pnpm), Rust/Cargo | `scripts\launch.bat` or `scripts\start-berry.ps1` | Creates developer `backend/.venv` using host Python; runs Vite/backend directly; checks frontend build readiness. |

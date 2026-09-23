@@ -77,14 +77,20 @@ The Berry launcher (`berry.exe`) remains available as a unified CLI and GUI envi
 | `berry models remove-root <root_id>` | Remove directory from catalog without deleting files |
 | `berry engine start <comfyui\|webui>` | Start an isolated managed engine |
 | `berry engine stop <comfyui\|webui>` | Stop an isolated managed engine |
-| `berry engine update <comfyui\|webui>` | Safe engine update with automatic rollback |
+| `berry engine update <comfyui\|webui>` | Safe engine update with automatic rollback to previous git commit |
 | `berry update check` | Check Berry app and engine updates separately |
+| `berry update app` | Trigger Berry application update (git pull in dev; package link in release) |
+| `berry update engine <comfyui\|webui>` | Update specified engine runtime |
 
 ### Graphical Environment Manager
-Click **"Environment"** in the top navigation bar to open the Environment Manager modal, offering:
+Access the Environment Manager anytime:
+- Click **"Environment"** in the top navigation bar.
+- Or click **"Models ↗"** directly inside the bottom creative dock to jump straight to your local model catalog.
+
+The modal features four dedicated panels:
 - **Core & Process**: PID, uptime, active tasks counter, and safe **Exit Berry** action.
 - **Engines Lifecycle**: Status badges, Start/Stop/Install/Update controls, and external engine links.
-- **Model Inventory**: Filterable table of local models, engine compatibility tags, and scan root management.
+- **Model Inventory**: Filterable table of local models, engine compatibility tags, missing dependencies detection, and scan root management (Add/Remove roots non-destructively).
 - **Updates & Recovery**: Separate app vs engine updates with rollback state display.
 
 ---

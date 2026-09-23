@@ -187,3 +187,18 @@ def test_missing_frontend_diagnostic_page(client):
     if "Packaging Error" in content:
         assert "frontend/dist/index.html" in content
         assert "pnpm build" in content
+
+
+def test_app_update_trigger(client):
+    """L08: Triggering application update should handle git or packaged mode safely."""
+    resp = client.post("/api/v1/updates/app")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "mode" in data
+    assert "status" in data
+    assert "message" in data
+    if data["mode"] == "packaged":
+        assert "download_url" in data
+        assert "LOCALAPPDATA" in data.get("notes", "")
+    elif data["mode"] == "git":
+        assert data["status"] in ("updated", "failed", "error")

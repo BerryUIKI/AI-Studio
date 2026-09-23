@@ -64,11 +64,19 @@ export default function App() {
 
   useEffect(() => {
     refreshStatus();
-    if (window.location.hash === '#manager' || window.location.search.includes('view=manager')) {
-      setShowManagerModal(true);
-    }
+    const handleHash = () => {
+      if (window.location.hash === '#manager' || window.location.search.includes('view=manager')) {
+        setShowManagerModal(true);
+      }
+    };
+    handleHash();
+    window.addEventListener('hashchange', handleHash);
+
     const interval = setInterval(refreshStatus, 8000);
-    return () => clearInterval(interval);
+    return () => {
+      window.removeEventListener('hashchange', handleHash);
+      clearInterval(interval);
+    };
   }, []);
 
   const toggleRuntime = async () => {
