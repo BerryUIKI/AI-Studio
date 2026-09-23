@@ -118,7 +118,7 @@ async def system_info() -> dict[str, object]:
 
 
 app_start_time = time.time()
-launcher_config = LauncherConfig()
+launcher_config = LauncherConfig(port=int(os.environ.get("BERRY_PORT", "8000")))
 
 
 # ---------------------------------------------------------------------------
