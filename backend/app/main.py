@@ -138,6 +138,8 @@ async def manager_status() -> ManagerStatusResponse:
     configured_clouds = sum(1 for p in credentials_manager.list_providers() if p.is_configured)
     models_count = len(model_store.list_models())
 
+    active_tasks_count = len(active_cancellations) + len(creative_runner.active_tasks)
+
     return ManagerStatusResponse(
         app_name="Berry AI Studio",
         version="0.1.0",
@@ -150,7 +152,7 @@ async def manager_status() -> ManagerStatusResponse:
         external_engines=external_list,
         cloud_providers_configured=configured_clouds,
         models_indexed=models_count,
-        active_tasks=len(active_cancellations),
+        active_tasks=active_tasks_count,
         launcher_config=launcher_config,
     )
 
@@ -176,7 +178,7 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
     Guards active generation tasks and predictably terminates managed engines if configured.
     Never terminates external user engines.
     """
-    active_count = len(active_cancellations)
+    active_count = len(active_cancellations) + len(creative_runner.active_tasks)
     if active_count > 0 and not request.force:
         raise HTTPException(
             status_code=409,
@@ -187,6 +189,8 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
     if active_count > 0:
         for run_id, cancel_evt in list(active_cancellations.items()):
             cancel_evt.set()
+        for task_id in list(creative_runner.active_tasks.keys()):
+            await creative_runner.cancel_task(task_id)
 
     # Determine whether to stop managed engines
     stop_managed = request.stop_managed_engines
@@ -220,6 +224,46 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
         managed_engines_stopped=stopped_engines,
     )
 
+
+@app.get("/api/v1/tasks/active")
+async def list_active_tasks() -> Dict[str, Any]:
+    """List all currently executing generation and workflow tasks (R14)."""
+    tasks = []
+    for run_id in active_cancellations:
+        tasks.append({"id": run_id, "type": "workflow_graph", "status": "running"})
+    for task_id, info in creative_runner.active_tasks.items():
+        tasks.append({
+            "id": task_id,
+            "type": "creative_action",
+            "action": info.get("action"),
+            "engine": info.get("engine"),
+            "status": "running",
+            "start_time": info.get("start_time"),
+        })
+    return {"active_tasks_count": len(tasks), "tasks": tasks}
+
+
+@app.post("/api/v1/tasks/{task_id}/cancel")
+async def cancel_task_endpoint(task_id: str) -> Dict[str, Any]:
+    """
+    Cancel an active creative task (R14).
+    Discloses remote cancellation limitations truthfully for cloud providers.
+    """
+    if task_id in creative_runner.active_tasks or task_id in creative_runner.active_cancellations:
+        return await creative_runner.cancel_task(task_id)
+    if task_id in active_cancellations:
+        active_cancellations[task_id].set()
+        return {"task_id": task_id, "status": "cancelled", "engine_interrupted": False}
+    raise HTTPException(status_code=404, detail=f"Active task '{task_id}' not found or already concluded.")
+
+
+@app.post("/api/v1/workflow/cancel/{run_id}")
+async def cancel_workflow_run(run_id: str) -> Dict[str, Any]:
+    """Cancel an active DAG workflow run (R14)."""
+    if run_id in active_cancellations:
+        active_cancellations[run_id].set()
+        return {"run_id": run_id, "success": True, "status": "cancelled"}
+    return {"run_id": run_id, "success": False, "status": "not_found"}
 
 
 # ---------------------------------------------------------------------------

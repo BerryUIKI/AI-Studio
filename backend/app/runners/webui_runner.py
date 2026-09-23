@@ -36,6 +36,16 @@ class WebUIRunner:
             else:
                 raise ValueError(f"Unsupported action for WebUI: {req.action}")
 
+    async def interrupt(self) -> bool:
+        """Interrupt active execution on SD WebUI via POST /sdapi/v1/interrupt."""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.post(f"{self.endpoint_url}/sdapi/v1/interrupt")
+                return resp.status_code == 200
+        except Exception as err:
+            logger.debug("WebUI interrupt failed or not reachable: %s", err)
+            return False
+
     async def _run_txt2img(self, client: httpx.AsyncClient, req: CreativeActionRequest) -> Dict[str, Any]:
         payload = {
             "prompt": req.prompt,

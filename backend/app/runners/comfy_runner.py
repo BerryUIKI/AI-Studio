@@ -152,6 +152,16 @@ class ComfyUIClient:
         """Construct the view/download URL for a generated media file."""
         return f"{self.base_url}/view?filename={filename}&subfolder={subfolder}&type={folder_type}"
 
+    async def interrupt(self) -> bool:
+        """Interrupt active execution on ComfyUI via POST /interrupt."""
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(f"{self.base_url}/interrupt")
+                return resp.status_code == 200
+        except Exception as err:
+            logger.debug("ComfyUI interrupt failed or not reachable: %s", err)
+            return False
+
 
 # Global default ComfyUI client instance
 comfy_client = ComfyUIClient()
