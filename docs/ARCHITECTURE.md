@@ -7,7 +7,7 @@ Product authority: [Vision](PRODUCT_VISION.md) and [PRD](PRD.md).
 
 Retain the existing React/TypeScript, Zustand, Tailwind and FastAPI foundation where useful. Refactor incrementally rather than rewriting the prototype indiscriminately.
 
-The UI manages a creative canvas and high-level actions. The backend owns projects, assets, model inventory, execution, secrets and runtime supervision. Local engines and cloud providers are optional adapters. The core starts without GPU packages.
+The Rust launcher owns Berry application bootstrap and presents the environment manager. The creative UI manages a canvas and high-level actions. The backend remains authoritative for projects, assets, model inventory, execution, secrets and managed-engine installation/runtime supervision. The launcher calls these services through a versioned local interface after bootstrap; engine and model logic must not be duplicated in Rust. Local engines and cloud providers are optional adapters. The core starts without GPU packages.
 
 API-first means a complete cloud-only path remains available. It does not diminish the approved NVIDIA/local installation experience.
 
@@ -15,6 +15,7 @@ API-first means a complete cloud-only path remains available. It does not dimini
 
 | Component | Responsibility |
 | --- | --- |
+| Rust launcher/manager | Berry startup, readiness, model inventory presentation, managed engine controls and update orchestration |
 | Creative workspace | Canvas objects, selection, contextual actions, parameters and status |
 | Project service | Versioned project documents, layout, history and recovery |
 | Asset service | Managed files, content hashes, metadata and export |
@@ -82,6 +83,8 @@ Async service handlers must not block on scans, hashing, subprocess waits or dat
 Separate managed ComfyUI and WebUI environments. No global pip installs or fallback to host Python. Support existing installations without taking ownership automatically.
 
 An installation manifest records engine version, environment, paths and completion state. Stage downloads/setup, report progress, and recover safely from interruption. Verify managed process identity before termination; never treat an arbitrary PID as sufficient ownership proof.
+
+The launcher may own Berry's backend process, but engine supervisors own managed ComfyUI/WebUI processes. External engines remain user-owned. Berry app updates and managed-engine updates are distinct operations; preserve models, projects, credentials and configuration. Track update state, compatibility and recovery before reporting success. See [Launcher and Environment Manager](LAUNCHER_MANAGER_REQUIREMENTS.md) for approved behavior.
 
 Platform adapters contain Windows-specific process flags and paths. Model directories may be shared only when engine configuration and compatibility permit. Preserve legacy engine locations and environment variables unless an explicit migration is implemented.
 

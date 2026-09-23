@@ -12,8 +12,11 @@ Welcome to **Berry AI Studio**, the beginner-friendly creative workspace with an
 
 ### Launching Berry
 1. Double-click `scripts\launch.bat` (or run `powershell -ExecutionPolicy Bypass -File scripts\start-berry.ps1`).
-2. The launcher will automatically configure an isolated development environment in `backend\.venv` if not already present.
-3. Your default browser will open automatically to `http://127.0.0.1:8000`.
+2. Alternatively, run the high-performance Rust launcher binary directly:
+   ```cmd
+   launcher\target\release\berry.exe
+   ```
+3. The launcher performs automated 4-stage readiness checks, bootstraps isolated environments if needed, and opens your default web browser to `http://127.0.0.1:8000` once the service is confirmed healthy.
 
 ---
 
@@ -35,7 +38,7 @@ Berry AI Studio supports two modes of creation:
 - **Using an Existing Engine**:
   - If you already run ComfyUI (port `8188`) or SD WebUI (port `7860`), Berry detects them automatically and connects with **zero process interference**.
 - **Using Berry's Managed Engine**:
-  - Click the engine power button in the header to start Berry's sandboxed local runtime.
+  - Open the **"Environment"** manager from the top header to inspect or start Berry's sandboxed local runtimes.
   - All local packages live strictly inside isolated directories (`%LOCALAPPDATA%\AI-Workflow\engine\`) with zero pollution of your system Python.
 
 ---
@@ -56,8 +59,40 @@ You never need to wire nodes to create images in Berry:
 
 ---
 
-## 4. Troubleshooting & FAQ
+## 4. Environment Manager & CLI Operations
 
-- **Backend says "Connecting..."**: Make sure `scripts\launch.bat` is running in a terminal window.
+The Berry launcher (`berry.exe`) remains available as a unified CLI and GUI environment manager:
+
+### CLI Commands
+| Command | Description |
+| :--- | :--- |
+| `berry` | Launch or focus active Berry workspace (no duplicate processes) |
+| `berry manager` | Open the Environment Manager view directly |
+| `berry status` | Show unified status of core PID, managed engines, cloud, and models |
+| `berry stop [--force]` | Controlled shutdown with active task protection |
+| `berry models list` | List all discovered models across registered roots |
+| `berry models rescan` | Trigger file inspection across all scan roots |
+| `berry models roots` | List all registered model directory roots |
+| `berry models add-root <dir> <label>` | Register a custom model directory |
+| `berry models remove-root <root_id>` | Remove directory from catalog without deleting files |
+| `berry engine start <comfyui\|webui>` | Start an isolated managed engine |
+| `berry engine stop <comfyui\|webui>` | Stop an isolated managed engine |
+| `berry engine update <comfyui\|webui>` | Safe engine update with automatic rollback |
+| `berry update check` | Check Berry app and engine updates separately |
+
+### Graphical Environment Manager
+Click **"Environment"** in the top navigation bar to open the Environment Manager modal, offering:
+- **Core & Process**: PID, uptime, active tasks counter, and safe **Exit Berry** action.
+- **Engines Lifecycle**: Status badges, Start/Stop/Install/Update controls, and external engine links.
+- **Model Inventory**: Filterable table of local models, engine compatibility tags, and scan root management.
+- **Updates & Recovery**: Separate app vs engine updates with rollback state display.
+
+---
+
+## 5. Troubleshooting & FAQ
+
+- **Backend says "Connecting..."**: Make sure `scripts\launch.bat` or `berry.exe` is running.
+- **Port 8000 Conflict**: If another application occupies port 8000, Berry launcher outputs an actionable diagnostic message. You can specify a custom port: `set BERRY_PORT=8001 && berry`.
+- **Frontend Packaging Diagnostic Page**: If `frontend/dist` has not been built, visiting `http://127.0.0.1:8000` presents an informative HTML diagnostic page rather than a blank 404. Run `cd frontend && pnpm build` to compile the web bundle.
 - **"No API key configured" in Cloud Mode**: Click **"Cloud BYOK"** in the header, paste your key from OpenAI/Fal.ai/SiliconFlow, and click **"Save"**.
-- **Can I add my own local model checkpoints?**: Yes! Berry scans `%LOCALAPPDATA%\AI-Workflow\engine\models\checkpoints` and lets you add custom directories via the Model Manager API.
+- **Model Files Safety**: Adding or removing directories in Berry's model inventory is non-destructive and never deletes weights from your disk.

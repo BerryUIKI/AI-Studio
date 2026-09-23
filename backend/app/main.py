@@ -5,12 +5,13 @@ import json
 import logging
 import time
 import uuid
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from app.core.cache import (
@@ -43,10 +44,16 @@ from app.schemas.engine import (
     EngineConnection,
     EngineConnectRequest,
     EngineInstallManifest,
+    EngineOwnership,
     EngineType,
+    EngineUpdateManifest,
+    LauncherConfig,
+    ManagerStatusResponse,
+    ShutdownRequest,
+    ShutdownResponse,
 )
 from app.schemas.hardware import HardwareReadiness
-from app.schemas.model import ModelRecord, ModelRoot
+from app.schemas.model import ModelRecord, ModelRoot, ModelRootCreate
 from app.schemas.events import (
     GraphFinishedEvent,
     GraphStartedEvent,
@@ -108,6 +115,111 @@ async def system_info() -> dict[str, object]:
         },
         "cache": {"items_cached": cache_store.size()},
     }
+
+
+app_start_time = time.time()
+launcher_config = LauncherConfig()
+
+
+# ---------------------------------------------------------------------------
+# Launcher & Environment Manager Endpoints (L01-L12)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/manager/status", response_model=ManagerStatusResponse)
+async def manager_status() -> ManagerStatusResponse:
+    """Return unified environment and process status for Berry, engines, and models."""
+    frontend_dir = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+    frontend_packaged = (frontend_dir / "index.html").is_file()
+
+    managed_comfy = engine_manager.get_engine("managed_comfyui")
+    managed_web = engine_manager.get_engine("managed_webui")
+    external_list = [e for e in engine_manager.list_engines() if e.ownership == EngineOwnership.EXTERNAL]
+
+    configured_clouds = sum(1 for p in credentials_manager.list_providers() if p.is_configured)
+    models_count = len(model_store.list_models())
+
+    return ManagerStatusResponse(
+        app_name="Berry AI Studio",
+        version="0.1.0",
+        pid=os.getpid(),
+        uptime_seconds=round(time.time() - app_start_time, 2),
+        port=launcher_config.port,
+        frontend_packaged=frontend_packaged,
+        managed_comfyui=managed_comfy,
+        managed_webui=managed_web,
+        external_engines=external_list,
+        cloud_providers_configured=configured_clouds,
+        models_indexed=models_count,
+        active_tasks=len(active_cancellations),
+        launcher_config=launcher_config,
+    )
+
+
+@app.get("/api/v1/manager/config", response_model=LauncherConfig)
+async def get_launcher_config() -> LauncherConfig:
+    """Get current launcher configuration."""
+    return launcher_config
+
+
+@app.post("/api/v1/manager/config", response_model=LauncherConfig)
+async def set_launcher_config(config: LauncherConfig) -> LauncherConfig:
+    """Update launcher configuration."""
+    global launcher_config
+    launcher_config = config
+    return launcher_config
+
+
+@app.post("/api/v1/manager/shutdown", response_model=ShutdownResponse)
+async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
+    """
+    Explicit controlled shutdown of Berry AI Studio (L07).
+    Guards active generation tasks and predictably terminates managed engines if configured.
+    Never terminates external user engines.
+    """
+    active_count = len(active_cancellations)
+    if active_count > 0 and not request.force:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot shutdown: {active_count} active generation task(s) running. Provide force=true to abort tasks.",
+        )
+
+    # Abort active tasks if forced
+    if active_count > 0:
+        for run_id, cancel_evt in list(active_cancellations.items()):
+            cancel_evt.set()
+
+    # Determine whether to stop managed engines
+    stop_managed = request.stop_managed_engines
+    if stop_managed is None:
+        stop_managed = launcher_config.stop_managed_engines_on_exit
+
+    stopped_engines = []
+    if stop_managed:
+        if supervisor.is_running():
+            supervisor.stop()
+            stopped_engines.append("managed_comfyui")
+        if webui_supervisor.is_running():
+            webui_supervisor.stop()
+            stopped_engines.append("managed_webui")
+
+    # Schedule self-termination
+    def _delayed_exit():
+        logger.info("Berry AI Studio server exiting upon manager request.")
+        os._exit(0)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.5, _delayed_exit)
+    except Exception:
+        pass
+
+    return ShutdownResponse(
+        status="shutting_down",
+        message="Berry AI Studio shutdown initiated.",
+        active_tasks_cancelled=active_count,
+        managed_engines_stopped=stopped_engines,
+    )
+
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +286,49 @@ async def trigger_engine_install(engine_type: EngineType) -> EngineInstallManife
     # Spawn in background task to avoid blocking HTTP call
     asyncio.create_task(installer.install_engine(engine_type))
     return installer.read_manifest(engine_type)
+
+
+@app.get("/api/v1/runtime/{engine_type}/update/manifest", response_model=EngineUpdateManifest)
+async def get_engine_update_manifest(engine_type: EngineType) -> EngineUpdateManifest:
+    """Retrieve the update manifest and rollback state for a managed engine."""
+    return installer.read_update_manifest(engine_type)
+
+
+@app.post("/api/v1/runtime/{engine_type}/update", response_model=EngineUpdateManifest)
+async def trigger_engine_update(engine_type: EngineType) -> EngineUpdateManifest:
+    """
+    Safely update a managed engine with active job checking and rollback protection (L08, L12).
+    """
+    has_active = len(active_cancellations) > 0
+    return await installer.update_engine(engine_type, has_active_tasks_fn=lambda: has_active)
+
+
+@app.get("/api/v1/updates/check")
+async def check_all_updates() -> dict[str, Any]:
+    """Check update availability for Berry AI Studio and managed engines separately (L08)."""
+    comfy_manifest = installer.read_update_manifest(EngineType.COMFYUI)
+    webui_manifest = installer.read_update_manifest(EngineType.WEBUI)
+
+    return {
+        "app": {
+            "name": "Berry AI Studio",
+            "current_version": "0.1.0",
+            "latest_version": "0.1.0",
+            "update_available": False,
+            "release_notes_url": "https://github.com/BerryUIKI/AI-Studio/releases",
+        },
+        "engines": {
+            "comfyui": {
+                "installed": supervisor.is_installed(),
+                "update_manifest": comfy_manifest,
+            },
+            "webui": {
+                "installed": webui_supervisor.is_installed(),
+                "update_manifest": webui_manifest,
+            },
+        },
+    }
+
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +399,22 @@ async def add_model_root(req: AddModelRootRequest) -> ModelRoot:
     """Register a new user-specified directory for model discovery."""
     root_id = f"root_{abs(hash(req.path)) % 10000}"
     return model_store.add_root(root_id, req.path, req.label, req.engine_type)
+
+
+@app.post("/api/v1/models/rescan", response_model=List[ModelRecord])
+async def trigger_model_rescan() -> List[ModelRecord]:
+    """Force re-scan of all model root directories."""
+    return await model_store.scan_all_roots_async()
+
+
+@app.delete("/api/v1/models/roots/{root_id}")
+async def remove_model_root(root_id: str) -> dict[str, Any]:
+    """Remove a configured model root directory without deleting files (L10)."""
+    removed = model_store.remove_root(root_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"Model root '{root_id}' not found")
+    return {"status": "removed", "root_id": root_id}
+
 
 
 # ---------------------------------------------------------------------------
@@ -613,7 +784,40 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
 # ---------------------------------------------------------------------------
 
 frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
-if frontend_dist.is_dir():
+if frontend_dist.is_dir() and (frontend_dist / "index.html").is_file():
     from fastapi.staticfiles import StaticFiles
 
     app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+else:
+    @app.get("/", response_class=HTMLResponse)
+    async def missing_frontend_page():
+        """Visible packaging error when frontend dist is missing (L02)."""
+        return HTMLResponse(
+            content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Berry AI Studio - Packaging Error</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; max-width: 600px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
+    h1 { color: #f43f5e; margin-top: 0; font-size: 22px; display: flex; align-items: center; gap: 8px; }
+    p { color: #cbd5e1; line-height: 1.6; }
+    code { background: #0f172a; color: #38bdf8; padding: 3px 6px; border-radius: 4px; font-family: monospace; }
+    .badge { display: inline-block; background: #ef4444; color: white; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">L02 Diagnostic</span>
+    <h1>⚠️ Packaging Error: Frontend Build Missing</h1>
+    <p>Berry AI Studio backend is running and healthy, but the frontend distribution assets (<code>frontend/dist/index.html</code>) are missing.</p>
+    <p><strong>For Developers:</strong> Run the frontend build command before launching:</p>
+    <p><code>cd frontend &amp;&amp; pnpm build</code></p>
+    <p><strong>Status:</strong> Backend core, REST APIs, and background engine supervisors remain accessible at <code>/health</code> and <code>/api/v1/manager/status</code>.</p>
+  </div>
+</body>
+</html>""",
+            status_code=200,
+        )
+

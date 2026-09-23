@@ -12,6 +12,7 @@ coverage/
 dist/
 dist-ssr/
 build/
+target/
 *.local
 
 # Python

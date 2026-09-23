@@ -50,3 +50,10 @@ class ModelRoot(BaseModel):
     is_active: bool = True
     exists: bool = True
     models_found: int = 0
+
+
+class ModelRootCreate(BaseModel):
+    path: str
+    label: str
+    engine_type: Optional[str] = "custom"
+

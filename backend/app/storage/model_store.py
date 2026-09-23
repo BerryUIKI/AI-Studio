@@ -258,6 +258,17 @@ class ModelStore:
 
         return discovered
 
+    def list_models(self) -> List[ModelRecord]:
+        """Return list of all models found in registered roots."""
+        return self.scan_all_roots()
+
+    def remove_root(self, root_id: str) -> bool:
+        """Remove a registered model scan root without deleting files (L10)."""
+        if root_id in self.roots:
+            del self.roots[root_id]
+            return True
+        return False
+
     async def scan_all_roots_async(self) -> List[ModelRecord]:
         """Asynchronously scan all model roots."""
         return await asyncio.to_thread(self.scan_all_roots)
@@ -265,3 +276,4 @@ class ModelStore:
 
 # Global model store singleton
 model_store = ModelStore()
+

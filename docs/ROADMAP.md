@@ -58,6 +58,16 @@ Exit: real cloud-only image journey passes with explicitly authorized test crede
 
 Exit: all in-scope requirements verified or explicitly returned to the product owner as release blockers. Do not silently defer approved scope.
 
+## M6 — Rust Launcher and Environment Manager
+
+- Audit the current Windows scripts and clean-machine startup, including frontend assets and backend runtime packaging.
+- Implement a Rust launcher that starts Berry, waits for readiness and opens the creative workspace.
+- Show the shared model catalog and manage installation, deployment and lifecycle of Berry-managed ComfyUI and WebUI through authoritative backend services.
+- Add separate, recoverable update flows for Berry, managed ComfyUI and managed WebUI.
+- Verify duplicate launch, port collision, cloud-only startup, external-engine ownership, model safety and interrupted install/update behavior.
+
+Exit: L01–L12 in [Launcher and Environment Manager](LAUNCHER_MANAGER_REQUIREMENTS.md) have recorded Windows evidence. Earlier M0–M5 claims do not substitute for this gate.
+
 ## Later Roadmap
 
 Video generation, richer templates, Agent-assisted existing workflows then automated workflow construction/repair, clarified CLI integration, non-NVIDIA discrete GPU inference, and additional OS distributions.

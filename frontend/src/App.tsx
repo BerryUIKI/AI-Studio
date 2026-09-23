@@ -10,6 +10,7 @@ import {
   ExternalLink,
   Layers,
   Cloud,
+  Server,
 } from 'lucide-react';
 import { NodePalette } from './components/canvas/NodePalette';
 import { FlowCanvas } from './components/canvas/FlowCanvas';
@@ -17,6 +18,7 @@ import { CreationDock } from './components/canvas/CreationDock';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
+import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
 
@@ -38,6 +40,7 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [showNodePalette, setShowNodePalette] = useState<boolean>(false);
   const [showCloudModal, setShowCloudModal] = useState<boolean>(false);
+  const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { nodes, clearCanvas, runWorkflow, isExecuting } = useCanvasStore();
@@ -61,6 +64,9 @@ export default function App() {
 
   useEffect(() => {
     refreshStatus();
+    if (window.location.hash === '#manager' || window.location.search.includes('view=manager')) {
+      setShowManagerModal(true);
+    }
     const interval = setInterval(refreshStatus, 8000);
     return () => clearInterval(interval);
   }, []);
@@ -125,6 +131,16 @@ export default function App() {
           >
             <Cloud className="w-3.5 h-3.5 text-sky-400" />
             <span>Cloud BYOK</span>
+          </button>
+
+          {/* Environment Manager Button */}
+          <button
+            onClick={() => setShowManagerModal(true)}
+            title="Open Environment Manager (Engines, Models, Updates, Core)"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
+          >
+            <Server className="w-3.5 h-3.5 text-purple-400" />
+            <span>Environment</span>
           </button>
 
           {/* Toggle Node Palette for Power Users */}
@@ -215,6 +231,7 @@ export default function App() {
       <InpaintModal />
       <UpscaleModal />
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
+      <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
     </div>
   );
 }

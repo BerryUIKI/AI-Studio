@@ -14,6 +14,7 @@ You are implementing Berry AI Studio as a senior product engineer. The product o
 4. docs/ARCHITECTURE.md.
 5. docs/ROADMAP.md.
 6. docs/PRODUCT_ALIGNMENT.md for discussion history and known prototype gaps.
+7. docs/LAUNCHER_MANAGER_REQUIREMENTS.md for the subsequently approved Rust launcher and environment manager scope (L01–L12).
 
 The vision and PRD contain the current product scope. The architecture provides implementation guidance. Older prototype behavior does not override these documents. Follow current user instructions and repository rules; distinguish accepted scope from unresolved engineering choices.
 
@@ -29,6 +30,7 @@ First release:
 - Curated existing ComfyUI workflows with validated dependencies and explicit input/output mappings.
 - Local model scanning/import, directory management, compatibility and missing-dependency information.
 - Persistent projects, canvas layouts, assets and generation history.
+- Rust launcher/environment manager for Berry startup, shared model inventory, managed ComfyUI/WebUI installation, lifecycle and updates. Follow L01–L12; reuse the backend services as the source of truth.
 - Truthful task status, cancellation, retry and deterministic caching.
 
 Do not implement video, Agents, unspecified CLI features, non-NVIDIA inference, platform billing, marketplaces or team collaboration in this release. Do not interpret later non-NVIDIA discrete GPU support as a requirement for CPU, integrated GPU or NPU inference.

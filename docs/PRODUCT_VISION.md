@@ -19,6 +19,7 @@ The primary user wants to generate and edit images without learning environment 
 - Retain native engine entry points for advanced use.
 - Include text-to-image, image-to-image, inpainting, and upscaling in the first release.
 - Provide local model scanning, importing, directory management, compatibility information, and missing-dependency guidance.
+- Provide a Rust-based launcher/environment manager that opens Berry, shows the unified model inventory, and manages installation, deployment, lifecycle and updates for Berry-managed ComfyUI and Stable Diffusion WebUI.
 - Cloud creation initially uses user-provided API keys and provider selection.
 - Save projects, assets, and generation records so work can resume after restart.
 - Defer video creation and Agent features. Future Agents may use existing workflows and construct workflows automatically.

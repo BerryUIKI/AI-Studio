@@ -2,13 +2,13 @@
 
 Date: 2026-09-23.
 Status: product scope approved; the detailed requirements and acceptance criteria below operationalize that scope for implementation.
-References: [Vision](PRODUCT_VISION.md), [Architecture](ARCHITECTURE.md), [Roadmap](ROADMAP.md).
+References: [Vision](PRODUCT_VISION.md), [Architecture](ARCHITECTURE.md), [Roadmap](ROADMAP.md), [Launcher and Environment Manager](LAUNCHER_MANAGER_REQUIREMENTS.md).
 
 ## Scope
 
 Ship a Windows creative application with a portable core, an infinite canvas, ComfyUI and Stable Diffusion WebUI integration, NVIDIA local execution, BYOK cloud execution, model management, and durable projects. Implement text-to-image, image-to-image, inpainting, and upscaling.
 
-The first development slices may run through the existing browser UI. The release must provide a documented Windows launch/install experience that does not require beginners to run developer commands. Desktop packaging technology is an engineering decision, not a confirmed product dependency.
+The first development slices may run through the existing browser UI. The release requires a Rust-based launcher/environment manager that opens Berry, presents model inventory, and manages installation, deployment, lifecycle and updates for Berry-managed ComfyUI and Stable Diffusion WebUI. See L01–L12 for acceptance. Desktop UI framework and packaging format remain engineering choices.
 
 ## Requirements and Acceptance
 
@@ -45,6 +45,7 @@ If provider access or hardware prevents verification, mark the requirement block
 - Creation controls: prompts, basic parameters, templates and explicit engine/provider selection.
 - Projects/assets: create, reopen, view history, and export.
 - Models: local inventory, directories, compatibility and missing items.
+- Launcher/environment manager: entry into Berry, shared model inventory, managed engine installation, deployment, lifecycle and updates.
 - Engines/settings: installation, connections, status, diagnostics and credentials.
 - Tasks: progress, errors, cancellation and completed results.
 
@@ -70,4 +71,4 @@ Model-download UX remains open. The initial product must explain missing models 
 
 ## Engineering Decisions Still Open
 
-Exact engine versions, reference models/providers, desktop wrapper, supported workflow import format, secure credential implementation, and minimum supported NVIDIA hardware. Resolve with documented evidence and small technical investigations. Escalate only decisions changing accepted scope, cost, privacy, or irreversible user-data behavior.
+Exact engine versions, reference models/providers, Rust desktop UI framework and packaging format, update channels and recovery design, supported workflow import format, secure credential implementation, and minimum supported NVIDIA hardware. Resolve with documented evidence and small technical investigations. Escalate only decisions changing accepted scope, cost, privacy, or irreversible user-data behavior.

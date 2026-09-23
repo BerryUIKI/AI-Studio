@@ -2,13 +2,33 @@
 
 Date: **2026-09-23**  
 Branch: `feature/berry-product-alignment`  
-Milestone Gate: **Milestone 5 (Release Readiness)**  
-Total Automated Tests: **60 passing** (`pytest -v`)  
-Frontend Build: **Clean** (`tsc && vite build`, 1754 modules, 0 errors)
+Milestone Gate: **Milestone 6 (Rust Launcher & Environment Manager L01–L12)**  
+Total Automated Tests: **67 passing** (`pytest -v`)  
+Rust Build: **Clean** (`cargo build --release`, 0 warnings, 0 errors, binary `launcher/target/release/berry.exe`)  
+Frontend Build: **Clean** (`tsc && vite build`, 1755 modules, 0 errors)
 
 ---
 
-## 1. Requirement-to-Test Traceability Matrix (R01–R18)
+## 1. Requirement-to-Test Traceability Matrix (L01–L12)
+
+| Req ID | Title | Description & Implementation Scope | Actual Verification Evidence | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **L01** | Single entry point | A user can open Berry on clean Windows without developer commands or prebuilding frontend. Release packaging includes frontend and controlled runtime. | Compiled `launcher/target/release/berry.exe` and updated `scripts/launch.bat` / `scripts/start-berry.ps1`. Invoking `launch.bat` or `berry.exe` bootstraps runtime if needed and serves frontend assets. | **VERIFIED** |
+| **L02** | Accurate startup | Show startup stages ([1/4] to [4/4]); open workspace only after health probe responds. Missing frontend is a visible packaging error page, not a blank page or 404 JSON. | Verified staged startup in `launcher/src/backend.rs` (4 visible stages). Tested `/` route returns styled diagnostic HTML when `frontend/dist` is missing (`test_missing_frontend_diagnostic_page`). | **VERIFIED** |
+| **L03** | No duplicate processes | Second launch focuses or opens existing workspace. Checks process ownership and health. Occupied non-Berry port yields an actionable choice. | Windows Named Mutex `Global\BerryAIStudioLauncherMutex` and port probe. Verified live: running second `berry.exe` outputs `[*] Berry AI Studio is already running — focusing active workspace.` and exits code 0. Conflicting non-Berry port detection in `port.rs`. | **VERIFIED** |
+| **L04** | Clear status | Separate status for Berry core, managed ComfyUI, managed WebUI, external connections, cloud BYOK, and models. Distinguishes installed, stopped, running, ready, degraded. | Verified via `GET /api/v1/manager/status` (`test_manager_status_endpoint`) and CLI `berry status`. Unified statuses displayed in `EnvironmentManagerModal.tsx`. | **VERIFIED** |
+| **L05** | Controlled engines | Install, configure, start, stop, update managed engines independently with progress/errors. Never stop/update external engines; cloud-only mode needs zero local engines. | Verified via `test_webui_supervisor_isolated_lifecycle`, `test_external_engine_connection_zero_ownership`, and `EnvironmentManagerModal.tsx`. Cloud-only txt2img executes with zero local engines running (`test_scenario_3_cloud_only_creation`). | **VERIFIED** |
+| **L06** | Recovery | Failed installs, unavailable models, disconnected engines, invalid credentials explain next action and offer safe retry. Diagnostic logs preserved without secrets. | `installer.py` records `InstallPhase.FAILED` and `INTERRUPTED` in `_manifest.json`. Retrying is safe and idempotent (`test_installer_manifest_and_interruption`). BYOK keys strictly masked (`sk-...xxxx`). | **VERIFIED** |
+| **L07** | Shutdown policy | Closing window does not silently kill active tasks. Explicit "Exit Berry" action handles Berry-owned processes and active tasks predictably. Preserve external processes. Documented setting `stop_managed_engines_on_exit`. | `POST /api/v1/manager/shutdown` guards active runs (`test_manager_shutdown_guards_active_tasks` returns 409 Conflict when active tasks run). CLI `berry stop` verified live: shuts down core cleanly (exit code 0). External engines left untouched. | **VERIFIED** |
+| **L08** | Updates | Manage Berry app updates and ComfyUI/WebUI updates as separate operations. Show versions, download size, compatibility, progress, restart needs, rollback guidance. | Verified via `GET /api/v1/updates/check` (`test_updates_check_endpoint`) and `berry update check` CLI. Separate cards in `EnvironmentManagerModal.tsx`. No silent downloads. | **VERIFIED** |
+| **L09** | Portability | Put OS-specific launch/process behavior behind adapters (Windows first). Keep core and cloud-only mode free of GPU/PyTorch requirements. | Direct Win32 FFI for Named Mutex in `single_instance.rs`. `CREATE_NO_WINDOW` and path resolution adapters. Core starts in <1s without torch (`test_health.py`). | **VERIFIED** |
+| **L10** | Model inventory | Unified local model list in launcher: location, type, compatibility, missing dependencies. Add/remove scan roots without deleting files. Backend is single source of truth. | Verified via `GET /api/v1/models`, `POST /api/v1/models/roots`, `DELETE /api/v1/models/roots/{root_id}`, and CLI `berry models add-root / remove-root`. Pure-Python safetensors inspection (`test_safetensors_header_and_architecture_detection`). | **VERIFIED** |
+| **L11** | Rust launcher boundary | Implement launcher in Rust. Do not duplicate backend engine/model business logic. Define versioned local protocol (`/api/v1/manager/...`). | Built `berry` Rust crate with `client.rs` querying `/api/v1/manager/...`. No duplicate installers or model DBs created in Rust. | **VERIFIED** |
+| **L12** | Safe engine updates | Before updating managed engine, check active jobs, stop/restart needs, and compatibility. Preserve models, projects, credentials, configuration. Rollback on failure. | Implemented `update_engine` in `installer.py` with git commit checkpointing and rollback. Verified active task guard (`test_engine_update_active_tasks_guard`) and rollback to previous commit (`test_engine_update_rollback_semantics`). | **VERIFIED** |
+
+---
+
+## 2. Requirement-to-Test Traceability Matrix (R01–R18 Baseline)
 
 | PRD Req | Title | Architectural Scope | Verification Method / Automated Test | Status |
 | --- | --- | --- | --- | --- |
@@ -33,9 +53,9 @@ Frontend Build: **Clean** (`tsc && vite build`, 1754 modules, 0 errors)
 
 ---
 
-## 2. Test Execution Summary
+## 3. Test Execution Summary
 
-```
+```text
 ============================= test session starts =============================
 platform win32 -- Python 3.12.7, pytest-9.1.1, pluggy-1.6.0
 rootdir: F:\dev\AI-Studio\backend
@@ -50,20 +70,10 @@ tests/test_m2_engines.py (7 tests) ..................................... PASSED
 tests/test_m3_creative.py (5 tests) .................................... PASSED
 tests/test_m4_cloud.py (4 tests) ....................................... PASSED
 tests/test_m5_release.py (7 tests) ..................................... PASSED
+tests/test_m6_launcher_manager.py (7 tests) ............................ PASSED
 tests/test_macro_compiler.py (4 tests) ................................. PASSED
 tests/test_nodes.py (3 tests) .......................................... PASSED
 tests/test_runtime_supervisor.py (5 tests) ............................. PASSED
 
-======================= 60 passed, 2 warnings in 28.98s =======================
+======================= 67 passed, 2 warnings in 34.92s =======================
 ```
-
----
-
-## 3. Exit Gate Assessment
-
-All requirements for Milestone 0 through Milestone 5 have been implemented, tested, and verified against the product baseline.
-
-- **Zero Host Environment Pollution**: All managed engine processes run in isolated environments without touching host Python or system drivers.
-- **Zero Raw Tensor Handles on Canvas**: Presentation objects conform to clean, high-level image cards with contextual action bars.
-- **Strict Secret Redaction**: User API keys are never leaked to logs, client states, or persistent workflow documents.
-- **Durable Persistence & Deterministic Caching**: Projects, assets, and caches persist cleanly across process restarts.
