@@ -18,9 +18,10 @@ from typing import List, Optional
 from app.runtime.supervisor import get_default_engine_dir
 from app.schemas.hardware import GpuInfo, HardwareReadiness, StorageInfo
 
-# Reference verified discrete GPU hardware models (M11)
-VERIFIED_AMD_MODELS = ["7900", "7800", "6700", "6800"]
-VERIFIED_INTEL_MODELS = ["A770", "A750"]
+# Reference candidate discrete GPU hardware models (M11)
+# Note: These are candidate architectures; physical verification requires real device execution logs.
+REFERENCE_AMD_MODELS = ["7900", "7800", "6700", "6800"]
+REFERENCE_INTEL_MODELS = ["A770", "A750"]
 
 
 def detect_nvidia_gpus() -> List[GpuInfo]:
@@ -111,7 +112,7 @@ def detect_windows_wmi_gpus() -> List[GpuInfo]:
 
                     # AMD Radeon Detection
                     if "RADEON" in name_upper or "AMD" in name_upper:
-                        is_verified = any(v in name_upper for v in VERIFIED_AMD_MODELS)
+                        is_reference = any(v in name_upper for v in REFERENCE_AMD_MODELS)
                         gpus.append(
                             GpuInfo(
                                 index=idx,
@@ -121,13 +122,13 @@ def detect_windows_wmi_gpus() -> List[GpuInfo]:
                                 driver_version=driver_ver,
                                 vendor="amd",
                                 backend="directml",
-                                status_classification="verified" if is_verified else "experimental",
+                                status_classification="candidate_unverified" if is_reference else "experimental",
                             )
                         )
 
                     # Intel Arc Detection
                     elif "INTEL" in name_upper and ("ARC" in name_upper or any(m in name_upper for m in ["A770", "A750", "A580", "A380"])):
-                        is_verified = any(v in name_upper for v in VERIFIED_INTEL_MODELS)
+                        is_reference = any(v in name_upper for v in REFERENCE_INTEL_MODELS)
                         gpus.append(
                             GpuInfo(
                                 index=idx,
@@ -137,7 +138,7 @@ def detect_windows_wmi_gpus() -> List[GpuInfo]:
                                 driver_version=driver_ver,
                                 vendor="intel",
                                 backend="directml",
-                                status_classification="verified" if is_verified else "experimental",
+                                status_classification="candidate_unverified" if is_reference else "experimental",
                             )
                         )
     except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
@@ -171,7 +172,7 @@ def detect_linux_non_nvidia_gpus() -> List[GpuInfo]:
                     vram_free_mb=12288,
                     vendor="amd",
                     backend="rocm",
-                    status_classification="verified",
+                    status_classification="candidate_unverified",
                 )
             )
     except Exception:
@@ -209,7 +210,7 @@ def detect_all_gpus() -> List[GpuInfo]:
                 vram_free_mb=12288,
                 vendor="apple_silicon",
                 backend="mps",
-                status_classification="verified",
+                status_classification="source_compatible_unverified",
             )
         ]
 
@@ -304,7 +305,10 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
                 guidance.append("SD 1.5 supported in low-vram mode; cloud API inference recommended for larger models.")
 
         elif vendor == "amd":
-            if status == "verified":
+            if status == "candidate_unverified":
+                summary = f"Candidate Architecture (Unverified on Physical Hardware in Current Session): {primary.name} ({primary.vram_total_mb}MB VRAM) using {backend.upper()}."
+                guidance.append(f"AMD Radeon accelerated via {backend.upper()} with automatic split-cross-attention. Physical generation unverified on this device.")
+            elif status == "verified":
                 summary = f"Ready (AMD Reference Hardware): {primary.name} ({primary.vram_total_mb}MB VRAM) using {backend.upper()}."
                 guidance.append(f"AMD Radeon accelerated via {backend.upper()} with automatic split-cross-attention.")
             else:
@@ -312,7 +316,10 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
                 guidance.append("Experimental DirectML acceleration enabled. If performance is inadequate, use Cloud BYOK.")
 
         elif vendor == "intel":
-            if status == "verified":
+            if status == "candidate_unverified":
+                summary = f"Candidate Architecture (Unverified on Physical Hardware in Current Session): {primary.name} ({primary.vram_total_mb}MB VRAM) using {backend.upper()}."
+                guidance.append(f"Intel Arc accelerated via {backend.upper()}. Physical generation unverified on this device.")
+            elif status == "verified":
                 summary = f"Ready (Intel Arc Reference Hardware): {primary.name} ({primary.vram_total_mb}MB VRAM) using {backend.upper()}."
                 guidance.append(f"Intel Arc accelerated via {backend.upper()}.")
             else:
@@ -320,8 +327,8 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
                 guidance.append("Experimental DirectML acceleration enabled. If performance is inadequate, use Cloud BYOK.")
 
         elif vendor == "apple_silicon":
-            summary = f"Ready (Apple Silicon): Metal Performance Shaders (MPS) active."
-            guidance.append("ComfyUI will run natively with Apple Silicon unified memory acceleration.")
+            summary = "Source-Compatible Architecture (Unverified on Physical Hardware in Current Session): Apple Silicon (MPS)."
+            guidance.append("ComfyUI and Python service are source-compatible with Apple Silicon MPS; physical macOS package and inference unverified in this session.")
 
         else:
             summary = f"Generic GPU detected: {primary.name}."

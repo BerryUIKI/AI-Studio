@@ -36,7 +36,7 @@ def test_macos_metal_detection(monkeypatch):
     assert len(gpus) == 1
     assert gpus[0].vendor == "apple_silicon"
     assert gpus[0].backend == "mps"
-    assert gpus[0].status_classification == "verified"
+    assert gpus[0].status_classification == "source_compatible_unverified"
 
     flags = get_hardware_launch_flags(gpus)
     assert "--force-fp16" in flags
