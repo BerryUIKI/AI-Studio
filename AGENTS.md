@@ -132,7 +132,7 @@ async def execute_flux_node(inputs: dict, params: dict, context: ExecutionContex
 
 ## 5. Git & Branching Rules for Agents
 
-- **Target Branch**: Never commit directly to `main`. When creating PRs or branches, branch off **`dev`** (`feature/<name>` or `bugfix/<name>`).
+- **GitFlow**: Follow `BRANCHING_STRATEGY.md`. Feature, ordinary bug-fix, and documentation branches start from and target `dev`; release branches start from `dev` and target `main`, then synchronize back to `dev`; hotfix branches start from `main` and target `main`, then synchronize back to `dev`. Never commit directly to `main` or `dev`.
 - **Commit Messages**: Follow Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`).
 - **Clean Commits**: Keep changes atomic. Do not bundle formatting refactors with behavioral feature additions.
 

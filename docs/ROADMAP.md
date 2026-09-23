@@ -1,7 +1,7 @@
 # Berry AI Studio Implementation Roadmap
 
 Date: 2026-09-23. This roadmap supersedes historical milestone completion claims.
-No milestone below is marked accepted based on the existing prototype.
+M0–M6 have been reported implemented on `feature/berry-product-alignment`. These reports are developer evidence; unified product acceptance and release promotion have not occurred.
 
 ## M0 — Baseline and Implementation Decisions
 

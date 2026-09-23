@@ -3,9 +3,13 @@
 Date: **2026-09-23**  
 Branch: `feature/berry-product-alignment`  
 Milestone Gate: **Milestone 6 (Rust Launcher & Environment Manager L01–L12)**  
-Total Automated Tests: **67 passing** (`pytest -v`)  
+Status: **Developer Implementation Evidence (Unified Product Acceptance Pending)**  
+Comprehensive Handoff: See [`DELIVERY_HANDOFF_M0_M6.md`](DELIVERY_HANDOFF_M0_M6.md)  
+Total Automated Tests: **68 passing** (`pytest -v`)  
 Rust Build: **Clean** (`cargo build --release`, 0 warnings, 0 errors, binary `launcher/target/release/berry.exe`)  
 Frontend Build: **Clean** (`tsc && vite build`, 1755 modules, 0 errors)
+
+> **Important Note on Evidence Scope**: Passing automated unit/integration tests (using mocked engine/cloud adapters) and developer builds establish implementation baseline evidence, not final product acceptance. Real local GPU generation, clean-machine installer runs, and paid cloud network calls are verified during the unified acceptance review.
 
 ---
 
