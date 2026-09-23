@@ -8,7 +8,7 @@
 
 ## 1. Release Package Artifact & Exact Commit
 
-- **Exact Git Review Commit (`dev`)**: Will be recorded upon merge of this PR into `dev`.
+- **Exact Git Review Commit (`dev`)**: [`4af27ec20ef8db25d9e0e46e5b437de5096ee1b9`](https://github.com/BerryUIKI/AI-Studio/commit/4af27ec20ef8db25d9e0e46e5b437de5096ee1b9)
 - **Preceding Integration Commit (`dev`)**: [`674611827de2a20854e55c9dd509dda9fb746de4`](https://github.com/BerryUIKI/AI-Studio/commit/674611827de2a20854e55c9dd509dda9fb746de4)
 - **Primary Package Artifact**:
   - **Archive**: `dist/Berry-AI-Studio-v0.1.0-windows-x64.zip` (18.9 MB)
@@ -38,6 +38,7 @@ All changes have been developed on focused feature branches and integrated into 
 | **[PR #5](https://github.com/BerryUIKI/AI-Studio/pull/5)** | `feature/windows-portable-distribution` | `feat(distribution): add Windows portable release packager and smoke test (L01)` | 3/3 Passed | [`3fbf7c1`](https://github.com/BerryUIKI/AI-Studio/commit/3fbf7c1) |
 | **[PR #6](https://github.com/BerryUIKI/AI-Studio/pull/6)** | `docs/m0-m6-delivery-handoff` | `docs(handoff): finalize M0-M6 delivery handoff and verification boundaries` | 3/3 Passed | [`da70036`](https://github.com/BerryUIKI/AI-Studio/commit/da70036) |
 | **[PR #7](https://github.com/BerryUIKI/AI-Studio/pull/7)** | `feature/cancellation-and-cloud-actions` | `feat(creative): implement task cancellation, engine interrupt, and cloud actions (R07-R09, R14, L07)` | 3/3 Passed | [`6746118`](https://github.com/BerryUIKI/AI-Studio/commit/6746118) |
+| **[PR #8](https://github.com/BerryUIKI/AI-Studio/pull/8)** | `docs/acceptance-dossier-m0-m6` | `docs(dossier): add Berry AI Studio v0.1 unified product acceptance dossier` | 3/3 Passed | [`4af27ec`](https://github.com/BerryUIKI/AI-Studio/commit/4af27ec) |
 
 ---
 
