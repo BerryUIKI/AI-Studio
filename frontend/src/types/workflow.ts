@@ -39,7 +39,7 @@ export interface NodeDefinition {
   parameters: ParameterDef[];
 }
 
-export type ExecutionStatus = 'idle' | 'queued' | 'running' | 'cached' | 'completed' | 'error';
+export type ExecutionStatus = 'idle' | 'queued' | 'running' | 'cached' | 'completed' | 'error' | 'cancelled';
 
 export interface CustomNodeData extends Record<string, unknown> {
   definition: NodeDefinition;

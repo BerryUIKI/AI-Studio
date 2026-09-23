@@ -7,10 +7,12 @@ import {
   NodeTypes,
 } from '@xyflow/react';
 import { WorkflowNode } from './WorkflowNode';
+import { ImageCardNode } from './ImageCardNode';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
 const nodeTypes: NodeTypes = {
   workflowNode: WorkflowNode,
+  imageCard: ImageCardNode,
 };
 
 export function FlowCanvas() {
