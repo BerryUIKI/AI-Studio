@@ -100,38 +100,38 @@ cargo run --manifest-path launcher/Cargo.toml
 
 ## 5. Requirement-to-Evidence Matrix (R01–R18 & L01–L12)
 
-| Requirement ID | Specification | Implementation & Verification Evidence | Status |
+| Requirement ID | Specification | Implementation & Verification Evidence | Verification Status |
 | :--- | :--- | :--- | :--- |
-| **R01** | Lightweight startup | Backend boots without `torch`; cloud mode requires 0 local GPU. Verified by `test_health.py` and `test_m1_core.py`. | **VERIFIED** |
-| **R02** | Device readiness | `/api/v1/hardware/readiness` inspects NVIDIA GPU, VRAM, and storage without modifying system drivers. Verified by `test_m5_release.py`. | **VERIFIED** |
-| **R03** | Managed engine installation | Isolated virtualenvs in `~/.ai-workflow/engine/`. Interrupted install recorded in manifest. Verified by `test_m2_engines.py`. | **VERIFIED** |
-| **R04** | Existing engine connection | Connects to external engines via URL without modifying user directories. Verified by `test_comfy_bridge.py`. | **VERIFIED** |
-| **R05** | Engine lifecycle | Supervised Start, Stop, and Status. Probes HTTP responsiveness. External processes preserved. Verified by `test_m2_engines.py`. | **VERIFIED** |
-| **R06** | Infinite canvas | React Flow infinite canvas with pan/zoom, card selection, contextual image actions, and zero spaghetti wires. Verified by `FlowCanvas.tsx`. | **VERIFIED** |
-| **R07** | Image creation | Prompt, aspect ratio, seed, and model selection. Unsupported combinations explain what is missing. Verified by `test_cancellation_and_actions.py`. | **VERIFIED** |
-| **R08** | Inpainting | Canvas-aligned mask drawing tool (`InpaintModal.tsx`), natural dimension scaling, prompt editing, and result placement. Verified by `test_m3_creative.py`. | **VERIFIED** |
-| **R09** | Upscaling and export | 2×/4× resolution upscaling (`UpscaleModal.tsx`), thumbnail dimension preview, and local export/download (`ImageCardNode.tsx`). | **VERIFIED** |
-| **R10** | Workflow templates | Curated macro graphs for txt2img, img2img, inpaint, upscale. Node inputs validated. Verified by `test_macro_compiler.py`. | **VERIFIED** |
-| **R11** | Model inventory | Non-destructive scanning of safetensors/checkpoints. Detects architectures (SDXL, SD1.5, Flux, LoRA) and missing VAE/CLIP. Verified by `test_m5_release.py`. | **VERIFIED** |
-| **R12** | Directory management | Add/remove model roots via CLI and GUI without deleting files. Verified by `test_m5_release.py` and `EnvironmentManagerModal.tsx`. | **VERIFIED** |
-| **R13** | BYOK cloud | Local credential storage for OpenAI, Fal.ai, SiliconFlow. Secrets redacted and never saved to canvas or git. Verified by `test_m4_cloud.py`. | **VERIFIED** |
-| **R14** | Task lifecycle & cancellation | Queued, running, completed, error, and cancelled states. REST cancel endpoints (`/api/v1/tasks/{id}/cancel`, `/api/v1/workflow/cancel/{id}`) with truthful cloud disclosure. Verified by `test_cancellation_and_actions.py`. | **VERIFIED** |
-| **R15** | Persistence & asset adoption | SQLite database saves projects, assets, and canvas state. Remote cloud URLs adopted into local content-addressable storage. Verified by `test_m1_core.py` and `test_m4_cloud.py`. | **VERIFIED** |
-| **R16** | Deterministic caching | Hash calculated from action, prompt, model, seed, input image, and mask hashes. Identical inputs reuse cache; parameter changes re-execute. Verified by `test_dag_cache.py`. | **VERIFIED** |
-| **R17** | Portable architecture | OS-specific process flags behind adapters (`launcher/src/backend.rs`). Portable core tested with 73 automated tests. | **VERIFIED** |
-| **R18** | Native entry points | Opens configured native UI (`/api/v1/runtime/{engine}/ui`) without hardcoded assumptions. | **VERIFIED** |
-| **L01** | Single entry point | Windows release package requires zero developer tools. Verified by `smoke-test-package.ps1` with sanitized PATH. | **VERIFIED** |
-| **L02** | Accurate startup | 4-stage readiness check in Rust launcher. Missing frontend renders diagnostic HTML error rather than blank page. Verified by `test_m6_launcher_manager.py`. | **VERIFIED** |
-| **L03** | No duplicate processes | Windows Named Mutex (`Global\BerryAIStudioLauncherMutex`) focuses existing workspace on second launch. Port collisions detected with diagnostic guidance. | **VERIFIED** |
-| **L04** | Clear status | `/api/v1/manager/status` and `berry.exe status` aggregate core, engines, cloud, models, and active tasks. Verified by `test_m6_launcher_manager.py`. | **VERIFIED** |
-| **L05** | Controlled engines | Managed engines install, start, stop, and update independently. External engines are never stopped or modified. | **VERIFIED** |
-| **L06** | Recovery | Actionable error messages and retry paths for broken virtualenvs, port conflicts, and interrupted updates. | **VERIFIED** |
-| **L07** | Shutdown policy | `/api/v1/manager/shutdown` and `berry stop` check active tasks; non-forced exit returns HTTP 409 if generations are running. Verified by `test_cancellation_and_actions.py`. | **VERIFIED** |
-| **L08** | Updates separation | Application updates (`POST /api/v1/updates/app`) and engine updates (`POST /api/v1/runtime/{engine}/update`) are separate operations. Verified by `test_m6_launcher_manager.py`. | **VERIFIED** |
-| **L09** | Launcher portability | Windows-specific Named Mutex and process creation behind `#[cfg(windows)]`. Cross-platform HTTP/TCP core. | **VERIFIED** |
-| **L10** | Model inventory in launcher | `berry models list/roots/add-root/remove-root` CLI and GUI Environment Manager. Reuses backend model store. | **VERIFIED** |
-| **L11** | Rust launcher boundary | Launcher implemented in Rust (`launcher/`), interacting with backend via REST API (`/api/v1/manager/*`). | **VERIFIED** |
-| **L12** | Safe engine updates & rollback | Before engine update, active tasks are checked. Pre-update git commit captured; on failure, `git checkout <commit>` restores code. Preserves models and configs. Verified by `test_m6_launcher_manager.py`. | **VERIFIED** |
+| **R01** | Lightweight startup | Backend boots without `torch`; cloud mode requires 0 local GPU. Verified by `test_health.py` and `test_m1_core.py`. | **MOCK_VERIFIED** |
+| **R02** | Device readiness | `/api/v1/hardware/readiness` inspects NVIDIA GPU, VRAM, and storage without modifying system drivers. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **R03** | Managed engine installation | Isolated virtualenvs in `~/.ai-workflow/engine/`. Interrupted install recorded in manifest. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **R04** | Existing engine connection | Connects to external engines via URL without modifying user directories. Verified by `test_comfy_bridge.py`. | **MOCK_VERIFIED** |
+| **R05** | Engine lifecycle | Supervised Start, Stop, and Status. Probes HTTP responsiveness. External processes preserved. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **R06** | Infinite canvas | React Flow infinite canvas with pan/zoom, card selection, contextual image actions, and zero spaghetti wires. Verified in browser build. | **MOCK_VERIFIED** |
+| **R07** | Image creation | Prompt, aspect ratio, seed, and model selection. Real Fal.ai and local ComfyUI RTX 3060 runs recorded. | **REAL_PROVIDER_VERIFIED** & **PHYSICAL_VERIFIED** |
+| **R08** | Inpainting | Canvas-aligned mask drawing tool (`InpaintModal.tsx`), natural dimension scaling, prompt editing. Real Fal.ai run recorded. | **REAL_PROVIDER_VERIFIED** |
+| **R09** | Upscaling and export | 2×/4× resolution upscaling (`UpscaleModal.tsx`), thumbnail dimension preview, and local export/download (`ImageCardNode.tsx`). Real Fal.ai run recorded. | **REAL_PROVIDER_VERIFIED** |
+| **R10** | Workflow templates | Curated macro graphs for txt2img, img2img, inpaint, upscale. Node inputs validated. Verified by `test_macro_compiler.py`. | **MOCK_VERIFIED** |
+| **R11** | Model inventory | Non-destructive scanning of safetensors/checkpoints. Detects architectures (SDXL, SD1.5, Flux, LoRA) and missing VAE/CLIP. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **R12** | Directory management | Add/remove model roots via CLI and GUI without deleting files. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **R13** | BYOK cloud | Local credential storage for OpenAI, Fal.ai, SiliconFlow. Secrets redacted and never saved to canvas or git. Real BYOK credentials verified. | **REAL_PROVIDER_VERIFIED** |
+| **R14** | Task lifecycle & cancellation | Queued, running, completed, error, and cancelled states. REST cancel endpoints with truthful cloud disclosure. Verified by `test_cancellation_and_actions.py`. | **MOCK_VERIFIED** |
+| **R15** | Persistence & asset adoption | SQLite database saves projects, assets, and canvas state. Remote cloud URLs adopted into local content-addressable storage. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **R16** | Deterministic caching | Hash calculated from action, prompt, model, seed, input image, and mask hashes. Identical inputs reuse cache; parameter changes re-execute. Verified by `test_dag_cache.py`. | **MOCK_VERIFIED** |
+| **R17** | Portable architecture | OS-specific process flags behind adapters (`launcher/src/backend.rs`). Cross-platform code paths passing unit tests. | **SOURCE_COMPATIBLE** |
+| **R18** | Native entry points | Opens configured native UI (`/api/v1/runtime/{engine}/ui`) without hardcoded assumptions. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L01** | Single entry point | Windows release package requires zero developer tools. Verified by `smoke-test-package.ps1` with sanitized PATH. | **PHYSICAL_VERIFIED** |
+| **L02** | Accurate startup | 4-stage readiness check in Rust launcher. Missing frontend renders diagnostic HTML error rather than blank page. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L03** | No duplicate processes | Windows Named Mutex (`Global\BerryAIStudioLauncherMutex`) focuses existing workspace on second launch. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L04** | Clear status | `/api/v1/manager/status` and `berry.exe status` aggregate core, engines, cloud, models, and active tasks. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L05** | Controlled engines | Managed engines install, start, stop, and update independently. External engines are never stopped or modified. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L06** | Recovery | Actionable error messages and retry paths for broken virtualenvs, port conflicts, and interrupted updates. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L07** | Shutdown policy | `/api/v1/manager/shutdown` and `berry stop` check active tasks; non-forced exit returns HTTP 409 if generations are running. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L08** | Updates separation | Application updates (`POST /api/v1/updates/app`) and engine updates (`POST /api/v1/runtime/{engine}/update`) are separate operations. Verified by `test_m6_launcher_manager.py`. | **MOCK_VERIFIED** |
+| **L09** | Launcher portability | Windows-specific Named Mutex and process creation behind `#[cfg(windows)]`. Cross-platform HTTP/TCP core. | **SOURCE_COMPATIBLE** |
+| **L10** | Model inventory in launcher | `berry models list/roots/add-root/remove-root` CLI and GUI Environment Manager. Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L11** | Rust launcher boundary | Launcher implemented in Rust (`launcher/`), interacting with backend via REST API (`/api/v1/manager/*`). Verified on host rig. | **PHYSICAL_VERIFIED** |
+| **L12** | Safe engine updates & rollback | Before engine update, active tasks are checked. Pre-update git commit captured; on failure, `git checkout <commit>` restores code. Verified by `test_m6_launcher_manager.py`. | **MOCK_VERIFIED** |
 
 ---
 
