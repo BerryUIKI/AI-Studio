@@ -1,8 +1,9 @@
 """
 Cloud API execution driver.
 
-Supports OpenAI-compatible LLM endpoints (DeepSeek, GPT-4o, etc.) and
-image generation APIs (Fal.ai / SiliconFlow / OpenAI Images).
+Supports OpenAI-compatible LLM endpoints (DeepSeek, GPT-4o, etc.),
+image generation APIs (Fal.ai / SiliconFlow / OpenAI Images),
+and the output.preview presentation card runner.
 
 Reads credentials from environment variables or from node-level params.
 Never hardcodes secrets.
@@ -21,6 +22,7 @@ from app.schemas.events import (
     NodeStatusEvent,
     WorkflowEvent,
 )
+from app.storage.asset_store import asset_store
 
 
 class APIRunnerError(Exception):
@@ -160,8 +162,22 @@ async def run_image_gen_node(
         yield NodeStatusEvent(node_id=node_id, status="error")
         return
 
-    yield NodeProgressEvent(node_id=node_id, progress=0.95, message="Image generation completed.")
-    yield NodeOutputEvent(node_id=node_id, output={"image": image_url})
+    yield NodeProgressEvent(node_id=node_id, progress=0.8, message="Persisting cloud image into managed storage...")
+    output_dict: Dict[str, Any] = {"image": image_url}
+    try:
+        asset = await asset_store.save_image_from_url(image_url)
+        output_dict = {
+            "image": f"/api/v1/assets/{asset.id}/content",
+            "asset_id": asset.id,
+            "content_hash": asset.content_hash,
+            "remote_url": image_url,
+        }
+    except Exception:
+        # Fall back to remote URL if download fails (e.g. offline mock or local test)
+        pass
+
+    yield NodeProgressEvent(node_id=node_id, progress=1.0, message="Image generation completed.")
+    yield NodeOutputEvent(node_id=node_id, output=output_dict)
     yield NodeStatusEvent(node_id=node_id, status="completed")
 
 
@@ -230,6 +246,33 @@ async def run_input_text_node(
 
 
 # ---------------------------------------------------------------------------
+# Preview node: display media input card
+# ---------------------------------------------------------------------------
+
+async def run_preview_node(
+    node_id: str,
+    inputs: Dict[str, Any],
+    params: Dict[str, Any],
+) -> AsyncGenerator[WorkflowEvent, None]:
+    """Presentation card handler for output.preview nodes."""
+    yield NodeStatusEvent(node_id=node_id, status="running")
+    media = inputs.get("media") or inputs.get("image") or inputs.get("text") or inputs.get("result")
+    output: Dict[str, Any] = {}
+    if isinstance(media, str):
+        if media.startswith("http://") or media.startswith("https://") or media.startswith("/api/v1/assets/"):
+            output["image"] = media
+        else:
+            output["result"] = media
+    elif isinstance(media, dict):
+        output.update(media)
+    elif media is not None:
+        output["result"] = str(media)
+
+    yield NodeOutputEvent(node_id=node_id, output=output)
+    yield NodeStatusEvent(node_id=node_id, status="completed")
+
+
+# ---------------------------------------------------------------------------
 # Runner dispatch table
 # ---------------------------------------------------------------------------
 
@@ -237,4 +280,5 @@ NODE_RUNNERS = {
     "input.text": run_input_text_node,
     "text.llm": run_llm_node,
     "image.generate": run_image_gen_node,
+    "output.preview": run_preview_node,
 }

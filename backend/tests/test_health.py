@@ -16,5 +16,5 @@ def test_system_info():
     response = client.get("/api/v1/info")
     assert response.status_code == 200
     data = response.json()
-    assert data["name"] == "AI-Workflow"
+    assert data["name"] == "Berry AI Studio"
     assert "runners" in data
