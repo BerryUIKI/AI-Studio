@@ -1,6 +1,7 @@
 //! Berry AI Studio - Launcher & Environment Manager (L01-L12).
 
 mod backend;
+mod cli;
 mod client;
 mod port;
 mod single_instance;
@@ -51,6 +52,9 @@ fn print_help() {
     println!("  berry engine <action> <type> Manage engine lifecycle (start, stop, install, update)");
     println!("  berry models <action> [...]  Manage model inventory (list, rescan, add, remove)");
     println!("  berry update <check|app|engine> Manage application and engine updates");
+    println!("  berry run <action> [options] Execute creative workflows from CLI (txt2img, img2img, upscale, txt2video, img2video)");
+    println!("  berry tasks <list|cancel>   Inspect or cancel background execution tasks");
+    println!("  berry system [--json]       Display hardware readiness and engine availability");
     println!("  berry help                  Show this help screen");
 }
 
@@ -66,6 +70,26 @@ fn main() {
 
     if args.len() > 1 {
         match args[1].as_str() {
+            "run" => {
+                if let Err(e) = cli::handle_run_command(&client, &args[2..]) {
+                    eprintln!("[ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+
+            "tasks" => {
+                if let Err(e) = cli::handle_tasks_command(&client, &args[2..]) {
+                    eprintln!("[ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
+
+            "system" => {
+                if let Err(e) = cli::handle_system_command(&client, &args[2..]) {
+                    eprintln!("[ERROR] {}", e);
+                    std::process::exit(1);
+                }
+            }
             "status" => {
                 match client.get_status() {
                     Ok(status) => {
