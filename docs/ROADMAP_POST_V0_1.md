@@ -24,29 +24,16 @@ This roadmap operationalizes the long-term approved technical directions for Ber
 
 ---
 
-## 2. Dependency-Ordered Milestones
+## 2. Dependency-Ordered Milestones & Implementation Status
 
-```
-M0–M6 (v0.1 Integrated Baseline)
-  │
-  ▼
-M7 — Video Generation & Usable Video Creation Journey
-  │
-  ▼
-M8 — Documented Unified Berry CLI for Creation & Environment Management
-  │
-  ▼
-M9 — Conversational Agent Control of Existing Workflows & Engines
-  │
-  ▼
-M10 — Agent-Assisted Construction, Validation, Repair, and Execution of ComfyUI Workflows
-  │
-  ▼
-M11 — Local Inference on Selected Non-NVIDIA Discrete GPUs
-  │
-  ▼
-M12 — Cross-Platform Desktop Support (macOS Apple Silicon & Linux)
-```
+| Milestone | Title & Focus Area | Implementation PR | Status on `dev` | Verification Evidence |
+| :--- | :--- | :--- | :--- | :--- |
+| **M7** | Video Generation & Usable Video Creation Journey | [PR #11](https://github.com/BerryUIKI/AI-Studio/pull/11) | **Merged** (`64cd55c`) | `test_m7_video.py` (7/7 passed), SVD XT / AnimateDiff macro compilers, Fal / SiliconFlow cloud video, canvas video cards |
+| **M8** | Documented Unified Berry CLI for Creation & Management | [PR #12](https://github.com/BerryUIKI/AI-Studio/pull/12) | **Merged** (`8e394dd`) | `test_m8_cli.py` (3/3 passed), Rust tests (2/2 passed), `berry run/tasks/system`, [`docs/CLI_REFERENCE.md`](CLI_REFERENCE.md) |
+| **M9** | Conversational Agent Control of Existing Workflows & Engines | [PR #13](https://github.com/BerryUIKI/AI-Studio/pull/13) | **Merged** (`1260722`) | `test_m9_agent.py` (6/6 passed), `AgentService`, transparent `AgentProposal`, human-in-the-loop gate, frontend `AgentPanel` |
+| **M10** | Agent-Assisted Construction, Validation, Repair of Workflows | [PR #14](https://github.com/BerryUIKI/AI-Studio/pull/14) | **Merged** (`60c3620`) | `test_m10_workflow_repair.py` (6/6 passed), ComfyUI DAG syntax & port validator, automated heuristic repair engine |
+| **M11** | Local Inference on Selected Non-NVIDIA Discrete GPUs | [PR #15](https://github.com/BerryUIKI/AI-Studio/pull/15) | **Merged** (`7f700b2`) | `test_m11_hardware.py` (4/4 passed), AMD/Intel/Apple GPU detection, DirectML flags, [`docs/SUPPORT_MATRIX.md`](SUPPORT_MATRIX.md) |
+| **M12** | Cross-Platform Desktop Adapters (macOS Metal & Linux) | [PR #16](https://github.com/BerryUIKI/AI-Studio/pull/16) | **Merged** (`2551796`) | `test_m12_cross_platform.py` (4/4 passed), Unix domain socket single instance, cross-platform browser, [`docs/PLATFORM_PORTABILITY.md`](PLATFORM_PORTABILITY.md) |
 
 ---
 
