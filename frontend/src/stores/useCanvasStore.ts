@@ -16,6 +16,7 @@ interface CanvasState {
   edges: Edge[];
   selectedNodeId: string | null;
   isExecuting: boolean;
+  currentRunId: string | null;
 
   onNodesChange: (changes: NodeChange<Node<CustomNodeData>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
@@ -26,7 +27,8 @@ interface CanvasState {
   setNodeOutput: (nodeId: string, output: Record<string, any>) => void;
   setSelectedNodeId: (nodeId: string | null) => void;
   clearCanvas: () => void;
-  runWorkflow: () => Promise<void>;
+  runWorkflow: (targetNodeId?: string) => Promise<void>;
+  cancelRun: () => void;
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
@@ -34,6 +36,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   edges: [],
   selectedNodeId: null,
   isExecuting: false,
+  currentRunId: null,
 
   onNodesChange: (changes) => {
     set({
@@ -139,30 +142,64 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
 
-  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: null, isExecuting: false }),
+  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: null, isExecuting: false, currentRunId: null }),
 
-  runWorkflow: async () => {
+  cancelRun: () => {
+    const { currentRunId } = get();
+    if (currentRunId) {
+      fetch(`/api/v1/workflow/cancel/${currentRunId}`, { method: 'POST' }).catch(() => {});
+      set({ isExecuting: false, currentRunId: null });
+    }
+  },
+
+  runWorkflow: async (targetNodeId?: string) => {
     const { nodes, edges, setNodeStatus, setNodeOutput } = get();
     if (nodes.length === 0) return;
 
-    set({ isExecuting: true });
+    const runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    set({ isExecuting: true, currentRunId: runId });
 
-    // Reset all nodes to queued/idle
-    nodes.forEach((n) => setNodeStatus(n.id, 'queued'));
+    // If targeted execution, resolve ancestors to queue only relevant nodes
+    const ancestorIds = new Set<string>();
+    if (targetNodeId) {
+      ancestorIds.add(targetNodeId);
+      const queue = [targetNodeId];
+      while (queue.length > 0) {
+        const curr = queue.shift()!;
+        edges
+          .filter((e) => e.target === curr)
+          .forEach((e) => {
+            if (!ancestorIds.has(e.source)) {
+              ancestorIds.add(e.source);
+              queue.push(e.source);
+            }
+          });
+      }
+    }
 
-    const graphPayload = {
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        type: n.data.definition.type,
-        params: n.data.params,
-      })),
-      edges: edges.map((e) => ({
-        id: e.id,
-        source: e.source,
-        source_handle: e.sourceHandle || 'output',
-        target: e.target,
-        target_handle: e.targetHandle || 'input',
-      })),
+    nodes.forEach((n) => {
+      if (!targetNodeId || ancestorIds.has(n.id)) {
+        setNodeStatus(n.id, 'queued');
+      }
+    });
+
+    const runPayload = {
+      run_id: runId,
+      target_node_id: targetNodeId || null,
+      graph: {
+        nodes: nodes.map((n) => ({
+          id: n.id,
+          type: n.data.definition.type,
+          params: n.data.params,
+        })),
+        edges: edges.map((e) => ({
+          id: e.id,
+          source: e.source,
+          source_handle: e.sourceHandle || 'output',
+          target: e.target,
+          target_handle: e.targetHandle || 'input',
+        })),
+      },
     };
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -172,7 +209,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
-        ws.send(JSON.stringify(graphPayload));
+        ws.send(JSON.stringify(runPayload));
       };
 
       ws.onmessage = (event) => {
@@ -183,12 +220,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           } else if (msg.type === 'NODE_OUTPUT') {
             setNodeOutput(msg.node_id, msg.output);
           } else if (msg.type === 'GRAPH_FINISHED') {
-            set({ isExecuting: false });
+            set({ isExecuting: false, currentRunId: null });
+          } else if (msg.type === 'RUN_CANCELLED') {
+            set({ isExecuting: false, currentRunId: null });
           } else if (msg.type === 'ERROR' || msg.type === 'NODE_ERROR') {
             if (msg.node_id) {
               setNodeStatus(msg.node_id, 'error');
             }
-            set({ isExecuting: false });
+            set({ isExecuting: false, currentRunId: null });
           }
         } catch {
           // ignore parsing error
@@ -196,14 +235,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       };
 
       ws.onerror = () => {
-        set({ isExecuting: false });
+        set({ isExecuting: false, currentRunId: null });
       };
 
       ws.onclose = () => {
-        set({ isExecuting: false });
+        set({ isExecuting: false, currentRunId: null });
       };
     } catch {
-      set({ isExecuting: false });
+      set({ isExecuting: false, currentRunId: null });
     }
   },
 }));
