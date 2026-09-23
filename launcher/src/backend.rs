@@ -26,13 +26,21 @@ impl BackendSupervisor {
     /// 3. Development fallback: bootstrap from host Python if running from source
     pub fn find_python_executable(&self) -> Result<PathBuf, String> {
         // 1. Release distribution: check bundled hermetic Python runtime
-        let bundled_python = if cfg!(windows) {
-            self.root_dir.join("runtime").join("python").join("python.exe")
+        let bundled_candidates = if cfg!(windows) {
+            vec![
+                self.root_dir.join("runtime").join("python").join("Scripts").join("python.exe"),
+                self.root_dir.join("runtime").join("python").join("python.exe"),
+            ]
         } else {
-            self.root_dir.join("runtime").join("python").join("bin").join("python")
+            vec![
+                self.root_dir.join("runtime").join("python").join("bin").join("python"),
+                self.root_dir.join("runtime").join("python").join("python"),
+            ]
         };
-        if bundled_python.is_file() {
-            return Ok(bundled_python);
+        for candidate in bundled_candidates {
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
         }
 
         // 2. Pre-configured isolated virtual environment
