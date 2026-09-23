@@ -186,3 +186,91 @@ def test_api_workflow_validate_and_repair_endpoints():
     assert rep_data["success"] is True
     assert rep_data["repaired_valid"] is True
     assert rep_data["repaired_workflow"]["8"]["inputs"]["vae"] == ["4", 2]
+
+
+def test_repairer_blocks_ambiguous_connections():
+    """Repairer blocks automatic reconnection when multiple ambiguous sources exist."""
+    broken = build_valid_comfyui_graph()
+    # Add a second VAE loader to create ambiguity
+    broken["10"] = {
+        "class_type": "VAELoader",
+        "inputs": {"vae_name": "vae-ft-mse-840000-ema-pruned.safetensors"},
+    }
+    del broken["8"]["inputs"]["vae"]
+
+    repairer = WorkflowRepairer()
+    result = repairer.repair(broken)
+
+    # Should have recorded a substitution_blocked action
+    blocked_repairs = [r for r in result.repairs_applied if r.action_type == "substitution_blocked"]
+    assert len(blocked_repairs) >= 1
+    assert "ambiguous" in blocked_repairs[0].description.lower()
+    # The slot should not have been blindly wired
+    assert "vae" not in result.repaired_workflow["8"]["inputs"]
+
+
+def test_repairer_blocks_cross_family_checkpoint_substitution():
+    """Repairer blocks model substitution if indexed models belong to an incompatible or unknown family."""
+    from unittest.mock import MagicMock
+    from app.schemas.model import ModelRecord, ModelCategory, ModelArchitecture
+
+    broken = build_valid_comfyui_graph()
+    # Workflow expects a Flux model
+    broken["4"]["inputs"]["ckpt_name"] = "flux1-schnell.safetensors"
+
+    # Catalog only has an SD 1.5 model
+    mock_catalog = MagicMock()
+    mock_catalog.get_models.return_value = [
+        ModelRecord(
+            id="sd15",
+            name="v1-5-pruned-emaonly.safetensors",
+            file_path="models/v1-5-pruned-emaonly.safetensors",
+            category=ModelCategory.CHECKPOINT,
+            architecture=ModelArchitecture.SD15,
+            format="safetensors",
+            size_bytes=4000000000,
+            size_mb=4000.0,
+        )
+    ]
+
+    repairer = WorkflowRepairer(model_catalog=mock_catalog)
+    result = repairer.repair(broken)
+
+    # Cross-family substitution must be blocked
+    blocked = [r for r in result.repairs_applied if r.action_type == "substitution_blocked"]
+    assert len(blocked) >= 1
+    assert "flux" in blocked[0].description.lower()
+    # The checkpoint in workflow should remain untouched (not mutated to SD1.5)
+    assert result.repaired_workflow["4"]["inputs"]["ckpt_name"] == "flux1-schnell.safetensors"
+
+
+def test_repairer_allows_same_family_checkpoint_substitution():
+    """Repairer substitutes missing checkpoint when a candidate with matching family is indexed."""
+    from unittest.mock import MagicMock
+    from app.schemas.model import ModelRecord, ModelCategory, ModelArchitecture
+
+    broken = build_valid_comfyui_graph()
+    # Workflow has missing SD 1.5 checkpoint
+    broken["4"]["inputs"]["ckpt_name"] = "dreamshaper_8_sd15.safetensors"
+
+    mock_catalog = MagicMock()
+    mock_catalog.get_models.return_value = [
+        ModelRecord(
+            id="sd15_alt",
+            name="v1-5-pruned-emaonly.safetensors",
+            file_path="models/v1-5-pruned-emaonly.safetensors",
+            category=ModelCategory.CHECKPOINT,
+            architecture=ModelArchitecture.SD15,
+            format="safetensors",
+            size_bytes=4000000000,
+            size_mb=4000.0,
+        )
+    ]
+
+    repairer = WorkflowRepairer(model_catalog=mock_catalog)
+    result = repairer.repair(broken)
+
+    substitutions = [r for r in result.repairs_applied if r.action_type == "replace_model"]
+    assert len(substitutions) == 1
+    assert result.repaired_workflow["4"]["inputs"]["ckpt_name"] == "v1-5-pruned-emaonly.safetensors"
+

@@ -1,7 +1,8 @@
-"""Conversational Agent Service for workflow and engine control (M9).
+"""Rule- and regex-based conversational assistant service for workflow and engine control (M9).
 
-Provides natural-language intent parsing, model/engine recommendation, transparent
-action plan formulation, and human-in-the-loop proposal execution.
+Provides deterministic intent matching, parameter extraction, model/engine recommendation, transparent
+action plan formulation, and human-in-the-loop proposal execution. Bounded heuristic capabilities;
+does not claim unconstrained natural-language understanding or arbitrary workflow synthesis.
 """
 
 import re
@@ -164,7 +165,8 @@ class AgentService:
                 "Berry Studio includes an automated ComfyUI DAG validator and repair engine (M10). "
                 "You can submit workflows via `/api/v1/workflow/validate` to inspect topological cycles, "
                 "missing MODEL/CLIP/VAE connections, and missing checkpoint dependencies. "
-                "The repair engine automatically reconnects broken links and substitutes indexed checkpoints."
+                "The repair engine reconnects unambiguous broken links and substitutes family-compatible "
+                "indexed checkpoints while blocking ambiguous or cross-family mutations."
             )
             assistant_msg = AgentChatMessage(role="assistant", content=content)
             history.append(assistant_msg)
