@@ -171,6 +171,12 @@ async def manager_status() -> ManagerStatusResponse:
     )
 
 
+@app.get("/api/v1/system/info", response_model=HardwareReadiness)
+async def get_system_hardware_info() -> HardwareReadiness:
+    """Return hardware readiness diagnostics, GPU vendor info, and storage metrics (M8, M11)."""
+    return await check_hardware_readiness()
+
+
 @app.get("/api/v1/manager/config", response_model=LauncherConfig)
 async def get_launcher_config() -> LauncherConfig:
     """Get current launcher configuration."""
