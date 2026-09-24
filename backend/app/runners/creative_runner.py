@@ -97,12 +97,13 @@ class CreativeRunner:
         interrupted = False
         disclaimer = None
 
+        is_cloud = "cloud" in engine_id or engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai")
         if "comfy" in engine_id:
             interrupted = await comfy_client.interrupt()
         elif "webui" in engine_id:
             runner = WebUIRunner()
             interrupted = await runner.interrupt()
-        elif "cloud" in engine_id:
+        elif is_cloud:
             disclaimer = (
                 "Cloud cancellation requested locally. Note: external cloud providers "
                 "may continue asynchronous inference or incur compute charges."
@@ -176,6 +177,7 @@ class CreativeRunner:
 
         # Dispatch based on engine
         try:
+            is_cloud = "cloud" in req.engine_id or req.engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai")
             if "webui" in req.engine_id:
                 if is_video:
                     raise ValueError("WebUI engine currently does not support native video generation. Use ComfyUI or Cloud.")
@@ -191,7 +193,7 @@ class CreativeRunner:
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
-            elif "cloud" in req.engine_id:
+            elif is_cloud:
                 action_data = await self._run_cloud(req, input_file_path, mask_file_path)
                 asset_id = action_data["asset_id"]
                 image_url = action_data["image_url"]
@@ -480,25 +482,57 @@ class CreativeRunner:
         elif req.action == CreativeActionType.IMG2VIDEO:
             if not image_b64:
                 raise ValueError("Source image is required for cloud img2video.")
-            key = credentials_manager.get_key(CloudProviderId.FAL)
-            if not key:
-                raise RuntimeError(
-                    "Cloud img2video requires a Fal.ai BYOK key (Fast SVD). "
-                    "Configure Fal.ai in Cloud Providers or use local ComfyUI."
+            if req.engine_id in ("siliconflow", "silicon"):
+                key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
+                if not key_sf:
+                    raise RuntimeError("SiliconFlow API key missing. Configure it in Cloud Providers (BYOK).")
+                remote_url = await _call_siliconflow_video(
+                    action="img2video",
+                    prompt=req.prompt,
+                    api_key=key_sf,
+                    image_b64=image_b64,
                 )
-            remote_url = await _call_fal_ai_video(
-                action="img2video",
-                prompt=req.prompt,
-                api_key=key,
-                image_b64=image_b64,
-                fps=req.fps,
-                num_frames=req.num_frames,
-                motion_bucket_id=req.motion_bucket_id,
-            )
+            else:
+                key_fal = credentials_manager.get_key(CloudProviderId.FAL)
+                if not key_fal:
+                    key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
+                    if key_sf:
+                        remote_url = await _call_siliconflow_video(
+                            action="img2video",
+                            prompt=req.prompt,
+                            api_key=key_sf,
+                            image_b64=image_b64,
+                        )
+                    else:
+                        raise RuntimeError(
+                            "Cloud img2video requires a Fal.ai BYOK key (Fast SVD) or SiliconFlow key (CogVideoX). "
+                            "Configure Fal.ai or SiliconFlow in Cloud Providers or use local ComfyUI."
+                        )
+                else:
+                    remote_url = await _call_fal_ai_video(
+                        action="img2video",
+                        prompt=req.prompt,
+                        api_key=key_fal,
+                        image_b64=image_b64,
+                        fps=req.fps,
+                        num_frames=req.num_frames,
+                        motion_bucket_id=req.motion_bucket_id,
+                    )
 
         elif req.action == CreativeActionType.TXT2VIDEO:
-            key_fal = credentials_manager.get_key(CloudProviderId.FAL)
-            if key_fal:
+            if req.engine_id in ("siliconflow", "silicon"):
+                key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
+                if not key_sf:
+                    raise RuntimeError("SiliconFlow API key missing. Configure it in Cloud Providers (BYOK).")
+                remote_url = await _call_siliconflow_video(
+                    action="txt2video",
+                    prompt=req.prompt,
+                    api_key=key_sf,
+                )
+            elif req.engine_id in ("fal_ai", "fal"):
+                key_fal = credentials_manager.get_key(CloudProviderId.FAL)
+                if not key_fal:
+                    raise RuntimeError("Fal.ai API key missing. Configure it in Cloud Providers (BYOK).")
                 remote_url = await _call_fal_ai_video(
                     action="txt2video",
                     prompt=req.prompt,
@@ -507,17 +541,27 @@ class CreativeRunner:
                     num_frames=req.num_frames,
                 )
             else:
-                key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
-                if not key_sf:
-                    raise RuntimeError(
-                        "No cloud API key configured for video generation. "
-                        "Configure a Fal.ai or SiliconFlow BYOK key in Cloud Settings."
+                key_fal = credentials_manager.get_key(CloudProviderId.FAL)
+                if key_fal:
+                    remote_url = await _call_fal_ai_video(
+                        action="txt2video",
+                        prompt=req.prompt,
+                        api_key=key_fal,
+                        fps=req.fps,
+                        num_frames=req.num_frames,
                     )
-                remote_url = await _call_siliconflow_video(
-                    action="txt2video",
-                    prompt=req.prompt,
-                    api_key=key_sf,
-                )
+                else:
+                    key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
+                    if not key_sf:
+                        raise RuntimeError(
+                            "No cloud API key configured for video generation. "
+                            "Configure a Fal.ai or SiliconFlow BYOK key in Cloud Settings."
+                        )
+                    remote_url = await _call_siliconflow_video(
+                        action="txt2video",
+                        prompt=req.prompt,
+                        api_key=key_sf,
+                    )
 
         else:
             # TXT2IMG

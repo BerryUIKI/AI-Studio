@@ -39,7 +39,17 @@ class AssetStore:
         byte_size = len(data)
 
         # Content-addressable subfolder structure: assets/{hash[:2]}/{hash}{ext}
-        ext = Path(filename).suffix or ".png"
+        ext = Path(filename).suffix or (".mp4" if media_type == "video" else ".png")
+        if media_type == "video":
+            if data[:4] == b"\x1a\x45\xdf\xa3":
+                ext = ".webm"
+            elif len(data) >= 8 and data[4:8] in (b"ftyp", b"moov", b"wide", b"mdat"):
+                ext = ".mp4"
+            elif len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+                ext = ".webp"
+            if Path(filename).suffix != ext:
+                filename = f"{Path(filename).stem}{ext}"
+
         subdir = self.assets_dir / content_hash[:2]
         subdir.mkdir(parents=True, exist_ok=True)
         target_path = subdir / f"{content_hash}{ext}"
