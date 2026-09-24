@@ -78,6 +78,26 @@ export interface AgentActionStep {
   description?: string;
 }
 
+export interface WorkflowNodeStage {
+  stage_number: number;
+  name: string;
+  node_type: string;
+  description: string;
+}
+
+export interface ReviewableWorkflowGraph {
+  workflow_id: string;
+  workflow_title: string;
+  node_count: number;
+  stages: WorkflowNodeStage[];
+  required_nodes: string[];
+  required_models: string[];
+  missing_models: string[];
+  is_valid: boolean;
+  validation_issues: string[];
+  recovery_guidance?: string;
+}
+
 export interface AgentProposal {
   id: string;
   intent: string;
@@ -87,6 +107,7 @@ export interface AgentProposal {
   model: string;
   parameters: Record<string, any>;
   chain_steps: AgentActionStep[];
+  workflow_graph?: ReviewableWorkflowGraph;
   estimated_calls: number;
   cost_disclaimer: string;
   explanation: string;

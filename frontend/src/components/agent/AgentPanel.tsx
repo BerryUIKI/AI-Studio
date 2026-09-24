@@ -9,6 +9,11 @@ import {
   RefreshCw,
   Image as ImageIcon,
   Zap,
+  Layers,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { AgentChatMessage, AgentProposal, CreativeActionResult, ImageCardData } from '../../types/creative';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -33,7 +38,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [executingProposalId, setExecutingProposalId] = useState<string | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
+  const [expandedGraphs, setExpandedGraphs] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const toggleGraphExpanded = (proposalId: string) => {
+    setExpandedGraphs((prev) => ({ ...prev, [proposalId]: !prev[proposalId] }));
+  };
 
   const selectedNodeId = useCanvasStore((s) => s.selectedNodeId);
   const nodes = useCanvasStore((s) => s.nodes);
@@ -278,6 +288,96 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
                     </div>
                   )}
 
+                  {/* Bounded ComfyUI Reviewable Graph */}
+                  {msg.proposal.workflow_graph && (
+                    <div className="rounded bg-slate-950/70 p-2.5 border border-slate-800 space-y-2">
+                      <div
+                        onClick={() => toggleGraphExpanded(msg.proposal!.id)}
+                        className="flex items-center justify-between cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-300">
+                          <Layers className="h-3.5 w-3.5 text-indigo-400" />
+                          <span>ComfyUI Execution DAG ({msg.proposal.workflow_graph.node_count} Nodes, {msg.proposal.workflow_graph.stages.length} Stages)</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {msg.proposal.workflow_graph.is_valid ? (
+                            <span className="flex items-center gap-1 rounded bg-emerald-950/60 border border-emerald-800/60 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                              <CheckCircle2 className="h-3 w-3" /> Validated
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 rounded bg-amber-950/60 border border-amber-800/60 px-1.5 py-0.5 text-[10px] text-amber-400">
+                              <AlertTriangle className="h-3 w-3" /> Issues
+                            </span>
+                          )}
+                          {expandedGraphs[msg.proposal.id] ? (
+                            <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Notice keeping raw ComfyUI handles off creative canvas */}
+                      <p className="text-[10px] text-slate-400">
+                        Encapsulated DAG: internal CLIP/Latent/VAE wiring stays isolated from the creative canvas.
+                      </p>
+
+                      {expandedGraphs[msg.proposal.id] && (
+                        <div className="mt-2 space-y-2 pt-2 border-t border-slate-800/80">
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                              Execution Stages:
+                            </span>
+                            {msg.proposal.workflow_graph.stages.map((st) => (
+                              <div key={st.stage_number} className="flex items-start gap-1.5 text-[11px] text-slate-300">
+                                <span className="h-4 w-4 rounded-full bg-slate-800 text-[9px] flex items-center justify-center font-bold text-indigo-400 shrink-0 mt-0.5">
+                                  {st.stage_number}
+                                </span>
+                                <div>
+                                  <span className="font-medium text-slate-200">{st.name}</span>
+                                  <span className="text-slate-500 font-mono text-[10px] ml-1">({st.node_type})</span>
+                                  <p className="text-[10px] text-slate-400">{st.description}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Required Models Checklist */}
+                          <div className="space-y-1 pt-1">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+                              Required Models:
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {msg.proposal.workflow_graph.required_models.map((m) => {
+                                const isMissing = msg.proposal!.workflow_graph!.missing_models.includes(m);
+                                return (
+                                  <span
+                                    key={m}
+                                    className={`rounded px-1.5 py-0.5 text-[10px] font-mono border ${
+                                      isMissing
+                                        ? 'bg-rose-950/40 border-rose-800/60 text-rose-300'
+                                        : 'bg-slate-900 border-slate-800 text-slate-300'
+                                    }`}
+                                  >
+                                    {m} {isMissing ? '(missing)' : ''}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Recovery guidance if issues exist */}
+                          {msg.proposal.workflow_graph.recovery_guidance && (
+                            <div className="rounded bg-amber-950/40 border border-amber-800/50 p-2 text-[10px] text-amber-300">
+                              <span className="font-semibold block mb-0.5">Recovery Guidance:</span>
+                              <span>{msg.proposal.workflow_graph.recovery_guidance}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Transparent Cost / Privacy Notice */}
                   <div className="flex items-center gap-1.5 rounded bg-emerald-950/30 border border-emerald-800/40 p-1.5 text-[11px] text-emerald-400">
                     <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
@@ -285,11 +385,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
                   </div>
 
                   {/* Human-in-the-Loop Action Gate */}
-                  <div className="pt-1 flex items-center gap-2">
+                  <div className="pt-1 flex flex-col gap-1.5">
+                    {msg.proposal.workflow_graph && !msg.proposal.workflow_graph.is_valid && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-950/30 border border-amber-800/40 rounded px-2 py-1">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        <span>Workflow has missing dependencies or validation issues.</span>
+                      </div>
+                    )}
                     <button
                       onClick={() => handleApproveAndRun(msg.proposal!)}
-                      disabled={executingProposalId === msg.proposal.id}
-                      className="flex-1 flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors shadow-sm"
+                      disabled={executingProposalId === msg.proposal.id || Boolean(msg.proposal.workflow_graph && !msg.proposal.workflow_graph.is_valid)}
+                      className="w-full flex items-center justify-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 px-3 py-1.5 text-xs font-semibold text-white transition-colors shadow-sm"
                     >
                       {executingProposalId === msg.proposal.id ? (
                         <>

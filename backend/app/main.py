@@ -34,6 +34,7 @@ from app.schemas.agent import (
 )
 from app.core.workflow_validator import WorkflowValidator
 from app.core.workflow_repair import WorkflowRepairer
+from app.core.workflow_catalog import WorkflowCatalog
 from app.schemas.workflow_analysis import (
     WorkflowValidationReport,
     WorkflowRepairResult,
@@ -575,12 +576,20 @@ async def agent_execute_proposal_endpoint(req: AgentExecuteProposalRequest) -> L
         return await agent_service.execute_proposal(req.proposal, project_id=req.project_id)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 workflow_validator = WorkflowValidator(model_catalog=model_store)
 workflow_repairer = WorkflowRepairer(model_catalog=model_store)
+
+
+@app.get("/api/v1/workflow/bounded")
+async def list_bounded_workflows() -> List[Dict[str, Any]]:
+    """Return the registry of bounded supported ComfyUI workflows (M10)."""
+    return WorkflowCatalog.list_workflows()
 
 
 @app.post("/api/v1/workflow/validate", response_model=WorkflowValidationReport)

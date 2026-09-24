@@ -29,6 +29,26 @@ class AgentActionStep(BaseModel):
     description: str = ""
 
 
+class WorkflowNodeStage(BaseModel):
+    stage_number: int
+    name: str
+    node_type: str
+    description: str
+
+
+class ReviewableWorkflowGraph(BaseModel):
+    workflow_id: str
+    workflow_title: str
+    node_count: int
+    stages: List[WorkflowNodeStage] = Field(default_factory=list)
+    required_nodes: List[str] = Field(default_factory=list)
+    required_models: List[str] = Field(default_factory=list)
+    missing_models: List[str] = Field(default_factory=list)
+    is_valid: bool = True
+    validation_issues: List[str] = Field(default_factory=list)
+    recovery_guidance: Optional[str] = None
+
+
 class AgentProposal(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     intent: str
@@ -38,6 +58,7 @@ class AgentProposal(BaseModel):
     model: str
     parameters: Dict[str, Any] = Field(default_factory=dict)
     chain_steps: List[AgentActionStep] = Field(default_factory=list)
+    workflow_graph: Optional[ReviewableWorkflowGraph] = None
     estimated_calls: int = 1
     cost_disclaimer: str = "Free local engine inference"
     explanation: str = ""
