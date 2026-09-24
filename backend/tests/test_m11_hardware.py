@@ -2,7 +2,9 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
+from fastapi.testclient import TestClient
 
+from app.main import app
 from app.runtime.hardware import (
     check_hardware_readiness,
     get_hardware_launch_flags,
@@ -187,3 +189,19 @@ async def test_readiness_cpu_only_cloud_recommendation(monkeypatch):
     assert readiness.ready_for_local_inference is False
     assert readiness.recommended_engine == "cloud_only"
     assert any("Cloud API inference" in note for note in readiness.guidance_notes)
+
+
+def test_system_info_endpoint():
+    """Verify GET /api/v1/system/info returns 200 with HardwareReadiness model."""
+    client = TestClient(app)
+    resp = client.get("/api/v1/system/info")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "has_discrete_gpu" in data
+    assert "has_nvidia_gpu" in data
+    assert "gpu_vendor" in data
+    assert "acceleration_backend" in data
+    assert "gpus" in data
+    assert "summary_message" in data
+    assert "status_classification" in data
+
