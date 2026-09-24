@@ -711,7 +711,7 @@ async def get_asset_content(asset_id: str) -> FileResponse:
     import mimetypes
     guessed_type, _ = mimetypes.guess_type(str(abs_path))
     content_type = guessed_type or ("video/mp4" if rec.media_type == "video" else "image/png")
-    return FileResponse(abs_path, media_type=content_type)
+    return FileResponse(abs_path, media_type=content_type, filename=rec.filename, content_disposition_type="inline")
 
 
 @app.post("/api/v1/workflow/cancel/{run_id}")

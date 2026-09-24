@@ -1,6 +1,8 @@
 """Tests for M7 Video Generation: Schemas, Caching, Macro Compilers, and Execution."""
 
 import asyncio
+import time
+import uuid
 from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
@@ -233,3 +235,84 @@ def test_img2video_missing_source_image(client):
     data = resp.json()
     assert data["success"] is False
     assert "Source image required" in data["error_message"]
+
+
+@pytest.mark.asyncio
+async def test_asset_store_detects_video_magic_bytes(client):
+    """Verify asset store accurately identifies container format by magic bytes."""
+    # 1. WebM magic bytes: \x1a\x45\xdf\xa3
+    webm_bytes = b"\x1a\x45\xdf\xa3\x00\x00\x00\x1f" + b"mock_webm_content"
+    asset_webm = await asset_store.save_bytes(webm_bytes, filename="uploaded_generic.dat", media_type="video")
+    assert asset_webm.filename.endswith(".webm")
+
+    # 2. MP4 magic bytes: ....ftyp
+    mp4_bytes = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00" + b"mock_mp4_content"
+    asset_mp4 = await asset_store.save_bytes(mp4_bytes, filename="uploaded_generic.dat", media_type="video")
+    assert asset_mp4.filename.endswith(".mp4")
+
+    # 3. WebP magic bytes: RIFF....WEBP
+    webp_bytes = b"RIFF\x20\x00\x00\x00WEBPVP8 " + b"mock_webp_content"
+    asset_webp = await asset_store.save_bytes(webp_bytes, filename="uploaded_generic.dat", media_type="video")
+    assert asset_webp.filename.endswith(".webp")
+
+    # 4. Verify Content endpoint returns inline filename disposition
+    resp = client.get(f"/api/v1/assets/{asset_mp4.id}/content")
+    assert resp.status_code == 200
+    assert "video/mp4" in resp.headers.get("content-type", "")
+    assert f'filename="{asset_mp4.filename}"' in resp.headers.get("content-disposition", "")
+
+
+@pytest.mark.asyncio
+async def test_cloud_video_siliconflow_dispatch(client):
+    """Verify SiliconFlow video generation is invoked when engine_id is siliconflow."""
+    mock_url = "https://api.siliconflow.cn/files/cogvideox_sample.mp4"
+
+    with patch("app.runners.creative_runner.credentials_manager.get_key", return_value="fake_sf_key"), \
+         patch("app.runners.creative_runner._call_siliconflow_video", new=AsyncMock(return_value=mock_url)) as mock_sf, \
+         patch("app.storage.asset_store.asset_store.save_media_from_url") as mock_save:
+
+        class MockAsset:
+            id = "sf_video_123"
+            file_path = "mock/cogvideo.mp4"
+            media_type = "video"
+            filename = "cloud_video.mp4"
+
+        mock_save.return_value = MockAsset()
+
+        unique_prompt = f"Cyberpunk street with rain reflections {time.time()}"
+        payload = {
+            "action": "txt2video",
+            "prompt": unique_prompt,
+            "engine_id": "siliconflow",
+            "seed": 42,
+        }
+
+        resp = client.post("/api/v1/creative/execute", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["success"] is True
+        assert data["video_url"] == "/api/v1/assets/sf_video_123/content"
+        mock_sf.assert_awaited_once_with(
+            action="txt2video",
+            prompt=unique_prompt,
+            api_key="fake_sf_key",
+        )
+
+
+@pytest.mark.asyncio
+async def test_cloud_video_cancellation_disclaimer():
+    """Verify cancelling a cloud video task returns truthful external provider disclaimer."""
+    task_id = "task_test_cloud_cancel"
+    creative_runner.active_tasks[task_id] = {
+        "action": "txt2video",
+        "engine": "fal_ai",
+        "start_time": 1000.0,
+    }
+    cancel_res = await creative_runner.cancel_task(task_id)
+
+    assert cancel_res["task_id"] == task_id
+    assert cancel_res["status"] == "cancelled"
+    assert cancel_res["disclaimer"] is not None
+    assert "external cloud providers" in cancel_res["disclaimer"]
+
