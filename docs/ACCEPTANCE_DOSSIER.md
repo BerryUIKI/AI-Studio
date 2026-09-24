@@ -8,8 +8,8 @@
 
 ## 1. Release Package Artifact & Exact Commit
 
-- **Exact Git Review Commit (`dev`)**: [`befb14d8775f0a05a415ff6957db12ca87596ff1`](https://github.com/BerryUIKI/AI-Studio/commit/befb14d8775f0a05a415ff6957db12ca87596ff1)
-- **Preceding Integration Commit (`dev`)**: [`c35f3b177265a0445d4df44b2609071dc015502c`](https://github.com/BerryUIKI/AI-Studio/commit/c35f3b177265a0445d4df44b2609071dc015502c)
+- **Exact Git Review Commit (`dev`)**: [`47150c2688820f4c39f0464f16524317187e172e`](https://github.com/BerryUIKI/AI-Studio/commit/47150c2688820f4c39f0464f16524317187e172e)
+- **Preceding Integration Commit (`dev`)**: [`fc83abfcfb83abfb79bb074dc9ef182a0b1cb3b3`](https://github.com/BerryUIKI/AI-Studio/commit/fc83abfcfb83abfb79bb074dc9ef182a0b1cb3b3)
 - **Primary Package Artifact**:
   - **Archive**: `dist/Berry-AI-Studio-v0.1.0-windows-x64.zip` (18.9 MB)
   - **Unpacked Distribution Directory**: `dist/Berry-AI-Studio-v0.1.0-windows-x64/`
@@ -51,6 +51,10 @@ All changes have been developed on focused feature branches and integrated into 
 | **[PR #18](https://github.com/BerryUIKI/AI-Studio/pull/18)** | `feature/repair-agent-safety` | `fix(workflow): enforce model family guards and ambiguity blocking in workflow repair` | 3/3 Passed | [`3cf860a`](https://github.com/BerryUIKI/AI-Studio/commit/3cf860a) |
 | **[PR #19](https://github.com/BerryUIKI/AI-Studio/pull/19)** | `feature/hardware-matrix-realism` | `fix(hardware): accurately classify AMD, Intel, and Apple Silicon as candidate or source-compatible` | 3/3 Passed | [`c35f3b1`](https://github.com/BerryUIKI/AI-Studio/commit/c35f3b1) |
 | **[PR #20](https://github.com/BerryUIKI/AI-Studio/pull/20)** | `feature/video-format-dossier-alignment` | `fix(video): support video containers and animated webp, fix MIME type, align dossier evidence` | 3/3 Passed | [`befb14d`](https://github.com/BerryUIKI/AI-Studio/commit/befb14d) |
+| **[PR #21](https://github.com/BerryUIKI/AI-Studio/pull/21)** | `docs/sync-acceptance-commit` | `docs: synchronize acceptance dossier commit hash with dev merge commit befb14d` | 3/3 Passed | [`626f768`](https://github.com/BerryUIKI/AI-Studio/commit/626f768) |
+| **[PR #22](https://github.com/BerryUIKI/AI-Studio/pull/22)** | `docs/reconcile-verification-matrix` | `docs: reconcile support matrix, roadmap, and acceptance dossier with 4-tier verification taxonomy` | 3/3 Passed | [`90f2845`](https://github.com/BerryUIKI/AI-Studio/commit/90f2845) |
+| **[PR #23](https://github.com/BerryUIKI/AI-Studio/pull/23)** | `feature/bounded-workflow-construction` | `feat(agent): implement bounded ComfyUI workflow construction, DAG review, and validation gating` | 3/3 Passed | [`fc83abf`](https://github.com/BerryUIKI/AI-Studio/commit/fc83abf) |
+| **[PR #24](https://github.com/BerryUIKI/AI-Studio/pull/24)** | `feature/harden-video-journey` | `fix(video): harden video container preservation, provider routing, and cancellation disclaimers` | 3/3 Passed | [`47150c2`](https://github.com/BerryUIKI/AI-Studio/commit/47150c2) |
 
 ---
 
@@ -151,12 +155,16 @@ cargo run --manifest-path launcher/Cargo.toml
 4. **Video Generation & Container Formats**:
    - Fal.ai (Fast SVD) and SiliconFlow (CogVideoX) output native MP4 (`video/mp4`, H.264).
    - Standard ComfyUI (AnimateDiff/SVD) without custom nodes outputs animated WebP (`image/webp`) via `SaveAnimatedWEBP`. If `VHS_VideoCombine` with ffmpeg is installed, ComfyUI outputs native MP4.
+   - `asset_store.save_bytes` auto-detects container magic bytes (EBML/WebM `\x1a\x45\xdf\xa3`, MP4 `ftyp`, WebP `RIFF....WEBP`) to guarantee files are stored with their true container extension.
    - In the frontend canvas, MP4 and WebM containers render natively in `<video controls loop>`, while animated WebP renders via `<img>` with an "Animated WebP" badge.
-   - Downloads and exports strictly preserve the native container extension (`.mp4`, `.webm`, or `.webp`).
-5. **Conversational Agent Boundaries**:
-   - The assistant operates via deterministic keyword and regular expression intent matching against predefined creative action schemas.
-   - It does not claim general unconstrained natural-language reasoning or autonomous arbitrary workflow synthesis.
-   - All execution requires explicit user review and approval via the proposal confirmation gate.
+   - Downloads and exports strictly preserve the native container extension (`.mp4`, `.webm`, or `.webp`) with `Content-Disposition: inline; filename="..."`.
+5. **Conversational Agent & Bounded Workflow Construction**:
+   - The assistant operates via deterministic keyword and regular expression intent matching against predefined creative action schemas. It does not claim general unconstrained natural-language reasoning or autonomous arbitrary workflow synthesis.
+   - **Bounded ComfyUI Construction**: Generates graphs strictly from a bounded set of 6 supported archetypes in `WorkflowCatalog` (`comfy.txt2img.standard`, `comfy.img2img.standard`, `comfy.inpaint.standard`, `comfy.upscale.esrgan`, `comfy.img2video.svd`, `comfy.txt2video.animatediff`).
+   - **Reviewable Proposed Graph**: Renders structured review summaries (`ReviewableWorkflowGraph`, `WorkflowNodeStage`) detailing execution stages, required nodes, and required models in the proposal panel before execution.
+   - **Canvas Isolation Invariant**: Low-level ComfyUI internal wiring (latents, CLIP tokens, VAE latents, CONDITIONING tensors) is strictly isolated off the primary creative canvas; the canvas only presents high-level media card nodes.
+   - **Pre-Execution Validation & Recovery Guidance**: Graphs are validated against `WorkflowValidator`; missing checkpoints produce explicit recovery guidance (local directory paths or Cloud BYOK).
+   - **Human-in-the-Loop Gating**: Execution strictly requires `approved=True` and a valid validation report; invalid or unapproved proposals cannot be executed.
 6. **Workflow Repair Ambiguity & Compatibility Guards**:
    - The ComfyUI repair engine automatically reconnects slots only when an unambiguous single source exists in the DAG. If multiple sources exist, automatic connection is blocked (`substitution_blocked`) to avoid graph corruption.
    - Checkpoint substitution is strictly constrained to matching architecture families (`sd15`, `sdxl`, `flux`, `svd`). Unknown or cross-family substitutions are blocked.

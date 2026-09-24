@@ -28,10 +28,10 @@ This roadmap operationalizes the long-term approved technical directions for Ber
 
 | Milestone | Title & Focus Area | Implementation PRs | Status on `dev` | Verification Evidence & Tier |
 | :--- | :--- | :--- | :--- | :--- |
-| **M7** | Video Generation & Usable Video Creation Journey | [PR #11](https://github.com/BerryUIKI/AI-Studio/pull/11), [PR #20](https://github.com/BerryUIKI/AI-Studio/pull/20) | **Merged** (`64cd55c`, `befb14d`) | **Mocked Verification**: `test_m7_video.py` (7/7 passed), SVD XT / AnimateDiff macro compiler, MIME detection, container vs. animated WebP handling. (Live cloud video generation requires funded BYOK keys). |
+| **M7** | Video Generation & Usable Video Creation Journey | [PR #11](https://github.com/BerryUIKI/AI-Studio/pull/11), [PR #20](https://github.com/BerryUIKI/AI-Studio/pull/20), [PR #24](https://github.com/BerryUIKI/AI-Studio/pull/24) | **Merged** (`64cd55c`, `befb14d`, `47150c2`) | **Mocked Verification**: `test_m7_video.py` (10/10 passed), SVD XT / AnimateDiff macro compiler, container magic-byte detection (.webm/.mp4/.webp), inline disposition export, SiliconFlow CogVideoX dispatch & cancellation. (Live cloud video generation requires funded BYOK keys). |
 | **M8** | Documented Unified Berry CLI for Creation & Management | [PR #12](https://github.com/BerryUIKI/AI-Studio/pull/12) | **Merged** (`8e394dd`) | **Physical Hardware Verified**: Rust CLI binary execution on Windows 11 host (`test_m8_cli.py`, `cargo test`, `berry.exe run/tasks/system`). |
 | **M9** | Conversational Agent Control of Existing Workflows & Engines | [PR #13](https://github.com/BerryUIKI/AI-Studio/pull/13), [PR #18](https://github.com/BerryUIKI/AI-Studio/pull/18) | **Merged** (`1260722`, `3cf860a`) | **Mocked Verification**: `test_m9_agent.py` (6/6 passed), `AgentService`, deterministic keyword/regex intent parsing, transparent `AgentProposal`, human-in-the-loop gate. |
-| **M10** | Agent-Assisted Construction, Validation, Repair of Workflows | [PR #14](https://github.com/BerryUIKI/AI-Studio/pull/14), [PR #18](https://github.com/BerryUIKI/AI-Studio/pull/18) | **Merged** (`60c3620`, `3cf860a`) | **Mocked Verification**: `test_m10_workflow_repair.py` (9/9 passed), ComfyUI DAG syntax & port validator, ambiguity guards, same-family model substitution blocker. |
+| **M10** | Agent-Assisted Construction, Validation, Repair of Workflows | [PR #14](https://github.com/BerryUIKI/AI-Studio/pull/14), [PR #18](https://github.com/BerryUIKI/AI-Studio/pull/18), [PR #23](https://github.com/BerryUIKI/AI-Studio/pull/23) | **Merged** (`60c3620`, `3cf860a`, `fc83abf`) | **Mocked Verification**: `test_m10_workflow_repair.py` (9/9 passed) + `test_workflow_construction.py` (10/10 passed), 6 bounded workflows in `WorkflowCatalog`, reviewable proposed DAG stages, canvas isolation, approval gate, missing model detection with recovery guidance. |
 | **M11** | Local Inference on Selected Non-NVIDIA Discrete GPUs | [PR #15](https://github.com/BerryUIKI/AI-Studio/pull/15), [PR #19](https://github.com/BerryUIKI/AI-Studio/pull/19) | **Merged** (`7f700b2`, `c35f3b1`) | **Mocked Verification**: `test_m11_hardware.py` (5/5 passed), AMD/Intel GPU detection via WMI/ROCm, DirectML launch flags. (Physical AMD/Intel hardware runs unverified in this session). |
 | **M12** | Cross-Platform Desktop Adapters (macOS Metal & Linux) | [PR #16](https://github.com/BerryUIKI/AI-Studio/pull/16), [PR #19](https://github.com/BerryUIKI/AI-Studio/pull/19) | **Merged** (`2551796`, `c35f3b1`) | **Source Compatibility**: `test_m12_cross_platform.py` (4/4 passed), Unix domain socket single instance, cross-platform browser launchers. (Native packaging and macOS/Linux runtime binaries unverified). |
 
@@ -130,27 +130,27 @@ This roadmap operationalizes the long-term approved technical directions for Ber
 ### M10: Agent-Assisted Construction, Validation, Repair, and Execution of ComfyUI Workflows
 
 - **User Journey**:
-  - Users can import complex ComfyUI workflows or ask the Agent to *"Diagnose why this workflow fails"*.
-  - The Agent analyzes the ComfyUI DAG:
-    - Validates node connections against port types (`MODEL`, `CLIP`, `VAE`, `LATENT`, `IMAGE`).
-    - Checks for missing custom node classes and missing checkpoint/LoRA models.
-    - Identifies topological cycles or disconnected subgraphs.
-  - If errors exist, the Agent proposes a concrete **Repair Diff** (e.g. *"Node 8 (VAEDecode) is missing VAE input; connect from unambiguous Node 4 [slot 2]"*).
-  - **Ambiguity Guards**: When multiple potential sources exist for an input slot (e.g., multiple VAE loaders or EmptyLatentImage nodes), automatic reconnection is blocked (`substitution_blocked`) rather than guessing, preventing corrupted dataflow.
-  - **Model Family Guards**: Missing checkpoints are substituted only within the exact same architecture family (`sd15`, `sdxl`, `flux`, `svd`); cross-family or unknown substitutions are strictly blocked.
-  - The user inspects the visual diff and accepts the repair.
-  - Once validated, the workflow can be executed directly or registered into the `TemplateRegistry`.
+  - The Agent assists users with ComfyUI workflow construction, inspection, validation, and repair without leaking low-level wires to the canvas:
+    - **Bounded Workflow Construction**: The Agent maps requests to a bounded, verified catalog of 6 supported ComfyUI workflow archetypes (`comfy.txt2img.standard`, `comfy.img2img.standard`, `comfy.inpaint.standard`, `comfy.upscale.esrgan`, `comfy.img2video.svd`, `comfy.txt2video.animatediff`). Unconstrained arbitrary graph synthesis is explicitly avoided.
+    - **Reviewable Proposed Graph**: The Agent generates a structured review summary (`ReviewableWorkflowGraph` and `WorkflowNodeStage`) presenting execution stages, node types, required models, and validation status in the Agent panel before execution.
+    - **Canvas Isolation Invariant**: Low-level ComfyUI wiring (latents, CLIP tokens, VAE latents, CONDITIONING tensors) is strictly encapsulated off the primary creative canvas. The canvas only exposes high-level media card nodes.
+    - **Pre-Execution Validation & Recovery**: Graphs are automatically validated against `WorkflowValidator`. Missing models are flagged with explicit recovery guidance (model paths or Cloud BYOK alternatives).
+    - **Human-in-the-Loop Gating**: Execution strictly requires `approved=True` and a passing validation report; invalid or unapproved proposals cannot be executed.
+  - If users import or repair third-party workflows:
+    - **Ambiguity Guards**: When multiple potential sources exist for an input slot, automatic reconnection is blocked (`substitution_blocked`) rather than guessing, preventing corrupted dataflow.
+    - **Model Family Guards**: Missing checkpoints are substituted only within the exact same architecture family (`sd15`, `sdxl`, `flux`, `svd`); cross-family or unknown substitutions are strictly blocked.
 - **Supported Capability Matrix**:
+  - `WorkflowCatalog` registry with 6 bounded ComfyUI workflow archetypes and stage summaries.
   - ComfyUI DAG syntax parser, topological sort cycle detector, and port type-checker.
   - Safe pattern repairs: unambiguous single-source slot reconnections, same-family model substitution.
   - Model dependency resolver: checks against indexed local models with family inference.
 - **Technical Boundaries**:
-  - Pure Python DAG analysis engine in `backend/app/core/workflow_validator.py` and `backend/app/core/workflow_repair.py`.
+  - Pure Python DAG analysis engine in `backend/app/core/workflow_catalog.py`, `backend/app/core/workflow_validator.py`, and `backend/app/core/workflow_repair.py`.
   - Sandboxed validation without running untrusted Python node code.
 - **Data & Project Compatibility**:
   - Validated workflows can be saved as custom templates in `TemplateRegistry`.
 - **Acceptance Criteria**:
-  - Automated tests verify detection of broken connections, missing models, cycles, and type mismatches.
+  - Automated tests (`test_m10_workflow_repair.py`, `test_workflow_construction.py`) verify 6 bounded workflows, stage generation, cycle detection, missing model detection, and approval enforcement.
   - Repair engine fixes broken workflows safely and blocks ambiguous or cross-family mutations.
 - **Explicit Exclusions**:
   - Arbitrary Python code execution inside custom nodes; automated downloading of untrusted git repositories; guessing ambiguous wiring.
