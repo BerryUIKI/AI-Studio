@@ -9,6 +9,7 @@ import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from app.core.workflow_catalog import WorkflowCatalog
 from app.schemas.agent import (
     AgentActionStep,
     AgentChatMessage,
@@ -16,6 +17,7 @@ from app.schemas.agent import (
     AgentChatResponse,
     AgentIntent,
     AgentProposal,
+    ReviewableWorkflowGraph,
 )
 from app.schemas.creative import (
     CreativeActionRequest,
@@ -317,6 +319,40 @@ class AgentService:
                 )
 
         explanation = " ".join(explanation_parts)
+
+        # Map intent to bounded ComfyUI workflow DAG if target_engine is managed_comfyui
+        workflow_graph: Optional[ReviewableWorkflowGraph] = None
+        if target_engine == "managed_comfyui":
+            workflow_map = {
+                "txt2img": "comfy.txt2img.standard",
+                "img2img": "comfy.img2img.standard",
+                "inpaint": "comfy.inpaint.standard",
+                "upscale": "comfy.upscale.esrgan",
+                "img2video": "comfy.img2video.svd",
+                "txt2video": "comfy.txt2video.animatediff",
+            }
+            wf_id = workflow_map.get(intent_name)
+            if wf_id:
+                try:
+                    _, workflow_graph = WorkflowCatalog.construct_workflow(
+                        workflow_id=wf_id,
+                        parameters=chain_steps[0].parameters,
+                        model_catalog=self.model_catalog,
+                    )
+                except Exception as e:
+                    workflow_graph = ReviewableWorkflowGraph(
+                        workflow_id=wf_id,
+                        workflow_title=wf_id,
+                        node_count=0,
+                        stages=[],
+                        required_nodes=[],
+                        required_models=[],
+                        missing_models=[],
+                        is_valid=False,
+                        validation_issues=[str(e)],
+                        recovery_guidance=f"Failed to compile bounded graph: {e}",
+                    )
+
         proposal = AgentProposal(
             intent=intent_name,
             title=title,
@@ -325,6 +361,7 @@ class AgentService:
             model=chain_steps[0].model,
             parameters=chain_steps[0].parameters,
             chain_steps=chain_steps,
+            workflow_graph=workflow_graph,
             estimated_calls=len(chain_steps),
             cost_disclaimer=cost_disclaimer,
             explanation=explanation,
@@ -354,6 +391,11 @@ class AgentService:
         """Execute an approved proposal through CreativeRunner with strict human-in-the-loop gate."""
         if not proposal.approved:
             raise PermissionError("Cannot execute unapproved proposal. Explicit user approval is required.")
+
+        if proposal.workflow_graph and not proposal.workflow_graph.is_valid:
+            guidance = proposal.workflow_graph.recovery_guidance or "Workflow validation failed."
+            issues = "; ".join(proposal.workflow_graph.validation_issues) if proposal.workflow_graph.validation_issues else "Invalid graph"
+            raise ValueError(f"Cannot execute invalid workflow proposal: {issues}. Recovery guidance: {guidance}")
 
         if not self.creative_runner:
             raise RuntimeError("CreativeRunner is not available on AgentService.")
