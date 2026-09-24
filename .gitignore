@@ -13,6 +13,8 @@ dist/
 dist-ssr/
 build/
 *.local
+*.log
+/Berry AI Studio.exe
 target/
 launcher/target/
 frontend/src-tauri/target/

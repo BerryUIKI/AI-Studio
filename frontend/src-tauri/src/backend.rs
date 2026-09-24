@@ -1,4 +1,6 @@
 //! Berry AI Studio - Embedded Backend Supervisor for Tauri Desktop App
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::thread;
@@ -10,40 +12,31 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-/// Detect the workspace or repository root directory.
+/// Write timestamped message to berry_desktop.log in the detected root directory.
+pub fn log_msg(msg: &str) {
+    let root = detect_root_dir();
+    let log_file = root.join("berry_desktop.log");
+    if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(log_file) {
+        let _ = writeln!(f, "[{:.3?}] {}", Instant::now(), msg);
+    }
+}
+
+/// Detect the workspace or repository root directory by walking all ancestors.
 pub fn detect_root_dir() -> PathBuf {
-    // 1. Check current working directory
-    if let Ok(cwd) = std::env::current_dir() {
-        if cwd.join("backend").join("app").join("main.py").is_file() {
-            return cwd;
-        }
-        if let Some(parent) = cwd.parent() {
-            if parent.join("backend").join("app").join("main.py").is_file() {
-                return parent.to_path_buf();
+    // 1. Check current_exe and ALL its ancestors
+    if let Ok(exe) = std::env::current_exe() {
+        for ancestor in exe.ancestors() {
+            if ancestor.join("backend").join("app").join("main.py").is_file() {
+                return ancestor.to_path_buf();
             }
         }
     }
 
-    // 2. Check executable directory and ancestor paths
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            if exe_dir.join("backend").join("app").join("main.py").is_file() {
-                return exe_dir.to_path_buf();
-            }
-            if let Some(p1) = exe_dir.parent() {
-                if p1.join("backend").join("app").join("main.py").is_file() {
-                    return p1.to_path_buf();
-                }
-                if let Some(p2) = p1.parent() {
-                    if p2.join("backend").join("app").join("main.py").is_file() {
-                        return p2.to_path_buf();
-                    }
-                    if let Some(p3) = p2.parent() {
-                        if p3.join("backend").join("app").join("main.py").is_file() {
-                            return p3.to_path_buf();
-                        }
-                    }
-                }
+    // 2. Check current_dir and ALL its ancestors
+    if let Ok(cwd) = std::env::current_dir() {
+        for ancestor in cwd.ancestors() {
+            if ancestor.join("backend").join("app").join("main.py").is_file() {
+                return ancestor.to_path_buf();
             }
         }
     }
@@ -53,64 +46,84 @@ pub fn detect_root_dir() -> PathBuf {
 
 /// Locate Python executable (bundled hermetic runtime, local virtualenv, or system fallback).
 pub fn find_python_executable(root_dir: &Path) -> Result<PathBuf, String> {
-    // 1. Release distribution: check bundled hermetic Python runtime
-    let bundled = if cfg!(windows) {
-        root_dir.join("runtime").join("python").join("python.exe")
-    } else {
-        root_dir.join("runtime").join("python").join("bin").join("python")
-    };
-    if bundled.is_file() {
-        return Ok(bundled);
+    let candidates = [
+        root_dir.join("runtime").join("python").join("Scripts").join("python.exe"),
+        root_dir.join("runtime").join("python").join("python.exe"),
+        root_dir.join("runtime").join("python").join("bin").join("python"),
+        root_dir.join("backend").join(".venv").join("Scripts").join("python.exe"),
+        root_dir.join("backend").join(".venv").join("bin").join("python"),
+    ];
+
+    for candidate in &candidates {
+        if candidate.is_file() {
+            log_msg(&format!("Found python executable: {:?}", candidate));
+            return Ok(candidate.clone());
+        }
     }
 
-    // 2. Local development virtual environment
-    let venv_py = if cfg!(windows) {
-        root_dir.join("backend").join(".venv").join("Scripts").join("python.exe")
-    } else {
-        root_dir.join("backend").join(".venv").join("bin").join("python")
-    };
-    if venv_py.is_file() {
-        return Ok(venv_py);
-    }
-
-    // 3. System PATH fallback
+    // System PATH fallback
     let sys_name = if cfg!(windows) { "python" } else { "python3" };
     if let Ok(output) = Command::new(sys_name).arg("--version").output() {
         if output.status.success() {
+            log_msg(&format!("Using system PATH fallback python: {}", sys_name));
             return Ok(PathBuf::from(sys_name));
         }
     }
 
-    Err(format!(
-        "Python runtime not found. Checked: {:?} and {:?}",
-        bundled, venv_py
-    ))
+    let err = format!(
+        "Python runtime not found in {:?}. Checked candidates: {:?}",
+        root_dir, candidates
+    );
+    log_msg(&err);
+    Err(err)
 }
 
 /// Check if Berry backend is responding on port.
 pub fn is_backend_healthy(port: u16) -> bool {
+    use std::net::{SocketAddr, TcpStream};
+    let addr: SocketAddr = match format!("127.0.0.1:{}", port).parse() {
+        Ok(a) => a,
+        Err(_) => return false,
+    };
+    // Fast fail if nothing is listening on TCP port
+    if TcpStream::connect_timeout(&addr, Duration::from_millis(100)).is_err() {
+        return false;
+    }
+
     let url = format!("http://127.0.0.1:{}/health", port);
     let agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_millis(400)))
+        .timeout_global(Some(Duration::from_millis(1000)))
         .build()
         .new_agent();
-    agent.get(&url)
-        .call()
-        .map(|r| r.status() == 200)
-        .unwrap_or(false)
+
+    match agent.get(&url).call() {
+        Ok(mut resp) => {
+            if resp.status().is_success() {
+                if let Ok(body) = resp.body_mut().read_to_string() {
+                    return body.contains("ai-workflow-backend") || body.contains("Berry AI Studio");
+                }
+            }
+            false
+        }
+        Err(_) => false,
+    }
 }
 
 /// Spawn the Berry backend core process if not already running.
 pub fn spawn_backend(root_dir: &Path, port: u16) -> Result<Option<Child>, String> {
     if is_backend_healthy(port) {
-        println!("[Tauri] Berry backend already running on port {}", port);
+        log_msg(&format!("Berry backend already running on port {}", port));
         return Ok(None);
     }
 
     let python_exe = find_python_executable(root_dir)?;
     let backend_dir = root_dir.join("backend");
 
-    println!("[Tauri] Spawning Berry core backend via {:?}", python_exe);
+    log_msg(&format!(
+        "Spawning Berry core backend via {:?} in {:?}",
+        python_exe, backend_dir
+    ));
+
     let mut cmd = Command::new(&python_exe);
     cmd.args([
         "-m",
@@ -126,28 +139,44 @@ pub fn spawn_backend(root_dir: &Path, port: u16) -> Result<Option<Child>, String
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let child = cmd.spawn().map_err(|e| format!("Failed to spawn backend process: {}", e))?;
-    println!("[Tauri] Backend process spawned with PID {}", child.id());
+    let child = cmd.spawn().map_err(|e| {
+        let err = format!("Failed to spawn backend process: {}", e);
+        log_msg(&err);
+        err
+    })?;
+
+    log_msg(&format!("Backend process spawned with PID {}", child.id()));
     Ok(Some(child))
 }
 
 /// Poll backend health until ready or timeout.
-pub fn wait_for_backend_ready(port: u16, timeout_secs: u64) -> bool {
+pub fn wait_for_backend_ready(port: u16, timeout_secs: u64, child: &mut Option<Child>) -> bool {
     let start = Instant::now();
     let timeout = Duration::from_secs(timeout_secs);
     while start.elapsed() < timeout {
+        // Check if child exited prematurely
+        if let Some(proc) = child.as_mut() {
+            if let Ok(Some(status)) = proc.try_wait() {
+                log_msg(&format!("Backend child exited prematurely with status: {}", status));
+                return false;
+            }
+        }
+
         if is_backend_healthy(port) {
+            log_msg(&format!("Backend is ready (elapsed: {:.2?})", start.elapsed()));
             return true;
         }
-        thread::sleep(Duration::from_millis(200));
+        thread::sleep(Duration::from_millis(300));
     }
+
+    log_msg(&format!("Backend timed out after {}s", timeout_secs));
     false
 }
 
 /// Gracefully shut down backend.
 pub fn shutdown_backend(port: u16, mut child: Option<Child>) {
     let url = format!("http://127.0.0.1:{}/api/v1/manager/shutdown", port);
-    println!("[Tauri] Requesting graceful backend shutdown...");
+    log_msg("Requesting graceful backend shutdown...");
     let agent = ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(2)))
         .build()
@@ -160,3 +189,20 @@ pub fn shutdown_backend(port: u16, mut child: Option<Child>) {
         let _ = proc.kill();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_detection() {
+        let root = detect_root_dir();
+        println!("TEST DETECTED ROOT: {:?}", root);
+        assert!(root.join("backend").join("app").join("main.py").is_file());
+
+        let py = find_python_executable(&root);
+        println!("TEST DETECTED PYTHON: {:?}", py);
+        assert!(py.is_ok());
+    }
+}
+
