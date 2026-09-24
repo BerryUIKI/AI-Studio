@@ -31,6 +31,17 @@ if (-not (Test-Path $LauncherExe)) {
     throw "Compiled launcher not found at $LauncherExe"
 }
 
+# 1b. Build Tauri native desktop application
+Write-Host "`n[1b/5] Building native Tauri desktop application..." -ForegroundColor Yellow
+Push-Location "$RepoRoot\frontend\src-tauri"
+try {
+    cargo build --release
+    if ($LASTEXITCODE -ne 0) { throw "Tauri compilation failed" }
+} finally {
+    Pop-Location
+}
+$TauriExe = "$RepoRoot\frontend\src-tauri\target\release\berry-app.exe"
+
 # 2. Build Frontend assets
 Write-Host "`n[2/5] Building frontend production bundle..." -ForegroundColor Yellow
 Push-Location "$RepoRoot\frontend"
@@ -61,6 +72,13 @@ Write-Host "`n[4/5] Populating release components..." -ForegroundColor Yellow
 # Copy launcher
 Copy-Item $LauncherExe -Destination "$TargetDir\berry.exe" -Force
 Write-Host "  -> berry.exe copied" -ForegroundColor Green
+
+# Copy Tauri desktop application
+if (Test-Path $TauriExe) {
+    Copy-Item $TauriExe -Destination "$TargetDir\Berry AI Studio.exe" -Force
+    Write-Host "  -> Berry AI Studio.exe native app copied" -ForegroundColor Green
+}
+
 
 # Copy frontend assets
 Copy-Item -Recurse "$FrontendDist\*" -Destination "$TargetDir\frontend\dist\" -Force
@@ -107,6 +125,11 @@ $BatContent = @"
 @echo off
 title Berry AI Studio
 cd /d "%~dp0"
+if exist "Berry AI Studio.exe" (
+    echo Launching Berry AI Studio native desktop application...
+    start "" "%~dp0Berry AI Studio.exe"
+    exit /b 0
+)
 echo Starting Berry AI Studio...
 start "" "%~dp0berry.exe"
 exit /b 0

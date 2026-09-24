@@ -15,6 +15,7 @@ build/
 *.local
 target/
 launcher/target/
+frontend/src-tauri/target/
 
 # Python
 __pycache__/
