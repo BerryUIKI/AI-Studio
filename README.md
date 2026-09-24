@@ -6,6 +6,26 @@ A beginner-friendly AI creative workspace combining an infinite canvas, local ge
 
 The product direction and first-release scope are approved. The repository contains an early prototype; the target capabilities below are not claims of completed implementation. See the documentation and milestone acceptance gates before assessing readiness.
 
+## Quick Start & Running the Desktop App
+
+### 1. Launch Native Desktop App (Tauri, No Browser Required)
+Double-click **`Berry.bat`** in the repository root:
+```powershell
+.\Berry.bat
+```
+Launches the standalone desktop application window (powered by Tauri & WebView2). No web browser tabs or command windows required.
+
+### 2. Development Mode (Hot Reload)
+```powershell
+# Run Tauri desktop app with live reload:
+pnpm --prefix frontend tauri dev
+
+# Or run frontend and backend independently:
+cd backend && .\.venv\Scripts\python -m uvicorn app.main:app --reload
+cd frontend && pnpm dev
+```
+
+
 ## First-Release Scope
 
 - Windows release with cross-platform code architecture.
