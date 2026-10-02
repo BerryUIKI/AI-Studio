@@ -8,14 +8,15 @@
 
 ## 1. Release Package Artifact & Exact Commit
 
-- **Exact Git Review Commit (`dev`)**: [`47150c2688820f4c39f0464f16524317187e172e`](https://github.com/BerryUIKI/AI-Studio/commit/47150c2688820f4c39f0464f16524317187e172e)
-- **Preceding Integration Commit (`dev`)**: [`fc83abfcfb83abfb79bb074dc9ef182a0b1cb3b3`](https://github.com/BerryUIKI/AI-Studio/commit/fc83abfcfb83abfb79bb074dc9ef182a0b1cb3b3)
+- **Exact Git Review Commit (`dev`)**: [`135126e97ad0aa5c548b6c730dd6d97de87c7088`](https://github.com/BerryUIKI/AI-Studio/commit/135126e97ad0aa5c548b6c730dd6d97de87c7088)
+- **Preceding Integration Commit (`dev`)**: [`17fb69d15f621c49bc58e6016cdd62399de58bf4`](https://github.com/BerryUIKI/AI-Studio/commit/17fb69d15f621c49bc58e6016cdd62399de58bf4)
 - **Primary Package Artifact**:
   - **Archive**: `dist/Berry-AI-Studio-v0.1.0-windows-x64.zip` (18.9 MB)
   - **Unpacked Distribution Directory**: `dist/Berry-AI-Studio-v0.1.0-windows-x64/`
   - **Contents**:
     - `berry.exe` (Native Rust launcher & environment manager)
-    - `Berry.bat` (Double-click launcher wrapper)
+    - `Berry AI Studio.exe` (Native Tauri desktop window application shell)
+    - `Berry.bat` (Double-click launcher wrapper prioritizing native desktop app)
     - `README.txt` (User onboarding & quickstart instructions)
     - `frontend/dist/` (Compiled React/Vite single-page production web application)
     - `backend/app/` (FastAPI core, DAG cache, persistent storage, runners, supervisors)
@@ -55,6 +56,11 @@ All changes have been developed on focused feature branches and integrated into 
 | **[PR #22](https://github.com/BerryUIKI/AI-Studio/pull/22)** | `docs/reconcile-verification-matrix` | `docs: reconcile support matrix, roadmap, and acceptance dossier with 4-tier verification taxonomy` | 3/3 Passed | [`90f2845`](https://github.com/BerryUIKI/AI-Studio/commit/90f2845) |
 | **[PR #23](https://github.com/BerryUIKI/AI-Studio/pull/23)** | `feature/bounded-workflow-construction` | `feat(agent): implement bounded ComfyUI workflow construction, DAG review, and validation gating` | 3/3 Passed | [`fc83abf`](https://github.com/BerryUIKI/AI-Studio/commit/fc83abf) |
 | **[PR #24](https://github.com/BerryUIKI/AI-Studio/pull/24)** | `feature/harden-video-journey` | `fix(video): harden video container preservation, provider routing, and cancellation disclaimers` | 3/3 Passed | [`47150c2`](https://github.com/BerryUIKI/AI-Studio/commit/47150c2) |
+| **[PR #25](https://github.com/BerryUIKI/AI-Studio/pull/25)** | `docs/sync-bounded-and-video-dossier` | `docs: synchronize roadmap and acceptance dossier with bounded workflow and video hardening PRs` | 3/3 Passed | [`036d476`](https://github.com/BerryUIKI/AI-Studio/commit/036d476) |
+| **[PR #26](https://github.com/BerryUIKI/AI-Studio/pull/26)** | `fix/system-info-endpoint` | `fix(system): add /api/v1/system/info endpoint for CLI diagnostics (M8, M11)` | 3/3 Passed | [`b54c421`](https://github.com/BerryUIKI/AI-Studio/commit/b54c421) |
+| **[PR #27](https://github.com/BerryUIKI/AI-Studio/pull/27)** | `feature/tauri-desktop-app` | `feat(desktop): add native Tauri desktop app and root Berry.bat launcher` | 3/3 Passed | [`27a1c03`](https://github.com/BerryUIKI/AI-Studio/commit/27a1c03) |
+| **[PR #28](https://github.com/BerryUIKI/AI-Studio/pull/28)** | `fix/tauri-root-detection-and-readiness` | `fix(desktop): resolve root dir traversal and backend readiness in Tauri desktop app` | 3/3 Passed | [`17fb69d`](https://github.com/BerryUIKI/AI-Studio/commit/17fb69d) |
+| **[PR #29](https://github.com/BerryUIKI/AI-Studio/pull/29)** | `feat/canvas-quick-add-and-context-menu` | `feat(canvas): add double-click and right-click quick node creation context menu` | 3/3 Passed | [`135126e`](https://github.com/BerryUIKI/AI-Studio/commit/135126e) |
 
 ---
 
@@ -168,6 +174,15 @@ cargo run --manifest-path launcher/Cargo.toml
 6. **Workflow Repair Ambiguity & Compatibility Guards**:
    - The ComfyUI repair engine automatically reconnects slots only when an unambiguous single source exists in the DAG. If multiple sources exist, automatic connection is blocked (`substitution_blocked`) to avoid graph corruption.
    - Checkpoint substitution is strictly constrained to matching architecture families (`sd15`, `sdxl`, `flux`, `svd`). Unknown or cross-family substitutions are blocked.
+7. **Native Tauri Desktop Application (PR #27, PR #28)**:
+   - Berry AI Studio includes a native Tauri 2.0 desktop window application shell (`frontend/src-tauri`) in addition to the standalone Rust CLI launcher (`launcher/`).
+   - The Tauri app provides native desktop window controls, bidirectional backend readiness polling, and robust root directory resolution across both development and packaged portable layouts.
+   - The root `Berry.bat` launcher detects compiled `Berry AI Studio.exe` to prioritize native desktop execution, falling back to `pnpm --prefix frontend tauri dev` or web browser mode.
+8. **Canvas Context Menu & Quick Node Creation (PR #29)**:
+   - Users can right-click or double-click anywhere on the blank infinite canvas to open `QuickAddMenu.tsx`.
+   - The menu provides rapid keyboard-searchable node placement (Image Card, Video Card, Text Prompt, ComfyUI Workflow templates, and Image Editing tools) without navigating through sidebars.
+9. **Unified System Diagnostics Endpoint (PR #26)**:
+   - Added `/api/v1/system/info` providing aggregated system metrics, detected GPU hardware, OS platform, memory, and engine statuses for consumption by the CLI (`berry system info`) and GUI diagnostics.
 
 ---
 
@@ -177,8 +192,8 @@ The following test scenarios should be executed during the unified product accep
 
 1. **Clean-Machine Windows Package Verification**:
    - Extract `dist/Berry-AI-Studio-v0.1.0-windows-x64.zip` on a clean Windows 10/11 machine without host Python, Node.js, or Git installed.
-   - Run `berry.exe` or double-click `Berry.bat`. Confirm readiness probe passes and opens `http://127.0.0.1:8000`.
-   - Run `berry.exe` a second time; confirm it detects the running instance and focuses the browser without spawning a second process.
+   - Run `Berry.bat`, `Berry AI Studio.exe`, or `berry.exe`. Confirm readiness probe passes and opens the creative workspace (native desktop window or browser `http://127.0.0.1:8000`).
+   - Run `berry.exe` a second time; confirm it detects the running instance and focuses the active workspace without spawning a second process.
 2. **Cloud-Only BYOK End-to-End Workflow**:
    - On a machine without local engines, open **Cloud BYOK** and enter a valid API key (Fal.ai, OpenAI, or SiliconFlow).
    - Generate an image via the Bottom Creation Dock (`txt2img`).
