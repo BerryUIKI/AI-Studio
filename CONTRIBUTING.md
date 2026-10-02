@@ -1,6 +1,6 @@
-# Contributing to AI-Workflow
+# Contributing to Berry AI Studio
 
-First off, thank you for considering contributing to **AI-Workflow**! Open-source thrives because of community members like you.
+First off, thank you for considering contributing to **Berry AI Studio**! Open-source thrives because of community members like you.
 
 This document outlines the workflow and quality guidelines for contributing code, documentation, and workflow presets.
 
@@ -14,9 +14,11 @@ All contributors and participants are expected to adhere to our [Code of Conduct
 
 ## Branching & Release Model
 
-We strictly follow a structured Git branching strategy:
-- **`main`**: The official, production-ready release branch. Direct commits are forbidden.
-- **`dev`**: The active integration branch. **All feature and bug fix pull requests must target `dev`**.
+We follow [GitFlow](BRANCHING_STRATEGY.md):
+- **`main`**: Protected, tagged release history. Direct commits are forbidden.
+- **`dev`**: Protected integration branch. Feature, ordinary bug-fix, and documentation pull requests target `dev`.
+- **`release/vX.Y.Z`**: Created from `dev` and merged into `main`, then synchronized back to `dev`.
+- **`hotfix/vX.Y.Z`**: Created from `main` and merged into `main`, then synchronized back to `dev`.
 
 Before opening a PR, please read our complete [Branching Strategy Specification](BRANCHING_STRATEGY.md).
 
@@ -34,8 +36,8 @@ Before opening a PR, please read our complete [Branching Strategy Specification]
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/BerryUIKI/AI-Workflow.git
-cd AI-Workflow
+git clone https://github.com/BerryUIKI/AI-Studio.git
+cd AI-Studio
 git checkout dev
 ```
 
@@ -68,6 +70,8 @@ The backend API and WebSocket server will be available at `http://localhost:8000
 
 ## Contribution Workflow
 
+Use English for all project documentation, PR titles and descriptions, commit messages, issues, release notes, code comments, and other project-facing written artifacts.
+
 1. **Check Issues**: Check existing GitHub Issues or start a discussion before making substantial architectural changes.
 2. **Branch from `dev`**:
    ```bash
@@ -85,7 +89,7 @@ The backend API and WebSocket server will be available at `http://localhost:8000
    - Frontend: `pnpm typecheck && pnpm lint`
    - Backend: `pytest` and `ruff check .`
 6. **Open a Pull Request**:
-   - Base branch: **`dev`**.
+   - Base branch: **`dev`** for features, ordinary fixes, and documentation; follow the release and hotfix routes in the branching policy for those branch types.
    - Fill out the PR template completely.
    - Link related issue numbers (e.g., `Fixes #42`).
 
@@ -105,7 +109,7 @@ When contributing new nodes or canvas components, please keep our core tenets in
 ## Pull Request Checklist
 
 Before submitting your PR, ensure:
-- [ ] PR targets the **`dev`** branch.
+- [ ] PR targets the branch required by its GitFlow branch type.
 - [ ] All new and existing tests pass.
 - [ ] Code adheres to TypeScript and Python formatting guidelines.
 - [ ] User-facing features include updated documentation or tooltips.
