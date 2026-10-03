@@ -77,6 +77,13 @@ from app.schemas.engine import (
 )
 from app.schemas.hardware import HardwareReadiness, GpuStatsResponse
 from app.schemas.model import ModelRecord, ModelRoot, ModelRootCreate
+from app.schemas.model_hub import (
+    HubCatalogResponse,
+    HardwareEvaluationRequest,
+    HardwareEvaluationResponse,
+)
+from app.storage.hub_catalog import HubCatalog
+from app.runtime.hardware_evaluator import evaluate_hardware
 from app.schemas.events import (
     GraphFinishedEvent,
     GraphStartedEvent,
@@ -605,6 +612,31 @@ async def remove_model_root(root_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Model root '{root_id}' not found")
     return {"status": "removed", "root_id": root_id}
 
+
+# ---------------------------------------------------------------------------
+# Model Hub & Hardware Evaluation Endpoints (MH-M2)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/models/hub/catalog", response_model=HubCatalogResponse)
+async def list_model_hub_catalog(
+    category: Optional[str] = None,
+    architecture: Optional[str] = None,
+    query: Optional[str] = None,
+) -> HubCatalogResponse:
+    """Retrieve curated model hub catalog with optional filtering (MH-M2)."""
+    models = HubCatalog.list_models(category=category, architecture=architecture, query=query)
+    return HubCatalogResponse(total=len(models), models=models)
+
+
+@app.post("/api/v1/models/hub/evaluate", response_model=HardwareEvaluationResponse)
+async def evaluate_models_hardware(req: HardwareEvaluationRequest) -> HardwareEvaluationResponse:
+    """Evaluate 4-tier hardware compatibility for requested or all catalog models (MH-M2)."""
+    if req.model_ids:
+        models = [HubCatalog.get_model(mid) for mid in req.model_ids]
+        filtered_models = [m for m in models if m is not None]
+    else:
+        filtered_models = HubCatalog.list_models()
+    return evaluate_hardware(filtered_models)
 
 
 # ---------------------------------------------------------------------------
