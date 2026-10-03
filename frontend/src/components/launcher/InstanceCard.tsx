@@ -13,19 +13,24 @@ import {
   FolderOpen,
   Trash2,
   ExternalLink,
+  Download,
 } from 'lucide-react';
-import { EngineInstance } from '../../stores/useEngineStore';
+import { EngineInstance, StartEngineResult } from '../../stores/useEngineStore';
 import { useNavigationStore, ViewType } from '../../stores/useNavigationStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
+import { t } from '../../i18n/translations';
 
 interface InstanceCardProps {
   instance: EngineInstance;
-  onStart?: (id: string) => Promise<boolean> | void;
+  onStart?: (id: string) => Promise<StartEngineResult | boolean> | void;
   onStop?: (id: string) => Promise<boolean> | void;
   onConfigure?: (instance: EngineInstance) => void;
   onViewLogs?: (instance: EngineInstance) => void;
   onOpenDirectory?: (instance: EngineInstance) => void;
   onUninstall?: (instance: EngineInstance) => void;
   onOpenAgent?: () => void;
+  onDeploy?: (instance: EngineInstance) => void;
+  onLaunchFailed?: (instance: EngineInstance, error: string) => void;
 }
 
 export const InstanceCard: React.FC<InstanceCardProps> = ({
@@ -37,6 +42,8 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   onOpenDirectory,
   onUninstall,
   onOpenAgent,
+  onDeploy,
+  onLaunchFailed,
 }) => {
   const { setActiveView } = useNavigationStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -71,9 +78,12 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
     }
   };
 
+  const { getEffectiveLanguage } = useSettingsStore();
+  const lang = getEffectiveLanguage();
   const Icon = getIcon();
   const isRunning = instance.status === 'running';
   const isReady = instance.status === 'ready';
+  const isNotInstalled = instance.status === 'not_installed';
 
   const handleCardClick = (e: React.MouseEvent) => {
     // If click originated from the context menu or action buttons, don't trigger default
@@ -90,16 +100,34 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
     if (isRunning) {
       if (instance.type === 'comfyui') setActiveView('comfyui');
       else if (instance.type === 'webui') setActiveView('webui');
+    } else if (isNotInstalled) {
+      if (onDeploy) {
+        onDeploy(instance);
+      }
     } else if (onStart) {
       handleStart();
     }
   };
 
   const handleStart = async () => {
+    if (isNotInstalled) {
+      if (onDeploy) onDeploy(instance);
+      return;
+    }
+
     if (!onStart) return;
     setIsActing(true);
     try {
-      await onStart(instance.id);
+      const result = await onStart(instance.id);
+      if (result && typeof result === 'object' && !result.success) {
+        if (result.code === 'NOT_INSTALLED' || result.code === 'ENV_MISSING') {
+          if (onLaunchFailed) {
+            onLaunchFailed(instance, result.message || 'Engine runtime environment is not installed.');
+          } else if (onDeploy) {
+            onDeploy(instance);
+          }
+        }
+      }
     } finally {
       setIsActing(false);
     }
@@ -299,6 +327,20 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
             >
               <Square className="w-3 h-3 text-red-400" />
               <span>Stop</span>
+            </button>
+          </div>
+        ) : isNotInstalled ? (
+          <div className="flex items-center justify-between w-full">
+            <span className="text-xs text-amber-500/90 font-medium">
+              {t('engine_not_installed_title', lang) || 'Not Installed'}
+            </span>
+            <button
+              onClick={handleStart}
+              disabled={isActing}
+              className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-amber-600 hover:bg-amber-500 rounded transition-colors disabled:opacity-50 shadow-sm shadow-amber-600/30"
+            >
+              <Download className="w-3 h-3" />
+              <span>{t('btn_install_engine', lang) || 'Deploy'}</span>
             </button>
           </div>
         ) : (

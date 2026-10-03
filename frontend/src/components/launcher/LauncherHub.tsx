@@ -15,6 +15,8 @@ export interface LauncherHubProps {
   onOpenDirectory?: (instance: EngineInstance) => void;
   onUninstallEngine?: (instance: EngineInstance) => void;
   onOpenAgent?: () => void;
+  onDeployEngine?: (instance: EngineInstance) => void;
+  onLaunchFailed?: (instance: EngineInstance, error: string) => void;
   // Legacy props kept for backward-compatibility
   comfyOnline?: boolean;
   comfyRunning?: boolean;
@@ -31,6 +33,8 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
   onOpenDirectory,
   onUninstallEngine,
   onOpenAgent,
+  onDeployEngine,
+  onLaunchFailed,
 }) => {
   const {
     instances,
@@ -117,6 +121,8 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
               onOpenDirectory={onOpenDirectory}
               onUninstall={onUninstallEngine}
               onOpenAgent={onOpenAgent}
+              onDeploy={onDeployEngine}
+              onLaunchFailed={onLaunchFailed}
             />
           ))}
 
