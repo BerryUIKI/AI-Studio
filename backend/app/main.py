@@ -81,9 +81,13 @@ from app.schemas.model_hub import (
     HubCatalogResponse,
     HardwareEvaluationRequest,
     HardwareEvaluationResponse,
+    StartDownloadRequest,
+    DownloadTaskInfo,
+    DownloadTasksResponse,
 )
 from app.storage.hub_catalog import HubCatalog
 from app.runtime.hardware_evaluator import evaluate_hardware
+from app.runtime.model_downloader import model_downloader
 from app.schemas.events import (
     GraphFinishedEvent,
     GraphStartedEvent,
@@ -637,6 +641,53 @@ async def evaluate_models_hardware(req: HardwareEvaluationRequest) -> HardwareEv
     else:
         filtered_models = HubCatalog.list_models()
     return evaluate_hardware(filtered_models)
+
+
+@app.post("/api/v1/models/hub/download", response_model=DownloadTaskInfo, status_code=202)
+async def start_model_download(req: StartDownloadRequest) -> DownloadTaskInfo:
+    """Initiate resumable background download with mirror acceleration (MH-M4)."""
+    try:
+        return model_downloader.start_download(
+            model_id=req.model_id,
+            target_engine=req.target_engine,
+            mirror_preset=req.mirror_preset,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/api/v1/models/hub/tasks", response_model=DownloadTasksResponse)
+async def list_download_tasks() -> DownloadTasksResponse:
+    """List active and completed model download tasks with transfer speed and ETA (MH-M4)."""
+    tasks = model_downloader.list_tasks()
+    return DownloadTasksResponse(tasks=tasks)
+
+
+@app.post("/api/v1/models/hub/tasks/{task_id}/pause")
+async def pause_download_task(task_id: str) -> dict[str, Any]:
+    """Pause an active downloading task (MH-M4)."""
+    success = model_downloader.pause_task(task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found or cannot be paused")
+    return {"status": "paused", "task_id": task_id}
+
+
+@app.post("/api/v1/models/hub/tasks/{task_id}/resume")
+async def resume_download_task(task_id: str) -> dict[str, Any]:
+    """Resume a paused download task (MH-M4)."""
+    success = model_downloader.resume_task(task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found or cannot be resumed")
+    return {"status": "resumed", "task_id": task_id}
+
+
+@app.delete("/api/v1/models/hub/tasks/{task_id}")
+async def cancel_download_task(task_id: str) -> dict[str, Any]:
+    """Cancel and delete an active or paused download task (MH-M4)."""
+    success = model_downloader.cancel_task(task_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
+    return {"status": "cancelled", "task_id": task_id}
 
 
 # ---------------------------------------------------------------------------
