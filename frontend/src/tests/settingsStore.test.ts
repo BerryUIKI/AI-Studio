@@ -62,9 +62,41 @@ describe('useSettingsStore', () => {
     const store = useSettingsStore.getState();
     store.setExitPolicy('close_all');
     store.setDefaultLandingView('canvas');
+    store.setLanguage('ja');
 
     store.resetSettings();
     expect(useSettingsStore.getState().exitPolicy).toBe('prompt');
     expect(useSettingsStore.getState().defaultLandingView).toBe('launcher');
+    expect(useSettingsStore.getState().language).toBe('system');
+  });
+
+  it('updates language and persists to localStorage', () => {
+    const store = useSettingsStore.getState();
+    expect(store.language).toBe('system');
+
+    store.setLanguage('zh-CN');
+    expect(useSettingsStore.getState().language).toBe('zh-CN');
+    expect(useSettingsStore.getState().getEffectiveLanguage()).toBe('zh-CN');
+
+    const stored = JSON.parse(localStorage.getItem('berry_ai_studio_settings') || '{}');
+    expect(stored.language).toBe('zh-CN');
+
+    // Test French
+    store.setLanguage('fr');
+    expect(useSettingsStore.getState().getEffectiveLanguage()).toBe('fr');
+  });
+
+  it('falls back to English when system language is undetectable or unmapped', () => {
+    const store = useSettingsStore.getState();
+    store.setLanguage('system');
+
+    // Mock navigator.language as unsupported language (e.g., Icelandic)
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { language: 'is-IS' },
+      writable: true,
+      configurable: true,
+    });
+
+    expect(useSettingsStore.getState().getEffectiveLanguage()).toBe('en');
   });
 });
