@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Package, Search, Filter, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
 import { useModelHubStore, HubModel } from '../../stores/useModelHubStore';
+import { useDownloadStore } from '../../stores/useDownloadStore';
 import { HubModelCard } from './HubModelCard';
 
 interface ModelHubViewProps {
@@ -65,11 +66,15 @@ export const ModelHubView: React.FC<ModelHubViewProps> = ({
     return true;
   });
 
+  const startDownload = useDownloadStore((state) => state.startDownload);
+  const setDrawerOpen = useDownloadStore((state) => state.setDrawerOpen);
+
   const handleInstall = (model: HubModel) => {
     if (onInstallModel) {
       onInstallModel(model);
     } else {
-      console.log('Initiate model installation for:', model.id);
+      startDownload(model.id);
+      setDrawerOpen(true);
     }
   };
 

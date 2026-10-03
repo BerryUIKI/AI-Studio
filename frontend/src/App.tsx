@@ -19,6 +19,8 @@ import { EngineLogViewer } from './components/launcher/EngineLogViewer';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
 import { ModelHubView } from './components/hub/ModelHubView';
+import { FloatingDownloadWidget } from './components/hub/FloatingDownloadWidget';
+import { DownloadManagerDrawer } from './components/hub/DownloadManagerDrawer';
 import { SettingsView } from './components/settings/SettingsView';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
@@ -351,6 +353,10 @@ export default function App() {
         onCloseAllAndExit={handleCloseAllAndExit}
         onCancel={() => setShowExitDialog(false)}
       />
+
+      {/* Model Hub Download Manager & Floating Widget (MH-M5) */}
+      <FloatingDownloadWidget />
+      <DownloadManagerDrawer />
     </div>
   );
 }
