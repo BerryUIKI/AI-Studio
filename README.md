@@ -15,14 +15,21 @@ Double-click **`Berry.bat`** in the repository root:
 ```
 Launches the standalone desktop application window (powered by Tauri & WebView2). No web browser tabs or command windows required.
 
-### 2. Development Mode (Hot Reload)
-```powershell
-# Run Tauri desktop app with live reload:
-pnpm --prefix frontend tauri dev
+### Development Commands
 
-# Or run frontend and backend independently:
-cd backend && .\.venv\Scripts\python -m uvicorn app.main:app --reload
-cd frontend && pnpm dev
+```bash
+# Install dependencies
+pnpm install
+
+# Frontend development
+pnpm dev:web          # Start Vite dev server (frontend only)
+pnpm typecheck        # TypeScript type check
+pnpm lint             # ESLint
+pnpm test             # Vitest
+
+# Desktop development (requires Rust)
+pnpm tauri dev        # Start full Tauri desktop app
+pnpm tauri build      # Production build
 ```
 
 
