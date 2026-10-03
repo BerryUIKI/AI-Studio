@@ -65,6 +65,8 @@ from app.schemas.engine import (
     ManagerStatusResponse,
     ShutdownRequest,
     ShutdownResponse,
+    EngineInstanceInfo,
+    EngineInstancesResponse,
 )
 from app.schemas.hardware import HardwareReadiness
 from app.schemas.model import ModelRecord, ModelRoot, ModelRootCreate
@@ -453,6 +455,14 @@ async def get_hardware_readiness() -> HardwareReadiness:
 async def list_engines() -> List[EngineConnection]:
     """List all available managed and external engine connections."""
     return engine_manager.list_engines()
+
+
+@app.get("/api/v1/engines/instances", response_model=EngineInstancesResponse)
+async def list_engine_instances() -> EngineInstancesResponse:
+    """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
+    instances = engine_manager.get_all_instances()
+    return EngineInstancesResponse(instances=instances)
+
 
 
 @app.post("/api/v1/engines/connect", response_model=EngineConnection)
