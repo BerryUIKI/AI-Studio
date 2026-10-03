@@ -22,9 +22,10 @@ import { useCanvasStore } from '../../stores/useCanvasStore';
 interface AgentPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  inline?: boolean;
 }
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline = false }) => {
   const [messages, setMessages] = useState<AgentChatMessage[]>([
     {
       id: 'welcome-1',
@@ -204,7 +205,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
   ];
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-slate-900 border-l border-slate-800 shadow-2xl text-slate-100">
+    <div
+      className={
+        inline
+          ? 'flex w-full h-full flex-col bg-slate-900 text-slate-100 overflow-hidden'
+          : 'fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col bg-slate-900 border-l border-slate-800 shadow-2xl text-slate-100'
+      }
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-950/60">
         <div className="flex items-center gap-2">
