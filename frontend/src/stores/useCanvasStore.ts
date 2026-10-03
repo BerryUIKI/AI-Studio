@@ -12,13 +12,15 @@ import {
 import { CustomNodeData, ExecutionStatus, NodeDefinition } from '../types/workflow';
 
 interface CanvasState {
-  nodes: Node<CustomNodeData>[];
+  nodes: Node<any>[];
   edges: Edge[];
   selectedNodeId: string | null;
   isExecuting: boolean;
   currentRunId: string | null;
+  past: Node<any>[][];
+  future: Node<any>[][];
 
-  onNodesChange: (changes: NodeChange<Node<CustomNodeData>>[]) => void;
+  onNodesChange: (changes: NodeChange<Node<any>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (definition: NodeDefinition, position?: { x: number; y: number }) => void;
@@ -29,6 +31,13 @@ interface CanvasState {
   clearCanvas: () => void;
   runWorkflow: (targetNodeId?: string) => Promise<void>;
   cancelRun: () => void;
+  pushSnapshot: () => void;
+  undo: () => void;
+  redo: () => void;
+  removeNode: (nodeId: string) => void;
+  duplicateNode: (nodeId: string) => void;
+  arrangeBranchTree: (rootNodeId?: string) => void;
+  addWorkspaceFrame: (label: string, position?: { x: number; y: number }, size?: { width: number; height: number }) => string;
 }
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
@@ -37,6 +46,189 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   selectedNodeId: null,
   isExecuting: false,
   currentRunId: null,
+  past: [],
+  future: [],
+
+  pushSnapshot: () => {
+    const currentNodes = JSON.parse(JSON.stringify(get().nodes));
+    set((state) => ({
+      past: [...state.past.slice(-24), currentNodes],
+      future: [],
+    }));
+  },
+
+  undo: () => {
+    const { past, future, nodes } = get();
+    if (past.length === 0) return;
+    const previous = past[past.length - 1];
+    const newPast = past.slice(0, -1);
+    set({
+      nodes: previous,
+      past: newPast,
+      future: [JSON.parse(JSON.stringify(nodes)), ...future],
+    });
+  },
+
+  redo: () => {
+    const { past, future, nodes } = get();
+    if (future.length === 0) return;
+    const next = future[0];
+    const newFuture = future.slice(1);
+    set({
+      nodes: next,
+      past: [...past, JSON.parse(JSON.stringify(nodes))],
+      future: newFuture,
+    });
+  },
+
+  removeNode: (nodeId) => {
+    get().pushSnapshot();
+    const { nodes, edges, selectedNodeId } = get();
+    set({
+      nodes: nodes.filter((n) => n.id !== nodeId),
+      edges: edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
+      selectedNodeId: selectedNodeId === nodeId ? null : selectedNodeId,
+    });
+  },
+
+  duplicateNode: (nodeId) => {
+    get().pushSnapshot();
+    const { nodes } = get();
+    const target = nodes.find((n) => n.id === nodeId);
+    if (!target) return;
+
+    const clonedId = `${target.type || 'node'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const clonedNode: Node<any> = {
+      ...JSON.parse(JSON.stringify(target)),
+      id: clonedId,
+      position: {
+        x: target.position.x + 40,
+        y: target.position.y + 40,
+      },
+    };
+
+    set({
+      nodes: [...nodes, clonedNode],
+      selectedNodeId: clonedId,
+    });
+  },
+
+  arrangeBranchTree: (rootNodeId) => {
+    const { nodes, selectedNodeId } = get();
+    const targetId = rootNodeId || selectedNodeId;
+    if (!targetId) return;
+
+    const targetNode = nodes.find((n) => n.id === targetId);
+    if (!targetNode || targetNode.type !== 'imageCard') return;
+
+    get().pushSnapshot();
+
+    // Map by assetId and source_asset_id
+    const assetIdToNode = new Map<string, Node<any>>();
+    const parentToChildren = new Map<string, string[]>();
+
+    nodes.forEach((n) => {
+      if (n.type === 'imageCard' && n.data?.assetId) {
+        assetIdToNode.set(n.data.assetId, n);
+      }
+    });
+
+    nodes.forEach((n) => {
+      if (n.type === 'imageCard') {
+        const parentAssetId = n.data?.provenance?.source_asset_id;
+        if (parentAssetId && assetIdToNode.has(parentAssetId)) {
+          const list = parentToChildren.get(parentAssetId) || [];
+          list.push(n.id);
+          parentToChildren.set(parentAssetId, list);
+        }
+      }
+    });
+
+    // Find root by tracing upwards
+    let current = targetNode;
+    const visited = new Set<string>();
+    while (current && current.data?.provenance?.source_asset_id && !visited.has(current.id)) {
+      visited.add(current.id);
+      const parentNode = assetIdToNode.get(current.data.provenance.source_asset_id);
+      if (parentNode) {
+        current = parentNode;
+      } else {
+        break;
+      }
+    }
+    const rootNode = current;
+
+    // Layout hierarchy from root
+    const updatedPositions = new Map<string, { x: number; y: number }>();
+    const rootX = rootNode.position.x;
+    const rootY = rootNode.position.y;
+    updatedPositions.set(rootNode.id, { x: rootX, y: rootY });
+
+    let currentYByDepth: Record<number, number> = { 0: rootY };
+
+    const layoutSubtree = (node: Node<any>, depth: number) => {
+      const assetId = node.data?.assetId;
+      if (!assetId) return;
+      const childrenIds = parentToChildren.get(assetId) || [];
+      if (childrenIds.length === 0) return;
+
+      const nextDepth = depth + 1;
+      childrenIds.forEach((childId) => {
+        const childNode = nodes.find((n) => n.id === childId);
+        if (!childNode) return;
+
+        const startY = currentYByDepth[nextDepth] ?? rootY;
+        const x = rootX + nextDepth * 370;
+        const y = startY;
+        updatedPositions.set(childId, { x, y });
+        currentYByDepth[nextDepth] = y + 430;
+
+        layoutSubtree(childNode, nextDepth);
+      });
+    };
+
+    layoutSubtree(rootNode, 0);
+
+    set({
+      nodes: nodes.map((n) => {
+        const newPos = updatedPositions.get(n.id);
+        if (newPos) {
+          return { ...n, position: newPos };
+        }
+        return n;
+      }),
+    });
+  },
+
+  addWorkspaceFrame: (label, position, size) => {
+    get().pushSnapshot();
+    const frameId = `frame_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const pos = position || { x: 80, y: 80 };
+    const dimensions = size || { width: 800, height: 500 };
+
+    const newFrame: Node<any> = {
+      id: frameId,
+      type: 'workspaceFrame',
+      position: pos,
+      data: {
+        label,
+        width: dimensions.width,
+        height: dimensions.height,
+        color: 'indigo',
+      },
+      style: {
+        width: dimensions.width,
+        height: dimensions.height,
+        zIndex: -1,
+      },
+    };
+
+    set((state) => ({
+      nodes: [newFrame, ...state.nodes],
+      selectedNodeId: frameId,
+    }));
+    return frameId;
+  },
 
   onNodesChange: (changes) => {
     set({
@@ -64,6 +256,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   addNode: (definition, position) => {
+    get().pushSnapshot();
     const defaultParams: Record<string, any> = {};
     definition.parameters.forEach((param) => {
       defaultParams[param.name] = param.default;
@@ -142,7 +335,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   setSelectedNodeId: (nodeId) => set({ selectedNodeId: nodeId }),
 
-  clearCanvas: () => set({ nodes: [], edges: [], selectedNodeId: null, isExecuting: false, currentRunId: null }),
+  clearCanvas: () => {
+    get().pushSnapshot();
+    set({ nodes: [], edges: [], selectedNodeId: null, isExecuting: false, currentRunId: null });
+  },
 
   cancelRun: () => {
     const { currentRunId } = get();

@@ -134,13 +134,24 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
 
       const results: CreativeActionResult[] = await resp.json();
 
+      // Automatically group multi-item proposals into a bounded workspace frame (Issue #38)
+      if (results.length > 1) {
+        const frameWidth = Math.min(1200, results.length * 360 + 60);
+        useCanvasStore.getState().addWorkspaceFrame(
+          `Agent Plan: ${proposal.title}`,
+          { x: 80, y: 80 },
+          { width: frameWidth, height: 520 }
+        );
+      }
+
       // Add resulting nodes to the canvas
-      for (const res of results) {
+      for (let idx = 0; idx < results.length; idx++) {
+        const res = results[idx];
         if (res.success && (res.image_url || res.video_url)) {
           const canvasStore = useCanvasStore.getState();
           const existingNodes = canvasStore.nodes;
-          const xOffset = 100 + (existingNodes.length % 5) * 360;
-          const yOffset = 100 + Math.floor(existingNodes.length / 5) * 420;
+          const xOffset = 120 + idx * 360;
+          const yOffset = 120;
 
           const isVideo = Boolean(res.video_url || proposal.intent.includes('video'));
           const cardId = `${isVideo ? 'video' : 'image'}_agent_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;

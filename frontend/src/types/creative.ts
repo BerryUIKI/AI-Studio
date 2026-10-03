@@ -67,6 +67,17 @@ export interface ImageCardData {
   height: number;
   provenance?: GenerationProvenance;
   label?: string;
+  isGenerating?: boolean;
+  generationStage?: string;
+  generationProgress?: number;
+}
+
+export interface WorkspaceFrameData {
+  label: string;
+  description?: string;
+  width: number;
+  height: number;
+  color?: string;
 }
 
 export interface AgentActionStep {

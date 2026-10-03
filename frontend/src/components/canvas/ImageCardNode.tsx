@@ -1,21 +1,33 @@
 import { memo } from 'react';
 import { NodeProps } from '@xyflow/react';
-import { Download, Maximize2, Paintbrush, Sparkles, Trash2, Video } from 'lucide-react';
+import {
+  Download,
+  Maximize2,
+  Paintbrush,
+  Sparkles,
+  Trash2,
+  Video,
+  GitBranch,
+  Loader2,
+} from 'lucide-react';
 import { ImageCardData } from '../../types/creative';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
+import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const cardData = data as unknown as ImageCardData;
   const { setReferenceImage, openInpaint, openUpscale, openImg2Video } = useCreativeStore();
-  const { nodes } = useCanvasStore();
+  const { removeNode, arrangeBranchTree } = useCanvasStore();
 
+  const isGenerating = Boolean(cardData.isGenerating);
   const isVideo = cardData.mediaType === 'video' || Boolean(cardData.videoUrl);
   const targetMediaUrl = cardData.videoUrl || cardData.imageUrl || '';
   const isVideoContainer = targetMediaUrl.toLowerCase().match(/\.(mp4|webm|mov)(\?|#|$)/) !== null;
 
   const handleExport = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!targetMediaUrl) return;
     const link = document.createElement('a');
     link.href = targetMediaUrl;
     let ext = isVideo ? (isVideoContainer ? 'mp4' : 'webp') : 'png';
@@ -31,9 +43,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
-    useCanvasStore.setState({
-      nodes: nodes.filter((n) => n.id !== id),
-    });
+    removeNode(id);
   };
 
   const handleVary = (e: React.MouseEvent) => {
@@ -57,126 +67,199 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   };
 
   const p = cardData.provenance;
+  const hasLineage = Boolean(p?.source_asset_id);
 
   return (
     <div
-      className={`group relative rounded-2xl bg-slate-900 border transition-all duration-200 overflow-hidden shadow-2xl ${
+      className={`group relative rounded-2xl bg-slate-900 border transition-all duration-200 overflow-visible shadow-2xl ${
         selected ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-slate-800 hover:border-slate-700'
       }`}
       style={{ width: 320 }}
     >
-      {/* Floating Action Bar */}
-      <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 bg-slate-950/85 backdrop-blur-md rounded-xl p-1 border border-slate-700/60 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-        {!isVideo && (
-          <>
-            <button
-              onClick={handleAnimate}
-              title="Animate (Image-to-Video)"
-              className="p-1.5 rounded-lg text-slate-300 hover:text-purple-400 hover:bg-slate-800 transition"
-            >
-              <Video className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleVary}
-              title="Vary (Image-to-Image)"
-              className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-400 hover:bg-slate-800 transition"
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleInpaint}
-              title="Inpaint / Mask"
-              className="p-1.5 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-slate-800 transition"
-            >
-              <Paintbrush className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={handleUpscale}
-              title="Upscale Image"
-              className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-400 hover:bg-slate-800 transition"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-          </>
-        )}
-        <button
-          onClick={handleExport}
-          title="Export / Download"
-          className="p-1.5 rounded-lg text-slate-300 hover:text-blue-400 hover:bg-slate-800 transition"
-        >
-          <Download className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={handleRemove}
-          title="Remove from Canvas"
-          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      {/* Floating In-Place Action Bar for Selected Card (Issue #34) */}
+      {selected && !isGenerating && (
+        <FloatingCardToolbar nodeId={id} data={cardData} />
+      )}
 
-      {/* Media Preview Container */}
-      <div className="relative bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[360px] overflow-hidden">
-        {isVideo && (isVideoContainer || !targetMediaUrl.toLowerCase().match(/\.(webp|gif)(\?|#|$)/)) ? (
-          <video
-            src={targetMediaUrl}
-            controls
-            loop
-            playsInline
-            className="w-full h-auto object-contain max-h-[360px]"
-          />
-        ) : (
-          <img
-            src={targetMediaUrl || cardData.imageUrl}
-            alt={cardData.label || 'Generated creative asset'}
-            className="w-full h-auto object-contain select-none"
-            loading="lazy"
-          />
-        )}
-        {isVideo && !isVideoContainer && (
-          <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-purple-950/80 backdrop-blur text-[10px] font-medium text-purple-300 border border-purple-800/60">
-            Animated WebP
+      {/* Card Content Container (with overflow-hidden for border-radius clipping) */}
+      <div className="rounded-2xl overflow-hidden bg-slate-900">
+        {/* Hover Action Bar (Top Right) */}
+        {!isGenerating && (
+          <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 bg-slate-950/85 backdrop-blur-md rounded-xl p-1 border border-slate-700/60 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+            {!isVideo && (
+              <>
+                <button
+                  onClick={handleAnimate}
+                  title="Animate (Image-to-Video)"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-purple-400 hover:bg-slate-800 transition"
+                >
+                  <Video className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleVary}
+                  title="Vary (Image-to-Image)"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-400 hover:bg-slate-800 transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleInpaint}
+                  title="Inpaint / Mask"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-slate-800 transition"
+                >
+                  <Paintbrush className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={handleUpscale}
+                  title="Upscale Image"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-400 hover:bg-slate-800 transition"
+                >
+                  <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+            <button
+              onClick={handleExport}
+              title="Export / Download"
+              className="p-1.5 rounded-lg text-slate-300 hover:text-blue-400 hover:bg-slate-800 transition"
+            >
+              <Download className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={handleRemove}
+              title="Remove from Canvas"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
-        {p && (
-          <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/75 backdrop-blur text-[10px] font-mono text-slate-300 border border-slate-800">
-            {p.dimensions}
-            {p.fps ? ` · ${p.fps}fps` : ''}
-            {p.duration_seconds ? ` · ${p.duration_seconds}s` : ''}
-          </div>
-        )}
-      </div>
 
-      {/* Provenance & Metadata Details Footer */}
-      <div className="p-3 bg-slate-900 border-t border-slate-800/80">
-        <p className="text-xs text-slate-200 font-medium line-clamp-2 leading-relaxed">
-          {cardData.label || 'Untitled Asset'}
-        </p>
+        {/* Media Preview Container / Generating Stage Container */}
+        <div className="relative bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[360px] overflow-hidden">
+          {isGenerating ? (
+            /* Fine-Grained Generation State & Latent Denoising Preview (Issue #37) */
+            <div className="w-full h-64 p-6 flex flex-col items-center justify-center relative bg-gradient-to-b from-slate-950 via-indigo-950/20 to-slate-950">
+              {/* Simulated Latent Noise Emergence Background */}
+              <div
+                className="absolute inset-0 opacity-20 bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px] animate-pulse"
+                style={{
+                  filter: `blur(${Math.max(0, 10 - ((cardData.generationProgress || 20) / 10))}px)`,
+                }}
+              />
 
-        {p ? (
-          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
-            <span className="px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-              {p.engine_id.replace('managed_', '')}
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-              {p.action}
-            </span>
-            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-              seed: {p.seed}
-            </span>
-            {p.fps && (
-              <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40">
-                {p.fps} fps
-              </span>
+              <div className="relative z-10 flex flex-col items-center gap-3 w-full max-w-[240px] text-center">
+                <div className="relative">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shadow-xl shadow-indigo-600/20">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                  </div>
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
+                  </span>
+                </div>
+
+                <div className="space-y-1 w-full">
+                  <span className="text-xs font-semibold text-slate-200 block">
+                    {cardData.generationStage || 'Generating...'}
+                  </span>
+                  {/* Progress bar */}
+                  <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden border border-slate-700/50">
+                    <div
+                      className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-300"
+                      style={{ width: `${cardData.generationProgress || 25}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
+                    <span>Progress</span>
+                    <span>{cardData.generationProgress || 25}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* Media Render (Image or Video) */
+            <>
+              {isVideo && (isVideoContainer || !targetMediaUrl.toLowerCase().match(/\.(webp|gif)(\?|#|$)/)) ? (
+                <video
+                  src={targetMediaUrl}
+                  controls
+                  loop
+                  playsInline
+                  className="w-full h-auto object-contain max-h-[360px]"
+                />
+              ) : (
+                <img
+                  src={targetMediaUrl || cardData.imageUrl}
+                  alt={cardData.label || 'Generated creative asset'}
+                  className="w-full h-auto object-contain select-none"
+                  loading="lazy"
+                />
+              )}
+
+              {isVideo && !isVideoContainer && (
+                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-purple-950/80 backdrop-blur text-[10px] font-medium text-purple-300 border border-purple-800/60">
+                  Animated WebP
+                </div>
+              )}
+
+              {p && (
+                <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/75 backdrop-blur text-[10px] font-mono text-slate-300 border border-slate-800">
+                  {p.dimensions}
+                  {p.fps ? ` · ${p.fps}fps` : ''}
+                  {p.duration_seconds ? ` · ${p.duration_seconds}s` : ''}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Provenance & Metadata Details Footer */}
+        <div className="p-3 bg-slate-900 border-t border-slate-800/80">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-xs text-slate-200 font-medium line-clamp-2 leading-relaxed flex-1">
+              {cardData.label || 'Untitled Asset'}
+            </p>
+            {hasLineage && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  arrangeBranchTree(id);
+                }}
+                title="Lineage variation (Click to align branch tree)"
+                className="p-1 rounded-md bg-indigo-950/60 text-indigo-400 hover:text-indigo-200 border border-indigo-800/50 hover:bg-indigo-900/60 transition"
+              >
+                <GitBranch className="w-3 h-3" />
+              </button>
             )}
           </div>
-        ) : (
-          <div className="mt-2 text-[10px] text-slate-500">Imported asset</div>
-        )}
+
+          {p ? (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+              <span className="px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
+                {p.engine_id.replace('managed_', '')}
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                {p.action}
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                seed: {p.seed}
+              </span>
+              {p.fps && (
+                <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40">
+                  {p.fps} fps
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="mt-2 text-[10px] text-slate-500">
+              {isGenerating ? 'Synthesizing...' : 'Imported asset'}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 });
 
 ImageCardNode.displayName = 'ImageCardNode';
-

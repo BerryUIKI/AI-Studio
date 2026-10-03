@@ -17,14 +17,21 @@ interface CreativeState {
   videoModalOpen: boolean;
   fps: number;
   numFrames: number;
+  denoise: number;
   motionBucketId: number;
   durationSeconds: number;
   isGenerating: boolean;
+  generationStage: string;
+  generationProgress: number;
   error: string | null;
 
   setPrompt: (prompt: string) => void;
   setNegativePrompt: (np: string) => void;
   setAspectRatio: (ar: string) => void;
+  setSteps: (steps: number) => void;
+  setCfgScale: (cfg: number) => void;
+  setDenoise: (denoise: number) => void;
+  setSeed: (seed: number) => void;
   setEngineId: (id: string) => void;
   setModel: (m: string) => void;
   setReferenceImage: (img: ImageCardData | null) => void;
@@ -46,6 +53,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   aspectRatio: '1:1',
   steps: 20,
   cfgScale: 7.0,
+  denoise: 0.75,
   seed: -1,
   engineId: 'managed_comfyui',
   model: 'v1-5-pruned-emaonly.safetensors',
@@ -58,11 +66,17 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   motionBucketId: 127,
   durationSeconds: 3.0,
   isGenerating: false,
+  generationStage: 'Idle',
+  generationProgress: 0,
   error: null,
 
   setPrompt: (prompt) => set({ prompt }),
   setNegativePrompt: (negativePrompt) => set({ negativePrompt }),
   setAspectRatio: (aspectRatio) => set({ aspectRatio }),
+  setSteps: (steps) => set({ steps }),
+  setCfgScale: (cfgScale) => set({ cfgScale }),
+  setDenoise: (denoise) => set({ denoise }),
+  setSeed: (seed) => set({ seed }),
   setEngineId: (engineId) => set({ engineId }),
   setModel: (model) => set({ model }),
   setReferenceImage: (referenceImage) => set({ referenceImage }),
@@ -77,7 +91,12 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
 
   executeCreativeAction: async (override) => {
     const s = get();
-    set({ isGenerating: true, error: null });
+    set({
+      isGenerating: true,
+      error: null,
+      generationStage: 'Preparing execution & checking cache...',
+      generationProgress: 15,
+    });
 
     const action = override?.action || (s.referenceImage ? 'img2img' : 'txt2img');
     const payload: CreativeActionRequest = {
@@ -89,6 +108,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       aspect_ratio: s.aspectRatio,
       steps: s.steps,
       cfg_scale: s.cfgScale,
+      denoise: s.denoise,
       seed: s.seed,
       input_image_id: s.referenceImage?.assetId,
       fps: s.fps,
@@ -98,12 +118,86 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       ...override,
     };
 
+    // Prepare placeholder card on canvas
+    const canvasStore = useCanvasStore.getState();
+    const existingNodes = canvasStore.nodes;
+    const isVideo = Boolean(action === 'txt2video' || action === 'img2video');
+    const placeholderId = `${isVideo ? 'video' : 'image'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    
+    // Position adjacent to reference card or in next grid slot
+    let posX = 80 + (existingNodes.length % 5) * 360;
+    let posY = 80 + Math.floor(existingNodes.length / 5) * 440;
+    if (s.referenceImage?.assetId) {
+      const refNode = existingNodes.find((n) => n.data?.assetId === s.referenceImage?.assetId);
+      if (refNode) {
+        posX = refNode.position.x + 360;
+        posY = refNode.position.y;
+      }
+    }
+
+    const placeholderCard: ImageCardData = {
+      imageUrl: s.referenceImage?.imageUrl || '',
+      mediaType: isVideo ? 'video' : 'image',
+      width: 512,
+      height: 512,
+      label: s.prompt,
+      isGenerating: true,
+      generationStage: 'Preparing parameters...',
+      generationProgress: 20,
+    };
+
+    useCanvasStore.setState({
+      nodes: [
+        ...existingNodes,
+        {
+          id: placeholderId,
+          type: 'imageCard',
+          position: { x: posX, y: posY },
+          data: placeholderCard as any,
+        },
+      ],
+      selectedNodeId: placeholderId,
+    });
+
+    // Simulated progress tick timer for fine-grained UX feedback
+    const stageTimer = setInterval(() => {
+      const curr = get().generationProgress;
+      if (curr < 85) {
+        let nextStage = 'Sampling latent diffusion steps...';
+        if (curr < 40) nextStage = 'Loading model checkpoint & latents...';
+        else if (curr < 75) nextStage = `Denoising step ${Math.round((curr / 85) * s.steps)}/${s.steps}...`;
+        else nextStage = 'Decoding VAE latent...';
+
+        const nextProgress = Math.min(85, curr + 12);
+        set({ generationProgress: nextProgress, generationStage: nextStage });
+
+        // Update placeholder card
+        useCanvasStore.setState((state) => ({
+          nodes: state.nodes.map((node) => {
+            if (node.id === placeholderId) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  generationProgress: nextProgress,
+                  generationStage: nextStage,
+                },
+              };
+            }
+            return node;
+          }),
+        }));
+      }
+    }, 450);
+
     try {
       const resp = await fetch('/api/v1/creative/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      clearInterval(stageTimer);
 
       if (!resp.ok) {
         throw new Error(`Server returned HTTP ${resp.status}`);
@@ -114,15 +208,12 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         throw new Error(result.error_message || 'Generation failed');
       }
 
-      // Add as ImageCard / VideoCard on canvas
-      const canvasStore = useCanvasStore.getState();
-      const existingNodes = canvasStore.nodes;
-      const xOffset = 80 + (existingNodes.length % 5) * 360;
-      const yOffset = 80 + Math.floor(existingNodes.length / 5) * 420;
+      set({
+        generationStage: 'Asset ready on canvas!',
+        generationProgress: 100,
+      });
 
-      const isVideo = Boolean(result.video_url || action === 'txt2video' || action === 'img2video');
-      const newCardId = `${isVideo ? 'video' : 'image'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const cardData: ImageCardData = {
+      const updatedCardData: ImageCardData = {
         assetId: result.asset_id,
         imageUrl: result.image_url || result.video_url || '',
         videoUrl: result.video_url,
@@ -131,24 +222,38 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         height: result.height,
         provenance: result.provenance,
         label: result.provenance?.prompt || s.prompt,
+        isGenerating: false,
+        generationStage: 'Done',
+        generationProgress: 100,
       };
 
-      const newCardNode = {
-        id: newCardId,
-        type: 'imageCard',
-        position: { x: xOffset, y: yOffset },
-        data: cardData as any,
-      };
-
-      useCanvasStore.setState({
-        nodes: [...existingNodes, newCardNode],
-        selectedNodeId: newCardId,
-      });
+      useCanvasStore.setState((state) => ({
+        nodes: state.nodes.map((node) => {
+          if (node.id === placeholderId) {
+            return {
+              ...node,
+              data: updatedCardData as any,
+            };
+          }
+          return node;
+        }),
+        selectedNodeId: placeholderId,
+      }));
 
       set({ isGenerating: false });
       return result;
     } catch (err: any) {
-      set({ isGenerating: false, error: err.message || 'Generation failed' });
+      clearInterval(stageTimer);
+      // Remove failed placeholder card from canvas
+      useCanvasStore.setState((state) => ({
+        nodes: state.nodes.filter((node) => node.id !== placeholderId),
+      }));
+      set({
+        isGenerating: false,
+        error: err.message || 'Generation failed',
+        generationStage: 'Failed',
+        generationProgress: 0,
+      });
       return null;
     }
   },
