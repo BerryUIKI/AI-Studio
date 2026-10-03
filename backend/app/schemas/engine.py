@@ -144,3 +144,54 @@ class EngineInstancesResponse(BaseModel):
     instances: List[EngineInstanceInfo]
 
 
+class DetectedEngineInfo(BaseModel):
+    engine_type: str  # comfyui, webui
+    path: str
+    version: Optional[str] = None
+    has_python_env: bool = False
+    python_executable: Optional[str] = None
+    recommended_name: str
+
+
+class EngineDetectResponse(BaseModel):
+    detected: List[DetectedEngineInfo]
+
+
+class EngineBindRequest(BaseModel):
+    engine_type: str  # comfyui, webui
+    name: str
+    path: str
+    port: Optional[int] = None
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class MirrorPresetInfo(BaseModel):
+    id: str
+    name: str
+    git_mirror: Optional[str] = None
+    pypi_mirror: Optional[str] = None
+    hf_mirror: Optional[str] = None
+
+
+class MirrorConfigResponse(BaseModel):
+    active_preset: str
+    presets: List[MirrorPresetInfo]
+    custom_git_mirror: Optional[str] = None
+    custom_pypi_mirror: Optional[str] = None
+    custom_hf_mirror: Optional[str] = None
+
+
+class UpdateMirrorConfigRequest(BaseModel):
+    active_preset: str
+    custom_git_mirror: Optional[str] = None
+    custom_pypi_mirror: Optional[str] = None
+    custom_hf_mirror: Optional[str] = None
+
+
+class EngineLogResponse(BaseModel):
+    instance_id: str
+    total_lines: int
+    logs: List[str]
+
+
+

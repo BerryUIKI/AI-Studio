@@ -354,5 +354,81 @@ class IsolatedEngineInstaller:
         return manifest
 
 
+class MirrorManager:
+    """Manages active network mirror presets for high-speed download in China Mainland or restricted networks."""
+
+    def __init__(self) -> None:
+        self.active_preset: str = "direct"
+        self.custom_git_mirror: Optional[str] = None
+        self.custom_pypi_mirror: Optional[str] = None
+        self.custom_hf_mirror: Optional[str] = None
+
+        self.presets = [
+            {
+                "id": "direct",
+                "name": "Direct (Official Global)",
+                "git_mirror": None,
+                "pypi_mirror": "https://pypi.org/simple",
+                "hf_mirror": "https://huggingface.co",
+            },
+            {
+                "id": "china_mainland",
+                "name": "China Mainland (Accelerated)",
+                "git_mirror": "https://mirror.ghproxy.com/",
+                "pypi_mirror": "https://pypi.tuna.tsinghua.edu.cn/simple",
+                "hf_mirror": "https://hf-mirror.com",
+            },
+            {
+                "id": "custom",
+                "name": "Custom Mirrors",
+                "git_mirror": None,
+                "pypi_mirror": None,
+                "hf_mirror": None,
+            },
+        ]
+
+    def get_config(self) -> Dict[str, Any]:
+        return {
+            "active_preset": self.active_preset,
+            "presets": self.presets,
+            "custom_git_mirror": self.custom_git_mirror,
+            "custom_pypi_mirror": self.custom_pypi_mirror,
+            "custom_hf_mirror": self.custom_hf_mirror,
+        }
+
+    def update_config(
+        self,
+        active_preset: str,
+        custom_git_mirror: Optional[str] = None,
+        custom_pypi_mirror: Optional[str] = None,
+        custom_hf_mirror: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        self.active_preset = active_preset
+        if custom_git_mirror is not None:
+            self.custom_git_mirror = custom_git_mirror
+        if custom_pypi_mirror is not None:
+            self.custom_pypi_mirror = custom_pypi_mirror
+        if custom_hf_mirror is not None:
+            self.custom_hf_mirror = custom_hf_mirror
+        return self.get_config()
+
+    def transform_git_url(self, repo_url: str) -> str:
+        if self.active_preset == "china_mainland":
+            return f"https://mirror.ghproxy.com/{repo_url}"
+        if self.active_preset == "custom" and self.custom_git_mirror:
+            prefix = self.custom_git_mirror.rstrip("/")
+            return f"{prefix}/{repo_url}"
+        return repo_url
+
+    def get_pip_index_url(self) -> Optional[str]:
+        if self.active_preset == "china_mainland":
+            return "https://pypi.tuna.tsinghua.edu.cn/simple"
+        if self.active_preset == "custom" and self.custom_pypi_mirror:
+            return self.custom_pypi_mirror
+        return None
+
+
 installer = IsolatedEngineInstaller()
+mirror_manager = MirrorManager()
+
 
