@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { LanguageSetting, SupportedLanguage, resolveEffectiveLanguage } from '../i18n/translations';
 
 export type ExitPolicy = 'prompt' | 'close_all' | 'keep_running';
 export type DefaultLandingView = 'launcher' | 'canvas';
@@ -6,11 +7,14 @@ export type DefaultLandingView = 'launcher' | 'canvas';
 export interface AppSettings {
   exitPolicy: ExitPolicy;
   defaultLandingView: DefaultLandingView;
+  language: LanguageSetting;
 }
 
 interface SettingsState extends AppSettings {
   setExitPolicy: (policy: ExitPolicy) => void;
   setDefaultLandingView: (view: DefaultLandingView) => void;
+  setLanguage: (lang: LanguageSetting) => void;
+  getEffectiveLanguage: () => SupportedLanguage;
   resetSettings: () => void;
 }
 
@@ -19,7 +23,20 @@ const STORAGE_KEY = 'berry_ai_studio_settings';
 const defaultSettings: AppSettings = {
   exitPolicy: 'prompt',
   defaultLandingView: 'launcher',
+  language: 'system',
 };
+
+const validLanguages: LanguageSetting[] = [
+  'system',
+  'en',
+  'zh-CN',
+  'ja',
+  'ko',
+  'fr',
+  'de',
+  'es',
+  'ru',
+];
 
 const loadSettings = (): AppSettings => {
   try {
@@ -34,6 +51,9 @@ const loadSettings = (): AppSettings => {
           defaultLandingView: ['launcher', 'canvas'].includes(parsed.defaultLandingView)
             ? parsed.defaultLandingView
             : defaultSettings.defaultLandingView,
+          language: validLanguages.includes(parsed.language)
+            ? parsed.language
+            : defaultSettings.language,
         };
       }
     }
@@ -64,6 +84,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       saveSettings({
         exitPolicy: policy,
         defaultLandingView: get().defaultLandingView,
+        language: get().language,
       });
     },
 
@@ -72,7 +93,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       saveSettings({
         exitPolicy: get().exitPolicy,
         defaultLandingView: view,
+        language: get().language,
       });
+    },
+
+    setLanguage: (lang: LanguageSetting) => {
+      set({ language: lang });
+      saveSettings({
+        exitPolicy: get().exitPolicy,
+        defaultLandingView: get().defaultLandingView,
+        language: lang,
+      });
+    },
+
+    getEffectiveLanguage: () => {
+      return resolveEffectiveLanguage(get().language);
     },
 
     resetSettings: () => {

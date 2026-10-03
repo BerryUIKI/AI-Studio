@@ -1,192 +1,340 @@
-import React from 'react';
-import { Settings, Cpu, Globe, Info, Power, Compass } from 'lucide-react';
-import { useSettingsStore, ExitPolicy, DefaultLandingView } from '../../stores/useSettingsStore';
+import React, { useState } from 'react';
+import {
+  Settings,
+  Languages,
+  Compass,
+  Power,
+  Globe,
+  Cpu,
+  Info,
+  ChevronRight,
+  Check,
+} from 'lucide-react';
+import {
+  useSettingsStore,
+  ExitPolicy,
+  DefaultLandingView,
+} from '../../stores/useSettingsStore';
+import {
+  LANGUAGE_OPTIONS,
+  LanguageSetting,
+  t,
+  resolveEffectiveLanguage,
+} from '../../i18n/translations';
 
 interface SettingsViewProps {
   onOpenCloudSettings?: () => void;
   onOpenEnvironmentManager?: () => void;
 }
 
+type SettingsSection = 'general' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
+
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenCloudSettings,
   onOpenEnvironmentManager,
 }) => {
-  const { exitPolicy, setExitPolicy, defaultLandingView, setDefaultLandingView } = useSettingsStore();
+  const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+
+  const {
+    language,
+    setLanguage,
+    exitPolicy,
+    setExitPolicy,
+    defaultLandingView,
+    setDefaultLandingView,
+  } = useSettingsStore();
+
+  const currentLang = resolveEffectiveLanguage(language);
+
+  const sections: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
+    { id: 'general', label: t('tab_general', currentLang), icon: Languages },
+    { id: 'startup', label: t('tab_startup', currentLang), icon: Compass },
+    { id: 'exit', label: t('tab_exit', currentLang), icon: Power },
+    { id: 'cloud', label: t('tab_cloud', currentLang), icon: Globe },
+    { id: 'engines', label: t('tab_engines', currentLang), icon: Cpu },
+    { id: 'about', label: t('tab_about', currentLang), icon: Info },
+  ];
 
   return (
-    <div className="flex flex-col w-full h-full overflow-y-auto bg-slate-950 text-slate-100 p-8 select-none">
-      <div className="max-w-3xl mx-auto w-full">
-        {/* Header */}
-        <div className="flex items-center space-x-3 mb-8 pb-4 border-b border-white/[0.08]">
-          <div className="w-10 h-10 rounded-xl bg-slate-900 border border-white/[0.08] flex items-center justify-center text-indigo-400">
-            <Settings className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">System Settings</h1>
-            <p className="text-xs text-slate-400">Configure client behavior, cloud keys, and engine environments.</p>
-          </div>
-        </div>
-
-        {/* Settings Sections */}
+    <div className="flex w-full h-full bg-slate-950 text-slate-100 select-none overflow-hidden">
+      {/* Left Dedicated Settings Navigation Sidebar */}
+      <aside className="w-64 border-r border-white/[0.08] bg-slate-900/40 p-4 flex flex-col justify-between shrink-0">
         <div className="space-y-6">
-          {/* Startup & Navigation Preferences */}
-          <section className="p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08]">
-            <div className="flex items-start space-x-3 mb-4">
-              <Compass className="w-5 h-5 text-indigo-400 mt-0.5" />
-              <div>
-                <h2 className="text-sm font-semibold text-slate-100">Startup & Default Landing</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Choose the view displayed when Berry AI Studio launches.
-                </p>
-              </div>
+          {/* Header */}
+          <div className="flex items-center space-x-3 px-2 pt-2">
+            <div className="w-9 h-9 rounded-xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shadow-inner">
+              <Settings className="w-5 h-5" />
             </div>
+            <div>
+              <h1 className="text-base font-bold text-white tracking-tight">
+                {t('settings_title', currentLang)}
+              </h1>
+              <p className="text-[11px] text-slate-400 truncate">Berry AI Studio</p>
+            </div>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-8">
-              {[
-                {
-                  id: 'launcher' as DefaultLandingView,
-                  title: 'Launcher Hub (Recommended)',
-                  desc: 'Multi-workspace dashboard with engine status, fast launching, and auto-detection.',
-                },
-                {
-                  id: 'canvas' as DefaultLandingView,
-                  title: 'Infinite Canvas',
-                  desc: 'Jump straight into the creative multimodal canvas workspace on launch.',
-                },
-              ].map((opt) => (
-                <div
-                  key={opt.id}
-                  onClick={() => setDefaultLandingView(opt.id)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                    defaultLandingView === opt.id
-                      ? 'bg-indigo-600/15 border-indigo-500/50 shadow-sm shadow-indigo-500/10'
-                      : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
+          {/* Module Nav Items */}
+          <nav className="space-y-1">
+            {sections.map((sec) => {
+              const Icon = sec.icon;
+              const isActive = activeSection === sec.id;
+              return (
+                <button
+                  key={sec.id}
+                  onClick={() => setActiveSection(sec.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20 font-semibold'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-slate-200">{opt.title}</span>
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        defaultLandingView === opt.id ? 'bg-indigo-400' : 'bg-slate-700'
-                      }`}
-                    />
+                  <div className="flex items-center space-x-2.5">
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{sec.label}</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">{opt.desc}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Engine Lifecycle & Exit Confirmation Policy */}
-          <section className="p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08]">
-            <div className="flex items-start space-x-3 mb-4">
-              <Power className="w-5 h-5 text-rose-400 mt-0.5" />
-              <div>
-                <h2 className="text-sm font-semibold text-slate-100">Application Exit & Engine Policy</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Control how background engines (ComfyUI / SD WebUI) behave when closing the window.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pl-8">
-              {[
-                {
-                  id: 'prompt' as ExitPolicy,
-                  title: 'Always Ask (Default)',
-                  desc: 'Show a confirmation dialog if managed engines are actively running.',
-                },
-                {
-                  id: 'close_all' as ExitPolicy,
-                  title: 'Close All Engines',
-                  desc: 'Automatically shut down all background inference engines on window close.',
-                },
-                {
-                  id: 'keep_running' as ExitPolicy,
-                  title: 'Keep Running',
-                  desc: 'Close the client window while leaving local background engines running.',
-                },
-              ].map((opt) => (
-                <div
-                  key={opt.id}
-                  onClick={() => setExitPolicy(opt.id)}
-                  className={`p-3.5 rounded-xl border cursor-pointer transition-all ${
-                    exitPolicy === opt.id
-                      ? 'bg-rose-600/15 border-rose-500/50 shadow-sm shadow-rose-500/10'
-                      : 'bg-slate-950/40 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-semibold text-slate-200">{opt.title}</span>
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        exitPolicy === opt.id ? 'bg-rose-400' : 'bg-slate-700'
-                      }`}
-                    />
-                  </div>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">{opt.desc}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Cloud & BYOK Settings */}
-          <section className="p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-3">
-                <Globe className="w-5 h-5 text-indigo-400 mt-0.5" />
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-100">Cloud API & BYOK Providers</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Configure API keys for Fal.ai, SiliconFlow, or OpenAI to generate without local GPU requirements.
-                  </p>
-                </div>
-              </div>
-              {onOpenCloudSettings && (
-                <button
-                  onClick={onOpenCloudSettings}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 rounded-lg border border-slate-700 transition-colors"
-                >
-                  Configure Keys
+                  <ChevronRight
+                    className={`w-3.5 h-3.5 transition-transform ${
+                      isActive ? 'text-white/80 translate-x-0.5' : 'text-slate-600'
+                    }`}
+                  />
                 </button>
-              )}
-            </div>
-          </section>
-
-          {/* Environment & Model Manager */}
-          <section className="p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08]">
-            <div className="flex items-center justify-between">
-              <div className="flex items-start space-x-3">
-                <Cpu className="w-5 h-5 text-indigo-400 mt-0.5" />
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-100">Local Engines & Model Catalog</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Manage ComfyUI and WebUI installation paths, scan model directories, and inspect hardware.
-                  </p>
-                </div>
-              </div>
-              {onOpenEnvironmentManager && (
-                <button
-                  onClick={onOpenEnvironmentManager}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-200 rounded-lg border border-slate-700 transition-colors"
-                >
-                  Manage Environments
-                </button>
-              )}
-            </div>
-          </section>
-
-          {/* About & System Info */}
-          <section className="p-5 rounded-2xl bg-slate-900/40 border border-white/[0.06] text-xs text-slate-400 space-y-2">
-            <div className="flex items-center space-x-2 text-slate-300 font-semibold mb-1">
-              <Info className="w-4 h-4 text-indigo-400" />
-              <span>Berry AI Studio v0.1.0</span>
-            </div>
-            <p>Unified multimodal creation workspace powered by FastAPI, React 18, and Tauri v2.</p>
-            <p className="font-mono text-[11px] text-slate-500">Zero Host Pollution · 5-Type Port Contract · API-First Architecture</p>
-          </section>
+              );
+            })}
+          </nav>
         </div>
-      </div>
+
+        {/* Footer info in sidebar */}
+        <div className="px-2 py-3 border-t border-white/[0.06] text-[11px] text-slate-500">
+          <span>v0.1.0 · Multi-Platform</span>
+        </div>
+      </aside>
+
+      {/* Main Settings Content Area */}
+      <main className="flex-1 overflow-y-auto p-8 lg:p-10">
+        <div className="max-w-3xl mx-auto space-y-6">
+          {/* Section: General & Language */}
+          {activeSection === 'general' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">{t('lang_heading', currentLang)}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('lang_desc', currentLang)}</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {LANGUAGE_OPTIONS.map((opt) => {
+                  const isSelected = language === opt.id;
+                  return (
+                    <div
+                      key={opt.id}
+                      onClick={() => setLanguage(opt.id as LanguageSetting)}
+                      className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between min-h-[76px] ${
+                        isSelected
+                          ? 'bg-indigo-600/15 border-indigo-500/50 shadow-sm shadow-indigo-500/10'
+                          : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-slate-200">
+                          {opt.nativeLabel}
+                        </span>
+                        {isSelected && <Check className="w-4 h-4 text-indigo-400 shrink-0" />}
+                      </div>
+                      <span className="text-[11px] text-slate-400">{opt.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {language === 'system' && (
+                <div className="p-3 rounded-xl bg-slate-900/40 border border-white/[0.06] text-xs text-slate-400 flex items-center justify-between">
+                  <span>{t('lang_system_detected', currentLang)}:</span>
+                  <span className="font-mono text-indigo-300 uppercase font-semibold">
+                    {currentLang}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Section: Startup & Landing */}
+          {activeSection === 'startup' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">{t('startup_heading', currentLang)}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('startup_desc', currentLang)}</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  {
+                    id: 'launcher' as DefaultLandingView,
+                    title: t('startup_launcher', currentLang),
+                    desc: t('startup_launcher_desc', currentLang),
+                  },
+                  {
+                    id: 'canvas' as DefaultLandingView,
+                    title: t('startup_canvas', currentLang),
+                    desc: t('startup_canvas_desc', currentLang),
+                  },
+                ].map((opt) => (
+                  <div
+                    key={opt.id}
+                    onClick={() => setDefaultLandingView(opt.id)}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                      defaultLandingView === opt.id
+                        ? 'bg-indigo-600/15 border-indigo-500/50 shadow-sm shadow-indigo-500/10'
+                        : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-semibold text-slate-200">{opt.title}</span>
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          defaultLandingView === opt.id ? 'bg-indigo-400' : 'bg-slate-700'
+                        }`}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">{opt.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section: Exit Policy */}
+          {activeSection === 'exit' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">{t('exit_heading', currentLang)}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('exit_desc', currentLang)}</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    id: 'prompt' as ExitPolicy,
+                    title: t('exit_prompt', currentLang),
+                    desc: t('exit_prompt_desc', currentLang),
+                  },
+                  {
+                    id: 'close_all' as ExitPolicy,
+                    title: t('exit_close_all', currentLang),
+                    desc: t('exit_close_all_desc', currentLang),
+                  },
+                  {
+                    id: 'keep_running' as ExitPolicy,
+                    title: t('exit_keep_running', currentLang),
+                    desc: t('exit_keep_running_desc', currentLang),
+                  },
+                ].map((opt) => (
+                  <div
+                    key={opt.id}
+                    onClick={() => setExitPolicy(opt.id)}
+                    className={`p-4 rounded-2xl border cursor-pointer transition-all ${
+                      exitPolicy === opt.id
+                        ? 'bg-rose-600/15 border-rose-500/50 shadow-sm shadow-rose-500/10'
+                        : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-semibold text-slate-200">{opt.title}</span>
+                      <span
+                        className={`w-2 h-2 rounded-full ${
+                          exitPolicy === opt.id ? 'bg-rose-400' : 'bg-slate-700'
+                        }`}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">{opt.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section: Cloud BYOK */}
+          {activeSection === 'cloud' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">{t('cloud_heading', currentLang)}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('cloud_desc', currentLang)}</p>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-200">
+                    OpenAI · Fal.ai · SiliconFlow
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Store API tokens securely on this device without leaking to cloud logs.
+                  </p>
+                </div>
+                {onOpenCloudSettings && (
+                  <button
+                    onClick={onOpenCloudSettings}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white rounded-xl shadow-md shadow-indigo-600/20 transition-all shrink-0 ml-4"
+                  >
+                    {t('cloud_btn', currentLang)}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Section: Engines & Hardware */}
+          {activeSection === 'engines' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">{t('engines_heading', currentLang)}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('engines_desc', currentLang)}</p>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-semibold text-slate-200">
+                    ComfyUI & Stable Diffusion WebUI
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Manage isolated engine virtualenvs, model search roots, and GPU device assignments.
+                  </p>
+                </div>
+                {onOpenEnvironmentManager && (
+                  <button
+                    onClick={onOpenEnvironmentManager}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white rounded-xl shadow-md shadow-indigo-600/20 transition-all shrink-0 ml-4"
+                  >
+                    {t('engines_btn', currentLang)}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Section: About */}
+          {activeSection === 'about' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white">{t('about_heading', currentLang)}</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{t('about_desc', currentLang)}</p>
+              </div>
+
+              <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] space-y-3">
+                <div className="flex items-center space-x-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
+                  <Info className="w-4 h-4" />
+                  <span>Berry AI Studio v0.1.0</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  A high-performance creative studio for generative AI, blending cloud flexibility with optional zero-host-pollution local execution.
+                </p>
+                <div className="pt-2 border-t border-white/[0.06]">
+                  <p className="font-mono text-[11px] text-slate-400">
+                    {t('about_manifesto', currentLang)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 };
