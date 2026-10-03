@@ -42,7 +42,7 @@ from app.schemas.workflow_analysis import (
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.engine_manager import engine_manager
-from app.runtime.hardware import check_hardware_readiness
+from app.runtime.hardware import check_hardware_readiness, get_gpu_stats
 from app.runtime.installer import installer, mirror_manager
 from app.runtime.credentials import credentials_manager
 from app.storage.model_store import model_store
@@ -75,7 +75,7 @@ from app.schemas.engine import (
     UpdateMirrorConfigRequest,
     EngineLogResponse,
 )
-from app.schemas.hardware import HardwareReadiness
+from app.schemas.hardware import HardwareReadiness, GpuStatsResponse
 from app.schemas.model import ModelRecord, ModelRoot, ModelRootCreate
 from app.schemas.events import (
     GraphFinishedEvent,
@@ -456,6 +456,12 @@ async def trigger_app_update() -> dict[str, Any]:
 async def get_hardware_readiness() -> HardwareReadiness:
     """Diagnose GPU VRAM, drivers, and filesystem storage readiness for local inference."""
     return await check_hardware_readiness()
+
+
+@app.get("/api/v1/hardware/gpu-stats", response_model=GpuStatsResponse)
+async def get_hardware_gpu_stats() -> GpuStatsResponse:
+    """Retrieve real-time GPU utilization, VRAM usage, and active compute processes (LH-M4)."""
+    return get_gpu_stats()
 
 
 @app.get("/api/v1/engines", response_model=List[EngineConnection])

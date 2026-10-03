@@ -38,3 +38,23 @@ class HardwareReadiness(BaseModel):
     summary_message: str
     guidance_notes: List[str] = Field(default_factory=list)
     status_classification: str = "verified"  # verified, experimental, cloud_recommended
+
+
+class GpuProcessInfo(BaseModel):
+    pid: int
+    process_name: str
+    vram_used_mb: int
+
+
+class GpuStatsResponse(BaseModel):
+    has_gpu: bool
+    vendor: str = "none"  # nvidia, amd, intel, apple_silicon, none
+    name: str = "No Dedicated GPU"
+    driver_version: Optional[str] = None
+    temperature_c: Optional[int] = None
+    utilization_pct: Optional[int] = None
+    vram_total_mb: int = 0
+    vram_used_mb: int = 0
+    vram_free_mb: int = 0
+    processes: List[GpuProcessInfo] = Field(default_factory=list)
+
