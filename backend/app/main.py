@@ -43,7 +43,7 @@ from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.engine_manager import engine_manager
 from app.runtime.hardware import check_hardware_readiness
-from app.runtime.installer import installer
+from app.runtime.installer import installer, mirror_manager
 from app.runtime.credentials import credentials_manager
 from app.storage.model_store import model_store
 from app.schemas.creative import CreativeActionRequest, CreativeActionResult
@@ -67,6 +67,13 @@ from app.schemas.engine import (
     ShutdownResponse,
     EngineInstanceInfo,
     EngineInstancesResponse,
+    DetectedEngineInfo,
+    EngineDetectResponse,
+    EngineBindRequest,
+    MirrorPresetInfo,
+    MirrorConfigResponse,
+    UpdateMirrorConfigRequest,
+    EngineLogResponse,
 )
 from app.schemas.hardware import HardwareReadiness
 from app.schemas.model import ModelRecord, ModelRoot, ModelRootCreate
@@ -462,6 +469,65 @@ async def list_engine_instances() -> EngineInstancesResponse:
     """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
     instances = engine_manager.get_all_instances()
     return EngineInstancesResponse(instances=instances)
+
+
+@app.get("/api/v1/engines/detect", response_model=EngineDetectResponse)
+async def detect_local_engines(paths: Optional[str] = None) -> EngineDetectResponse:
+    """Scan candidate directories for existing ComfyUI or SD WebUI installations."""
+    scan_paths = [p.strip() for p in paths.split(",")] if paths else None
+    detected = engine_manager.detect_engines(scan_paths)
+    return EngineDetectResponse(detected=detected)
+
+
+@app.post("/api/v1/engines/bind", response_model=EngineConnection, status_code=201)
+async def bind_external_engine(request: EngineBindRequest) -> EngineConnection:
+    """Bind an external engine directory into the catalog without process mutation."""
+    try:
+        return engine_manager.bind_external_engine(
+            engine_type_str=request.engine_type,
+            name=request.name,
+            path_str=request.path,
+            port=request.port,
+            extra_args=request.extra_args,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/v1/engines/unbind/{instance_id}")
+async def unbind_external_engine(instance_id: str) -> dict[str, Any]:
+    """Unbind an external engine from the catalog. Non-destructive: preserves all files."""
+    success = engine_manager.unbind_external_engine(instance_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Engine instance '{instance_id}' not found")
+    return {"success": True, "message": f"Engine instance '{instance_id}' unbound successfully"}
+
+
+@app.get("/api/v1/runtime/{instance_id}/logs", response_model=EngineLogResponse)
+async def get_engine_logs(instance_id: str, lines: int = 100) -> EngineLogResponse:
+    """Fetch recent diagnostic logs for an engine instance."""
+    logs = engine_manager.get_logs(instance_id, lines)
+    return EngineLogResponse(instance_id=instance_id, total_lines=len(logs), logs=logs)
+
+
+@app.get("/api/v1/installer/mirrors", response_model=MirrorConfigResponse)
+async def get_installer_mirrors() -> MirrorConfigResponse:
+    """Get active network download mirror configuration and available presets."""
+    cfg = mirror_manager.get_config()
+    return MirrorConfigResponse.model_validate(cfg)
+
+
+@app.put("/api/v1/installer/mirrors", response_model=MirrorConfigResponse)
+async def update_installer_mirrors(request: UpdateMirrorConfigRequest) -> MirrorConfigResponse:
+    """Update active mirror preset or custom mirror URLs."""
+    cfg = mirror_manager.update_config(
+        active_preset=request.active_preset,
+        custom_git_mirror=request.custom_git_mirror,
+        custom_pypi_mirror=request.custom_pypi_mirror,
+        custom_hf_mirror=request.custom_hf_mirror,
+    )
+    return MirrorConfigResponse.model_validate(cfg)
+
 
 
 

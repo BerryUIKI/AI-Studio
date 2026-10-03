@@ -12,10 +12,14 @@ import { EnvironmentManagerModal } from './components/manager/EnvironmentManager
 import { GlobalNavRail } from './components/navigation/GlobalNavRail';
 import { ViewContainer } from './components/navigation/ViewContainer';
 import { LauncherHub } from './components/launcher/LauncherHub';
+import { AddEngineModal } from './components/launcher/AddEngineModal';
+import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
+import { EngineConfigModal } from './components/launcher/EngineConfigModal';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
 import { SettingsView } from './components/settings/SettingsView';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
+import { useEngineStore, type EngineInstance } from './stores/useEngineStore';
 
 export default function App() {
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
@@ -26,6 +30,26 @@ export default function App() {
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
   const [showAgentPanel, setShowAgentPanel] = useState<boolean>(false);
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
+  const [showAddEngineModal, setShowAddEngineModal] = useState<boolean>(false);
+  const [showDeploymentDrawer, setShowDeploymentDrawer] = useState<boolean>(false);
+  const [deploymentEngineType, setDeploymentEngineType] = useState<'comfyui' | 'webui'>('comfyui');
+  const [selectedConfigInstance, setSelectedConfigInstance] = useState<EngineInstance | null>(null);
+
+  const { fetchInstances } = useEngineStore();
+
+  const handleStartDeployment = (type: 'comfyui' | 'webui') => {
+    setDeploymentEngineType(type);
+    setShowDeploymentDrawer(true);
+  };
+
+  const handleUninstallEngine = async (instance: EngineInstance) => {
+    if (!instance.is_managed) {
+      await fetch(`/api/v1/engines/unbind/${instance.id}`, { method: 'DELETE' });
+    } else {
+      await fetch(`/api/v1/runtime/${instance.type}/stop`, { method: 'POST' }).catch(() => {});
+    }
+    fetchInstances();
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { nodes, clearCanvas, runWorkflow, isExecuting } = useCanvasStore();
@@ -135,7 +159,9 @@ export default function App() {
                 webuiRunning={false}
                 onStartComfy={toggleRuntime}
                 onStartWebui={toggleRuntime}
-                onOpenAddEngine={() => setShowManagerModal(true)}
+                onOpenAddEngine={() => setShowAddEngineModal(true)}
+                onConfigureEngine={(inst) => setSelectedConfigInstance(inst)}
+                onUninstallEngine={handleUninstallEngine}
               />
             ),
             canvas: (
@@ -189,6 +215,21 @@ export default function App() {
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
       <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
       <AgentPanel isOpen={showAgentPanel} onClose={() => setShowAgentPanel(false)} />
+      <AddEngineModal
+        isOpen={showAddEngineModal}
+        onClose={() => setShowAddEngineModal(false)}
+        onStartDeployment={handleStartDeployment}
+      />
+      <DeploymentDrawer
+        isOpen={showDeploymentDrawer}
+        engineType={deploymentEngineType}
+        onClose={() => setShowDeploymentDrawer(false)}
+      />
+      <EngineConfigModal
+        isOpen={!!selectedConfigInstance}
+        instance={selectedConfigInstance}
+        onClose={() => setSelectedConfigInstance(null)}
+      />
     </div>
   );
 }
