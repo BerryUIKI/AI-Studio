@@ -14,6 +14,7 @@ import {
   Square,
   Copy,
   X,
+  PanelRight,
 } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -206,20 +207,6 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           <span>Environment</span>
         </button>
 
-        {/* Conversational Agent Assistant Button */}
-        <button
-          onClick={onToggleAgent}
-          title="Conversational AI Assistant (Natural Language Workflows & Human-in-the-Loop)"
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border transition shadow-sm ${
-            showAgentPanel
-              ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-indigo-500/10'
-              : 'bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 border-slate-700/60'
-          }`}
-        >
-          <Sparkles className="w-3 h-3 text-amber-400" />
-          <span>Agent</span>
-        </button>
-
         {/* Toggle Node Palette for Power Users */}
         <button
           onClick={onToggleNodePalette}
@@ -307,6 +294,23 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 
           {/* Real-Time GPU Status & Telemetry (LH-M4) */}
           <GpuStatusIndicator />
+        </div>
+
+        {/* AI Agent Sidebar Toggle Button (Persistent Right Sidebar Anchor) */}
+        <div className="flex items-center ml-1 border-l border-white/[0.06] pl-1.5" data-no-drag>
+          <button
+            onClick={onToggleAgent}
+            title="Toggle AI Creative Agent (Natural language workflows & Comfy assistant)"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 shadow-sm ${
+              showAgentPanel
+                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-indigo-500/20 ring-1 ring-indigo-500/30'
+                : 'bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 hover:text-white border-slate-700/60'
+            }`}
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${showAgentPanel ? 'text-amber-400 animate-spin-slow' : 'text-amber-400'}`} />
+            <span>Agent</span>
+            <PanelRight className={`w-3 h-3 ml-0.5 transition-transform duration-150 ${showAgentPanel ? 'text-indigo-300 rotate-180' : 'text-slate-400'}`} />
+          </button>
         </div>
 
         {/* Windows / Desktop Native Window Control Buttons */}
