@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type ViewType = 'launcher' | 'canvas' | 'comfyui' | 'webui' | 'agents' | 'settings';
+export type ViewType = 'launcher' | 'canvas' | 'models' | 'comfyui' | 'webui' | 'agents' | 'settings';
 
 interface NavigationState {
   activeView: ViewType;

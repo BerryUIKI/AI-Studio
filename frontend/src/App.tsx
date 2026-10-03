@@ -18,6 +18,7 @@ import { EngineConfigModal } from './components/launcher/EngineConfigModal';
 import { EngineLogViewer } from './components/launcher/EngineLogViewer';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
+import { ModelHubView } from './components/hub/ModelHubView';
 import { SettingsView } from './components/settings/SettingsView';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
@@ -280,6 +281,7 @@ export default function App() {
                 </main>
               </div>
             ),
+            models: <ModelHubView />,
             comfyui: (
               <EmbeddedEngineView
                 engineType="comfyui"
