@@ -124,3 +124,23 @@ class ShutdownResponse(BaseModel):
     active_tasks_cancelled: int
     managed_engines_stopped: List[str]
 
+
+class EngineInstanceInfo(BaseModel):
+    id: str
+    type: str  # canvas, comfyui, webui, agents, custom
+    name: str
+    version: Optional[str] = None
+    is_managed: bool = True
+    is_builtin: bool = False
+    install_path: Optional[str] = None
+    status: str  # ready, running, stopped, not_installed, error, updating
+    endpoint: Optional[str] = None
+    pid: Optional[int] = None
+    vram_used_mb: Optional[int] = None
+    capabilities: List[str] = Field(default_factory=list)
+
+
+class EngineInstancesResponse(BaseModel):
+    instances: List[EngineInstanceInfo]
+
+

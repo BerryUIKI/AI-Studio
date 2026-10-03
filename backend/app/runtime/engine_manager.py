@@ -163,6 +163,102 @@ class EngineManager:
             return None
         return await self.test_engine_connection(conn)
 
+    def get_all_instances(self) -> List[Any]:
+        """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
+        from app.schemas.engine import EngineInstanceInfo
+
+        instances: List[EngineInstanceInfo] = [
+            EngineInstanceInfo(
+                id="builtin-canvas",
+                type="canvas",
+                name="Infinite Canvas",
+                version="v0.1.0",
+                is_managed=True,
+                is_builtin=True,
+                install_path=None,
+                status="ready",
+                endpoint=None,
+                capabilities=["txt2img", "img2img", "inpaint", "upscale", "video"],
+            )
+        ]
+
+        # ComfyUI
+        comfy_installed = comfy_supervisor.is_installed()
+        comfy_running = comfy_supervisor.is_running()
+        comfy_status = "running" if comfy_running else ("stopped" if comfy_installed else "not_installed")
+        instances.append(
+            EngineInstanceInfo(
+                id="comfyui-managed",
+                type="comfyui",
+                name="ComfyUI Engine",
+                version="v0.3.8",
+                is_managed=True,
+                is_builtin=False,
+                install_path=str(getattr(comfy_supervisor, "engine_dir", "")),
+                status=comfy_status,
+                endpoint=f"http://127.0.0.1:{comfy_supervisor.port}",
+                pid=getattr(getattr(comfy_supervisor, "_process", None), "pid", None) if comfy_running else None,
+                capabilities=["txt2img", "img2img", "workflows"],
+            )
+        )
+
+        # WebUI
+        webui_installed = webui_supervisor.is_installed()
+        webui_running = webui_supervisor.is_running()
+        webui_status = "running" if webui_running else ("stopped" if webui_installed else "not_installed")
+        instances.append(
+            EngineInstanceInfo(
+                id="webui-managed",
+                type="webui",
+                name="SD WebUI",
+                version="v1.9.3",
+                is_managed=True,
+                is_builtin=False,
+                install_path=str(getattr(webui_supervisor, "engine_dir", "")),
+                status=webui_status,
+                endpoint=f"http://127.0.0.1:{webui_supervisor.port}",
+                pid=getattr(getattr(webui_supervisor, "_process", None), "pid", None) if webui_running else None,
+                capabilities=["txt2img", "img2img", "inpaint"],
+            )
+        )
+
+        # External engines
+        for conn_id, conn in self._connections.items():
+            if conn.ownership == EngineOwnership.EXTERNAL:
+                ext_status = "running" if conn.status == EngineStatus.READY else "stopped"
+                instances.append(
+                    EngineInstanceInfo(
+                        id=conn.id,
+                        type=conn.engine_type.value,
+                        name=conn.name,
+                        version=conn.version or "External",
+                        is_managed=False,
+                        is_builtin=False,
+                        install_path=conn.models_path,
+                        status=ext_status,
+                        endpoint=conn.endpoint_url,
+                        capabilities=conn.capabilities,
+                    )
+                )
+
+        # Agents Studio
+        instances.append(
+            EngineInstanceInfo(
+                id="builtin-agents",
+                type="agents",
+                name="AI Agents Studio",
+                version="v0.1.0",
+                is_managed=True,
+                is_builtin=True,
+                install_path=None,
+                status="ready",
+                endpoint=None,
+                capabilities=["workflows", "repair", "conversational"],
+            )
+        )
+
+        return instances
+
 
 # Global engine manager singleton
 engine_manager = EngineManager()
