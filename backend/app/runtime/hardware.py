@@ -361,3 +361,117 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
         guidance_notes=guidance,
         status_classification=status if has_discrete else "cloud_recommended",
     )
+
+
+def get_gpu_stats() -> Any:
+    """Retrieve real-time GPU utilization, VRAM usage, and active compute processes (LH-M4)."""
+    from app.schemas.hardware import GpuProcessInfo, GpuStatsResponse
+    from app.runtime.supervisor import supervisor as comfy_supervisor
+    from app.runtime.webui_supervisor import webui_supervisor
+
+    fallback = GpuStatsResponse(
+        has_gpu=False,
+        vendor="none",
+        name="No Dedicated GPU",
+        driver_version=None,
+        temperature_c=None,
+        utilization_pct=None,
+        vram_total_mb=0,
+        vram_used_mb=0,
+        vram_free_mb=0,
+        processes=[],
+    )
+
+    try:
+        res = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,temperature.gpu,utilization.gpu,memory.total,memory.used,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+
+        if res.returncode != 0 or not res.stdout.strip():
+            return fallback
+
+        line = res.stdout.strip().splitlines()[0]
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 7:
+            return fallback
+
+        name = parts[0]
+        driver_version = parts[1]
+        temperature_c = int(parts[2]) if parts[2].isdigit() else None
+        utilization_pct = int(parts[3]) if parts[3].isdigit() else None
+        vram_total_mb = int(float(parts[4]))
+        vram_used_mb = int(float(parts[5]))
+        vram_free_mb = int(float(parts[6]))
+
+        processes: List[GpuProcessInfo] = []
+        try:
+            proc_res = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-compute-apps=pid,used_memory",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            if proc_res.returncode == 0 and proc_res.stdout.strip():
+                comfy_pid = getattr(getattr(comfy_supervisor, "_process", None), "pid", None)
+                webui_pid = getattr(getattr(webui_supervisor, "_process", None), "pid", None)
+                current_pid = os.getpid()
+
+                for proc_line in proc_res.stdout.strip().splitlines():
+                    p_parts = [p.strip() for p in proc_line.split(",")]
+                    if len(p_parts) >= 2:
+                        try:
+                            p_pid = int(p_parts[0])
+                            p_vram = int(float(p_parts[1]))
+
+                            if p_pid == current_pid:
+                                p_name = "Berry Backend"
+                            elif comfy_pid and p_pid == comfy_pid:
+                                p_name = "ComfyUI"
+                            elif webui_pid and p_pid == webui_pid:
+                                p_name = "SD WebUI"
+                            else:
+                                p_name = f"Process ({p_pid})"
+
+                            processes.append(
+                                GpuProcessInfo(
+                                    pid=p_pid,
+                                    process_name=p_name,
+                                    vram_used_mb=p_vram,
+                                )
+                            )
+                        except (ValueError, IndexError):
+                            continue
+        except Exception:
+            pass
+
+        return GpuStatsResponse(
+            has_gpu=True,
+            vendor="nvidia",
+            name=name,
+            driver_version=driver_version,
+            temperature_c=temperature_c,
+            utilization_pct=utilization_pct,
+            vram_total_mb=vram_total_mb,
+            vram_used_mb=vram_used_mb,
+            vram_free_mb=vram_free_mb,
+            processes=processes,
+        )
+
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired, Exception):
+        return fallback
+

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { GpuStatusIndicator } from './GpuStatusIndicator';
 
 export interface ComfyStatus {
   online: boolean;
@@ -297,6 +298,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
               </button>
             )}
           </div>
+
+          {/* Real-Time GPU Status & Telemetry (LH-M4) */}
+          <GpuStatusIndicator />
         </div>
 
         {/* Windows / Desktop Native Window Control Buttons */}
