@@ -81,6 +81,7 @@ MH-M1 (Navigation Entry & Model Hub Shell)
 ---
 
 ## MH-M5 — Download Drawer, Floating Widget & E2E Verification
+**Status**: ✅ Completed (Implemented and Verified)
 **Goal**: Deliver the user-facing download management UI and complete end-to-end integration.
 
 ### Deliverables
