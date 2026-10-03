@@ -272,6 +272,7 @@ export default function App() {
                 onConfigureEngine={(inst) => setSelectedConfigInstance(inst)}
                 onViewLogs={(inst) => setSelectedLogInstance(inst)}
                 onUninstallEngine={handleUninstallEngine}
+                onOpenAgent={() => setShowAgentPanel(true)}
               />
             ),
             canvas: (
@@ -304,11 +305,6 @@ export default function App() {
                 onOpenDirectory={() => setShowManagerModal(true)}
               />
             ),
-            agents: (
-              <div className="w-full h-full flex flex-col bg-slate-950 p-6 overflow-hidden">
-                <AgentPanel isOpen={true} onClose={() => {}} inline={true} />
-              </div>
-            ),
             settings: (
               <SettingsView
                 onOpenCloudSettings={() => setShowCloudModal(true)}
@@ -317,6 +313,17 @@ export default function App() {
             ),
           }}
         </ViewContainer>
+
+        {/* Persistent Collapsible Right Sidebar AI Agent */}
+        {showAgentPanel && (
+          <aside className="w-96 flex-shrink-0 h-full border-l border-slate-800 bg-slate-900 shadow-2xl z-30 transition-all duration-200">
+            <AgentPanel
+              isOpen={showAgentPanel}
+              onClose={() => setShowAgentPanel(false)}
+              inline={true}
+            />
+          </aside>
+        )}
       </div>
 
       {/* Contextual Action Modals */}
@@ -325,7 +332,6 @@ export default function App() {
       <VideoModal />
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
       <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
-      <AgentPanel isOpen={showAgentPanel} onClose={() => setShowAgentPanel(false)} />
       <AddEngineModal
         isOpen={showAddEngineModal}
         onClose={() => setShowAddEngineModal(false)}

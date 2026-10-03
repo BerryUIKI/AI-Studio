@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronRight,
   AlertTriangle,
+  PanelRightClose,
 } from 'lucide-react';
 import { AgentChatMessage, AgentProposal, CreativeActionResult, ImageCardData } from '../../types/creative';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -226,12 +227,22 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
             </div>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onClose}
+            title="Collapse Sidebar"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onClose}
+            title="Close Assistant"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Selected canvas context indicator */}

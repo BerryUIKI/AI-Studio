@@ -25,6 +25,7 @@ interface InstanceCardProps {
   onViewLogs?: (instance: EngineInstance) => void;
   onOpenDirectory?: (instance: EngineInstance) => void;
   onUninstall?: (instance: EngineInstance) => void;
+  onOpenAgent?: () => void;
 }
 
 export const InstanceCard: React.FC<InstanceCardProps> = ({
@@ -35,6 +36,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   onViewLogs,
   onOpenDirectory,
   onUninstall,
+  onOpenAgent,
 }) => {
   const { setActiveView } = useNavigationStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -81,7 +83,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
 
     if (instance.is_builtin) {
       if (instance.type === 'canvas') setActiveView('canvas');
-      else if (instance.type === 'agents') setActiveView('agents');
+      else if (instance.type === 'agents') onOpenAgent?.();
       return;
     }
 
@@ -271,7 +273,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
           <button
             onClick={() => {
               if (instance.type === 'canvas') setActiveView('canvas');
-              else if (instance.type === 'agents') setActiveView('agents');
+              else if (instance.type === 'agents') onOpenAgent?.();
             }}
             className="text-xs font-semibold text-indigo-400 group-hover:text-indigo-300 flex items-center space-x-1"
           >
