@@ -1,10 +1,36 @@
-import React, { useState } from 'react';
-import { Package, Search, Filter, ShieldCheck, DownloadCloud, Sparkles } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { Package, Search, Filter, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
+import { useModelHubStore, HubModel } from '../../stores/useModelHubStore';
+import { HubModelCard } from './HubModelCard';
 
-export const ModelHubView: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [onlyCompatible, setOnlyCompatible] = useState(false);
+interface ModelHubViewProps {
+  onInstallModel?: (model: HubModel) => void;
+  onUseCloudModel?: (model: HubModel) => void;
+}
+
+export const ModelHubView: React.FC<ModelHubViewProps> = ({
+  onInstallModel,
+  onUseCloudModel,
+}) => {
+  const {
+    models,
+    evaluations,
+    hardwareSummary,
+    selectedCategory,
+    selectedArchitecture,
+    searchQuery,
+    onlyCompatible,
+    isLoading,
+    error,
+    setCategory,
+    setSearchQuery,
+    setOnlyCompatible,
+    fetchCatalog,
+  } = useModelHubStore();
+
+  useEffect(() => {
+    fetchCatalog();
+  }, [fetchCatalog, selectedCategory, selectedArchitecture]);
 
   const categories = [
     { id: 'all', label: 'All Items' },
@@ -14,6 +40,46 @@ export const ModelHubView: React.FC = () => {
     { id: 'upscaler', label: 'Upscalers' },
     { id: 'vae', label: 'VAEs' },
   ];
+
+  // Client-side filtering for search query & compatible only
+  const filteredModels = models.filter((model) => {
+    // Keyword match
+    const q = searchQuery.toLowerCase().trim();
+    const matchesQuery =
+      !q ||
+      model.name.toLowerCase().includes(q) ||
+      model.architecture.toLowerCase().includes(q) ||
+      model.author.toLowerCase().includes(q) ||
+      (model.tags && model.tags.some((t) => t.toLowerCase().includes(q)));
+
+    if (!matchesQuery) return false;
+
+    // Compatible only filter
+    if (onlyCompatible) {
+      const evaluation = evaluations[model.id];
+      if (evaluation && evaluation.tier === 'unsupported') {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  const handleInstall = (model: HubModel) => {
+    if (onInstallModel) {
+      onInstallModel(model);
+    } else {
+      console.log('Initiate model installation for:', model.id);
+    }
+  };
+
+  const handleUseCloud = (model: HubModel) => {
+    if (onUseCloudModel) {
+      onUseCloudModel(model);
+    } else {
+      console.log('Switch to cloud mode for model:', model.id);
+    }
+  };
 
   return (
     <div className="flex flex-col w-full h-full overflow-y-auto bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 p-8 select-none">
@@ -37,12 +103,23 @@ export const ModelHubView: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Hardware & Mirror Status Badge */}
+          {/* Quick Hardware & Diagnostics Summary Badge */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-800 text-xs text-slate-300">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>4-Tier Memory Diagnostics Active</span>
+              <span>
+                {hardwareSummary
+                  ? `${hardwareSummary.gpu_name} (${(hardwareSummary.vram_total_mb / 1024).toFixed(0)}G)`
+                  : 'Hardware Diagnostics Active'}
+              </span>
             </div>
+            <button
+              onClick={() => fetchCatalog()}
+              title="Refresh catalog and re-evaluate hardware"
+              className="p-2 rounded-xl bg-slate-900/60 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
           </div>
         </div>
 
@@ -53,7 +130,7 @@ export const ModelHubView: React.FC = () => {
             {categories.map((cat) => (
               <button
                 key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => setCategory(cat.id)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
                   selectedCategory === cat.id
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
@@ -93,23 +170,37 @@ export const ModelHubView: React.FC = () => {
           </div>
         </div>
 
-        {/* Placeholder Content Area (Shell for MH-M2/M3 Model Cards) */}
-        <div className="p-12 rounded-3xl bg-slate-900/30 border border-white/[0.06] flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-4 shadow-lg shadow-indigo-600/5">
-            <DownloadCloud className="w-8 h-8" />
+        {/* Error banner if network/API failure */}
+        {error && (
+          <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{error}</span>
           </div>
-          <h3 className="text-base font-bold text-white mb-1.5">
-            Curated Model Catalog & Hardware Evaluator
-          </h3>
-          <p className="text-xs text-slate-400 max-w-md mb-6 leading-relaxed">
-            The Model Hub shell is ready. Connecting backend catalog registry, real-time 4-tier
-            VRAM/RAM memory diagnostics, and resumable download acceleration in upcoming milestones.
-          </p>
-          <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono">
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Milestone MH-M1 Initialized · Ready for Catalog Integration</span>
+        )}
+
+        {/* Responsive Model Cards Grid */}
+        {filteredModels.length === 0 ? (
+          <div className="p-12 rounded-3xl bg-slate-900/30 border border-white/[0.06] flex flex-col items-center justify-center text-center">
+            <Package className="w-12 h-12 text-slate-600 mb-3" />
+            <h3 className="text-sm font-bold text-slate-300 mb-1">No Matching Models Found</h3>
+            <p className="text-xs text-slate-500">
+              Try adjusting your search query, selecting &quot;All Items&quot;, or unchecking &quot;Compatible Only&quot;.
+            </p>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {filteredModels.map((model) => (
+              <HubModelCard
+                key={model.id}
+                model={model}
+                evaluation={evaluations[model.id]}
+                hardwareSummary={hardwareSummary}
+                onInstall={handleInstall}
+                onUseCloud={handleUseCloud}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
