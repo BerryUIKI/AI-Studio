@@ -16,6 +16,8 @@ interface AddEngineModalProps {
   isOpen: boolean;
   onClose: () => void;
   onStartDeployment?: (engineType: 'comfyui' | 'webui', mirrorPreset: string) => void;
+  initialTab?: 'detected' | 'browse' | 'install';
+  initialEngineType?: 'comfyui' | 'webui';
 }
 
 interface DetectedItem {
@@ -31,14 +33,16 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
   isOpen,
   onClose,
   onStartDeployment,
+  initialTab = 'detected',
+  initialEngineType = 'comfyui',
 }) => {
-  const [activeTab, setActiveTab] = useState<'detected' | 'browse' | 'install'>('detected');
+  const [activeTab, setActiveTab] = useState<'detected' | 'browse' | 'install'>(initialTab);
   const [detectedList, setDetectedList] = useState<DetectedItem[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
 
   // Manual browse form state
-  const [manualType, setManualType] = useState<'comfyui' | 'webui'>('comfyui');
+  const [manualType, setManualType] = useState<'comfyui' | 'webui'>(initialEngineType);
   const [manualName, setManualName] = useState('');
   const [manualPath, setManualPath] = useState('');
   const [manualPort, setManualPort] = useState<number>(8188);
@@ -46,7 +50,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
   const [manualError, setManualError] = useState<string | null>(null);
 
   // Managed install state
-  const [installEngineType, setInstallEngineType] = useState<'comfyui' | 'webui'>('comfyui');
+  const [installEngineType, setInstallEngineType] = useState<'comfyui' | 'webui'>(initialEngineType);
   const [selectedMirror, setSelectedMirror] = useState<string>('china_mainland');
 
   const { fetchInstances } = useEngineStore();
@@ -71,9 +75,12 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setActiveTab(initialTab);
+      setManualType(initialEngineType);
+      setInstallEngineType(initialEngineType);
       scanForEngines();
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab, initialEngineType]);
 
   if (!isOpen) return null;
 

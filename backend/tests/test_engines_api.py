@@ -47,3 +47,15 @@ def test_list_engine_instances_endpoint():
     assert agents["type"] == "agents"
     assert agents["is_builtin"] is True
     assert agents["status"] == "ready"
+
+
+def test_runtime_start_uninstalled_response():
+    """Verify runtime start endpoint returns structured code and error message when uninstalled."""
+    resp = client.post("/api/v1/runtime/start")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "success" in data
+    assert "message" in data
+    if not data["success"]:
+        assert data.get("code") in ["NOT_INSTALLED", "ENV_MISSING"]
+

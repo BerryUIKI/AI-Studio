@@ -56,15 +56,35 @@ describe('useEngineStore', () => {
   it('starts engine and updates status on success', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ status: 'started' }),
+      json: async () => ({ success: true, message: 'ComfyUI started', pid: 1234 }),
     });
 
     const store = useEngineStore.getState();
-    const success = await store.startEngine('comfyui-managed');
+    const result = await store.startEngine('comfyui-managed');
 
-    expect(success).toBe(true);
+    expect(result.success).toBe(true);
     const updated = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
     expect(updated?.status).toBe('running');
+    expect(updated?.pid).toBe(1234);
+  });
+
+  it('marks instance as not_installed when start returns NOT_INSTALLED', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        success: false,
+        code: 'NOT_INSTALLED',
+        message: 'ComfyUI is not installed in runtime directory. Run installer first.',
+      }),
+    });
+
+    const store = useEngineStore.getState();
+    const result = await store.startEngine('comfyui-managed');
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('NOT_INSTALLED');
+    const updated = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
+    expect(updated?.status).toBe('not_installed');
   });
 
   it('stops engine and updates status on success', async () => {

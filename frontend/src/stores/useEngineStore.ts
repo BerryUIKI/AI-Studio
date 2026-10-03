@@ -15,6 +15,13 @@ export interface EngineInstance {
   capabilities: string[];
 }
 
+export interface StartEngineResult {
+  success: boolean;
+  code?: 'NOT_INSTALLED' | 'ENV_MISSING' | 'ALREADY_RUNNING' | string;
+  message?: string;
+  pid?: number | null;
+}
+
 interface EngineState {
   instances: EngineInstance[];
   isLoading: boolean;
@@ -24,7 +31,7 @@ interface EngineState {
   setSearchQuery: (query: string) => void;
   setInstances: (instances: EngineInstance[]) => void;
   fetchInstances: () => Promise<void>;
-  startEngine: (instanceId: string) => Promise<boolean>;
+  startEngine: (instanceId: string) => Promise<StartEngineResult>;
   stopEngine: (instanceId: string) => Promise<boolean>;
 }
 
@@ -107,24 +114,42 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     }
   },
 
-  startEngine: async (instanceId: string) => {
+  startEngine: async (instanceId: string): Promise<StartEngineResult> => {
     const inst = get().instances.find((i) => i.id === instanceId);
-    if (!inst) return false;
+    if (!inst) return { success: false, message: 'Instance not found' };
 
     try {
       const endpoint = inst.type === 'webui' ? '/api/v1/runtime/webui/start' : '/api/v1/runtime/start';
       const res = await fetch(endpoint, { method: 'POST' });
       if (res.ok) {
-        set((state) => ({
-          instances: state.instances.map((i) =>
-            i.id === instanceId ? { ...i, status: 'running' } : i
-          ),
-        }));
-        return true;
+        const data = await res.json().catch(() => ({ success: false }));
+        const isSuccess = data.success === true || (data.success !== false && data.status === 'started');
+        if (isSuccess) {
+          set((state) => ({
+            instances: state.instances.map((i) =>
+              i.id === instanceId ? { ...i, status: 'running', pid: data.pid } : i
+            ),
+          }));
+          return { success: true, message: data.message, pid: data.pid };
+        } else {
+          // If uninstalled or env missing, reflect not_installed in status
+          if (data.code === 'NOT_INSTALLED' || data.code === 'ENV_MISSING') {
+            set((state) => ({
+              instances: state.instances.map((i) =>
+                i.id === instanceId ? { ...i, status: 'not_installed' } : i
+              ),
+            }));
+          }
+          return {
+            success: false,
+            code: data.code,
+            message: data.message || 'Engine failed to start',
+          };
+        }
       }
-      return false;
-    } catch {
-      return false;
+      return { success: false, message: `Server error (HTTP ${res.status})` };
+    } catch (e: any) {
+      return { success: false, message: e.message || 'Network connection failed' };
     }
   },
 

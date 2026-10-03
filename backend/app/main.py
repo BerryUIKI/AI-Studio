@@ -74,6 +74,7 @@ from app.schemas.engine import (
     MirrorConfigResponse,
     UpdateMirrorConfigRequest,
     EngineLogResponse,
+    RuntimeStartResponse,
 )
 from app.schemas.hardware import HardwareReadiness, GpuStatsResponse
 from app.schemas.model import ModelRecord, ModelRoot, ModelRootCreate
@@ -328,7 +329,7 @@ async def runtime_status() -> dict[str, Any]:
     return supervisor.get_status()
 
 
-@app.post("/api/v1/runtime/start")
+@app.post("/api/v1/runtime/start", response_model=RuntimeStartResponse)
 async def runtime_start() -> dict[str, Any]:
     """Launch the isolated ComfyUI subprocess via supervisor."""
     return supervisor.start()
@@ -346,7 +347,7 @@ async def runtime_webui_status() -> dict[str, Any]:
     return webui_supervisor.get_status()
 
 
-@app.post("/api/v1/runtime/webui/start")
+@app.post("/api/v1/runtime/webui/start", response_model=RuntimeStartResponse)
 async def runtime_webui_start() -> dict[str, Any]:
     """Launch the isolated WebUI subprocess via supervisor."""
     return webui_supervisor.start()

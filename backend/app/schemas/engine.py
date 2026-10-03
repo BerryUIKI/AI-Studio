@@ -194,4 +194,12 @@ class EngineLogResponse(BaseModel):
     logs: List[str]
 
 
+class RuntimeStartResponse(BaseModel):
+    success: bool
+    code: Optional[str] = None  # e.g. "NOT_INSTALLED", "ENV_MISSING", "ALREADY_RUNNING"
+    message: str
+    pid: Optional[int] = None
+
+
+
 

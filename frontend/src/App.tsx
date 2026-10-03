@@ -16,6 +16,7 @@ import { AddEngineModal } from './components/launcher/AddEngineModal';
 import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
 import { EngineConfigModal } from './components/launcher/EngineConfigModal';
 import { EngineLogViewer } from './components/launcher/EngineLogViewer';
+import { EngineNotInstalledModal } from './components/launcher/EngineNotInstalledModal';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
 import { ModelHubView } from './components/hub/ModelHubView';
@@ -40,10 +41,13 @@ export default function App() {
   const [showAgentPanel, setShowAgentPanel] = useState<boolean>(false);
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
   const [showAddEngineModal, setShowAddEngineModal] = useState<boolean>(false);
+  const [addEngineInitialTab, setAddEngineInitialTab] = useState<'detected' | 'browse' | 'install'>('detected');
   const [showDeploymentDrawer, setShowDeploymentDrawer] = useState<boolean>(false);
   const [deploymentEngineType, setDeploymentEngineType] = useState<'comfyui' | 'webui'>('comfyui');
   const [selectedConfigInstance, setSelectedConfigInstance] = useState<EngineInstance | null>(null);
   const [selectedLogInstance, setSelectedLogInstance] = useState<EngineInstance | null>(null);
+  const [notInstalledTarget, setNotInstalledTarget] = useState<EngineInstance | null>(null);
+  const [notInstalledError, setNotInstalledError] = useState<string | null>(null);
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
 
   const { instances, fetchInstances } = useEngineStore();
@@ -60,6 +64,17 @@ export default function App() {
   const handleStartDeployment = (type: 'comfyui' | 'webui') => {
     setDeploymentEngineType(type);
     setShowDeploymentDrawer(true);
+  };
+
+  const handlePromptDeployment = (instance: EngineInstance, error?: string) => {
+    setNotInstalledTarget(instance);
+    setNotInstalledError(error || null);
+  };
+
+  const handleLocateExisting = (type: 'comfyui' | 'webui') => {
+    setDeploymentEngineType(type);
+    setAddEngineInitialTab('browse');
+    setShowAddEngineModal(true);
   };
 
   const handleUninstallEngine = async (instance: EngineInstance) => {
@@ -268,11 +283,16 @@ export default function App() {
                 webuiRunning={false}
                 onStartComfy={toggleRuntime}
                 onStartWebui={toggleRuntime}
-                onOpenAddEngine={() => setShowAddEngineModal(true)}
+                onOpenAddEngine={() => {
+                  setAddEngineInitialTab('detected');
+                  setShowAddEngineModal(true);
+                }}
                 onConfigureEngine={(inst) => setSelectedConfigInstance(inst)}
                 onViewLogs={(inst) => setSelectedLogInstance(inst)}
                 onUninstallEngine={handleUninstallEngine}
                 onOpenAgent={() => setShowAgentPanel(true)}
+                onDeployEngine={(inst) => handlePromptDeployment(inst)}
+                onLaunchFailed={(inst, err) => handlePromptDeployment(inst, err)}
               />
             ),
             canvas: (
@@ -291,17 +311,24 @@ export default function App() {
                 title="ComfyUI"
                 port={comfyStatus?.port || 8188}
                 isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
+                isInstalled={Boolean(
+                  instances.find((i) => i.id === 'comfyui-managed')?.status !== 'not_installed' &&
+                  runtimeStatus?.installed !== false
+                )}
                 onStartEngine={toggleRuntime}
+                onDeployEngine={() => handleStartDeployment('comfyui')}
                 onOpenDirectory={() => setShowManagerModal(true)}
               />
             ),
             webui: (
               <EmbeddedEngineView
                 engineType="webui"
-                title="Stable Diffusion WebUI"
+                title="SD WebUI"
                 port={7860}
-                isRunning={false}
+                isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
+                isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
                 onStartEngine={toggleRuntime}
+                onDeployEngine={() => handleStartDeployment('webui')}
                 onOpenDirectory={() => setShowManagerModal(true)}
               />
             ),
@@ -334,6 +361,8 @@ export default function App() {
       <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
       <AddEngineModal
         isOpen={showAddEngineModal}
+        initialTab={addEngineInitialTab}
+        initialEngineType={deploymentEngineType}
         onClose={() => setShowAddEngineModal(false)}
         onStartDeployment={handleStartDeployment}
       />
@@ -341,6 +370,17 @@ export default function App() {
         isOpen={showDeploymentDrawer}
         engineType={deploymentEngineType}
         onClose={() => setShowDeploymentDrawer(false)}
+      />
+      <EngineNotInstalledModal
+        isOpen={!!notInstalledTarget}
+        instance={notInstalledTarget}
+        errorMessage={notInstalledError}
+        onClose={() => {
+          setNotInstalledTarget(null);
+          setNotInstalledError(null);
+        }}
+        onDeploy={(type) => handleStartDeployment(type)}
+        onLocate={(type) => handleLocateExisting(type)}
       />
       <EngineConfigModal
         isOpen={!!selectedConfigInstance}
