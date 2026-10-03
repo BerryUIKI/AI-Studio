@@ -9,6 +9,11 @@ import { VideoModal } from './components/canvas/VideoModal';
 import { AgentPanel } from './components/agent/AgentPanel';
 import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
 import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
+import { GlobalNavRail } from './components/navigation/GlobalNavRail';
+import { ViewContainer } from './components/navigation/ViewContainer';
+import { LauncherHub } from './components/launcher/LauncherHub';
+import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
+import { SettingsView } from './components/settings/SettingsView';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
 
@@ -111,14 +116,70 @@ export default function App() {
         onMaximizeChange={setIsMaximized}
       />
 
-      {/* Main Workspace Layout */}
+      {/* Main Workspace Layout with Global Navigation Rail and Keep-Alive View Container */}
       <div className="flex-1 flex overflow-hidden relative">
-        {showNodePalette && <NodePalette />}
-        <main className="flex-1 relative">
-          <FlowCanvas />
-          {/* Newcomer Creative Creation Dock */}
-          <CreationDock />
-        </main>
+        <GlobalNavRail
+          comfyOnline={comfyStatus?.online}
+          comfyRunning={runtimeStatus?.running}
+          webuiOnline={false}
+          webuiRunning={false}
+          isGenerating={isExecuting}
+        />
+        <ViewContainer>
+          {{
+            launcher: (
+              <LauncherHub
+                comfyOnline={comfyStatus?.online}
+                comfyRunning={runtimeStatus?.running}
+                webuiOnline={false}
+                webuiRunning={false}
+                onStartComfy={toggleRuntime}
+                onStartWebui={toggleRuntime}
+                onOpenAddEngine={() => setShowManagerModal(true)}
+              />
+            ),
+            canvas: (
+              <div className="flex-1 flex w-full h-full overflow-hidden relative">
+                {showNodePalette && <NodePalette />}
+                <main className="flex-1 relative w-full h-full">
+                  <FlowCanvas />
+                  <CreationDock />
+                </main>
+              </div>
+            ),
+            comfyui: (
+              <EmbeddedEngineView
+                engineType="comfyui"
+                title="ComfyUI"
+                port={comfyStatus?.port || 8188}
+                isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
+                onStartEngine={toggleRuntime}
+                onOpenDirectory={() => setShowManagerModal(true)}
+              />
+            ),
+            webui: (
+              <EmbeddedEngineView
+                engineType="webui"
+                title="Stable Diffusion WebUI"
+                port={7860}
+                isRunning={false}
+                onStartEngine={toggleRuntime}
+                onOpenDirectory={() => setShowManagerModal(true)}
+              />
+            ),
+            agents: (
+              <div className="w-full h-full flex flex-col bg-slate-950 p-6 overflow-hidden">
+                <AgentPanel isOpen={true} onClose={() => {}} inline={true} />
+              </div>
+            ),
+            settings: (
+              <SettingsView
+                onOpenCloudSettings={() => setShowCloudModal(true)}
+                onOpenEnvironmentManager={() => setShowManagerModal(true)}
+              />
+            ),
+          }}
+        </ViewContainer>
       </div>
 
       {/* Contextual Action Modals */}
