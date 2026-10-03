@@ -14,6 +14,7 @@ export interface LauncherHubProps {
   onViewLogs?: (instance: EngineInstance) => void;
   onOpenDirectory?: (instance: EngineInstance) => void;
   onUninstallEngine?: (instance: EngineInstance) => void;
+  onOpenAgent?: () => void;
   // Legacy props kept for backward-compatibility
   comfyOnline?: boolean;
   comfyRunning?: boolean;
@@ -29,6 +30,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
   onViewLogs,
   onOpenDirectory,
   onUninstallEngine,
+  onOpenAgent,
 }) => {
   const {
     instances,
@@ -114,6 +116,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
               onViewLogs={onViewLogs}
               onOpenDirectory={onOpenDirectory}
               onUninstall={onUninstallEngine}
+              onOpenAgent={onOpenAgent}
             />
           ))}
 

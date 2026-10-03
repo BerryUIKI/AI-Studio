@@ -5,7 +5,6 @@ import {
   Package,
   Puzzle,
   Image as ImageIcon,
-  Bot,
   Settings,
   ChevronLeft,
   Menu,
@@ -25,7 +24,6 @@ const mainNavItems: NavItem[] = [
   { id: 'models', label: 'Model Hub', icon: Package },
   { id: 'comfyui', label: 'ComfyUI', icon: Puzzle, isEngine: true },
   { id: 'webui', label: 'SD WebUI', icon: ImageIcon, isEngine: true },
-  { id: 'agents', label: 'AI Agents', icon: Bot },
 ];
 
 const bottomNavItems: NavItem[] = [
