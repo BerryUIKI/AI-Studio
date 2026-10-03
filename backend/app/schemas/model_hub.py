@@ -62,3 +62,31 @@ class HardwareSummary(BaseModel):
 class HardwareEvaluationResponse(BaseModel):
     hardware_summary: HardwareSummary
     evaluations: Dict[str, ModelEvaluation]
+
+
+DownloadTaskStatus = Literal["pending", "downloading", "paused", "completed", "failed", "cancelled"]
+
+
+class StartDownloadRequest(BaseModel):
+    model_id: str
+    target_engine: str = "comfyui"
+    mirror_preset: Optional[str] = None
+
+
+class DownloadTaskInfo(BaseModel):
+    task_id: str
+    model_id: str
+    model_name: str
+    target_engine: str
+    target_path: str
+    status: DownloadTaskStatus
+    total_bytes: int
+    downloaded_bytes: int
+    progress_pct: float
+    speed_bps: int = 0
+    eta_seconds: Optional[int] = None
+    error_message: Optional[str] = None
+
+
+class DownloadTasksResponse(BaseModel):
+    tasks: List[DownloadTaskInfo]

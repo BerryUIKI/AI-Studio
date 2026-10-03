@@ -66,6 +66,7 @@ MH-M1 (Navigation Entry & Model Hub Shell)
 ---
 
 ## MH-M4 — Multi-Mirror Resumable Download Engine
+**Status**: ✅ Completed (Implemented and Verified)
 **Goal**: Implement background downloader with mirror fallback, chunk resumption, atomic destination placement, and inventory hot-rescan.
 
 ### Deliverables
