@@ -37,6 +37,7 @@ MH-M1 (Navigation Entry & Model Hub Shell)
 
 ## MH-M2 — Curated Catalog & 4-Tier Hardware Evaluation Engine
 **Goal**: Implement backend catalog registry and hardware runnability assessment.
+**Status**: ✅ Completed (Implemented and Verified)
 
 ### Deliverables
 | # | Task | Target Files |
