@@ -24,10 +24,15 @@ describe('useNavigationStore', () => {
     expect(state.activeView).toBe('canvas');
     expect(state.viewHistory).toEqual(['launcher', 'canvas']);
 
+    store.setActiveView('models');
+    state = useNavigationStore.getState();
+    expect(state.activeView).toBe('models');
+    expect(state.viewHistory).toEqual(['launcher', 'canvas', 'models']);
+
     store.setActiveView('comfyui');
     state = useNavigationStore.getState();
     expect(state.activeView).toBe('comfyui');
-    expect(state.viewHistory).toEqual(['launcher', 'canvas', 'comfyui']);
+    expect(state.viewHistory).toEqual(['launcher', 'canvas', 'models', 'comfyui']);
   });
 
   it('does not duplicate history on repeated view switch', () => {

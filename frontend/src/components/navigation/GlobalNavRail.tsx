@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Home,
   Palette,
+  Package,
   Puzzle,
   Image as ImageIcon,
   Bot,
@@ -21,6 +22,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { id: 'launcher', label: 'Launcher Hub', icon: Home },
   { id: 'canvas', label: 'Infinite Canvas', icon: Palette },
+  { id: 'models', label: 'Model Hub', icon: Package },
   { id: 'comfyui', label: 'ComfyUI', icon: Puzzle, isEngine: true },
   { id: 'webui', label: 'SD WebUI', icon: ImageIcon, isEngine: true },
   { id: 'agents', label: 'AI Agents', icon: Bot },
