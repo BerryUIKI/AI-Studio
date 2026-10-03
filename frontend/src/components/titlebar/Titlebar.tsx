@@ -48,6 +48,7 @@ export interface TitlebarProps {
   hasNodes: boolean;
   onClearCanvas: () => void;
   onMaximizeChange?: (isMaximized: boolean) => void;
+  onCloseRequested?: () => void;
 }
 
 export const Titlebar: React.FC<TitlebarProps> = ({
@@ -67,6 +68,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   hasNodes,
   onClearCanvas,
   onMaximizeChange,
+  onCloseRequested,
 }) => {
   const [isDesktop, setIsDesktop] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -128,6 +130,10 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   };
 
   const handleClose = async () => {
+    if (onCloseRequested) {
+      onCloseRequested();
+      return;
+    }
     try {
       if (isTauri()) {
         const appWindow = getCurrentWindow();
