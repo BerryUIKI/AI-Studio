@@ -210,7 +210,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
         const err = await res.json();
         setShutdownError(err.detail || 'Active tasks running. Confirm force exit?');
       }
-    } catch (err) {
+    } catch {
       setShutdownError('Server disconnected or shutdown failed.');
     } finally {
       setShuttingDown(false);
