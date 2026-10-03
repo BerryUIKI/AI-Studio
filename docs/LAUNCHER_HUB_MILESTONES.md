@@ -1,8 +1,16 @@
 # Berry AI Studio Launcher Hub — Implementation Milestones
 
-Date: 2026-10-03. Status: approved plan; implementation pending.
+Date: 2026-10-03. Status: Completed & Merged into `dev`.
 Parent PRD: [Launcher Hub PRD](LAUNCHER_HUB_PRD.md).
 Governing Documents: [Roadmap](ROADMAP.md), [Architecture](ARCHITECTURE.md), [Launcher Requirements L01–L12](LAUNCHER_MANAGER_REQUIREMENTS.md).
+
+### Milestone Execution Status
+
+- **LH-M1 (Navigation Shell & View Router)**: ✅ Completed (Merged in PR #43)
+- **LH-M2 (Launcher Hub View & Instance Cards)**: ✅ Completed (Merged in PR #44)
+- **LH-M3 (Engine Detection, Binding & Deployment)**: ✅ Completed (Merged in PR #45)
+- **LH-M4 (GPU Monitoring & System Status)**: ✅ Completed (Merged in PR #46)
+- **LH-M5 (Polish, Exit Policy & Integration Testing)**: ✅ Completed (Merged in PR #47)
 
 ---
 

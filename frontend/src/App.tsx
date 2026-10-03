@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Titlebar, type ComfyStatus, type RuntimeStatus } from './components/titlebar/Titlebar';
 import { NodePalette } from './components/canvas/NodePalette';
 import { FlowCanvas } from './components/canvas/FlowCanvas';
@@ -15,11 +15,17 @@ import { LauncherHub } from './components/launcher/LauncherHub';
 import { AddEngineModal } from './components/launcher/AddEngineModal';
 import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
 import { EngineConfigModal } from './components/launcher/EngineConfigModal';
+import { EngineLogViewer } from './components/launcher/EngineLogViewer';
+import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
 import { SettingsView } from './components/settings/SettingsView';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
 import { useEngineStore, type EngineInstance } from './stores/useEngineStore';
+import { useSettingsStore } from './stores/useSettingsStore';
+import { useNavigationStore } from './stores/useNavigationStore';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export default function App() {
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
@@ -34,8 +40,19 @@ export default function App() {
   const [showDeploymentDrawer, setShowDeploymentDrawer] = useState<boolean>(false);
   const [deploymentEngineType, setDeploymentEngineType] = useState<'comfyui' | 'webui'>('comfyui');
   const [selectedConfigInstance, setSelectedConfigInstance] = useState<EngineInstance | null>(null);
+  const [selectedLogInstance, setSelectedLogInstance] = useState<EngineInstance | null>(null);
+  const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
 
-  const { fetchInstances } = useEngineStore();
+  const { instances, fetchInstances } = useEngineStore();
+  const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore();
+  const { setActiveView } = useNavigationStore();
+
+  // Apply default landing view on initial mount
+  useEffect(() => {
+    if (defaultLandingView === 'canvas') {
+      setActiveView('canvas');
+    }
+  }, [defaultLandingView, setActiveView]);
 
   const handleStartDeployment = (type: 'comfyui' | 'webui') => {
     setDeploymentEngineType(type);
@@ -97,6 +114,94 @@ export default function App() {
     refreshStatus();
   };
 
+  // Compute active running managed engines for exit policy prompt
+  const getRunningManagedEngines = useCallback((): RunningEngineItem[] => {
+    const running: RunningEngineItem[] = [];
+    for (const inst of instances) {
+      if (
+        inst.is_managed &&
+        !inst.is_builtin &&
+        (inst.status === 'running' || (inst.id === 'comfyui-managed' && runtimeStatus?.running))
+      ) {
+        running.push({ id: inst.id, name: inst.name });
+      }
+    }
+    if (runtimeStatus?.running && !running.some((e) => e.id === 'comfyui-managed')) {
+      running.push({ id: 'comfyui-managed', name: 'ComfyUI Engine' });
+    }
+    return running;
+  }, [instances, runtimeStatus]);
+
+  const closeAppWindow = async () => {
+    try {
+      if (isTauri()) {
+        const appWindow = getCurrentWindow();
+        await appWindow.close();
+      }
+    } catch (err) {
+      console.error('Failed to close app window:', err);
+    }
+  };
+
+  const handleKeepRunning = (remember: boolean) => {
+    if (remember) {
+      setExitPolicy('keep_running');
+    }
+    setShowExitDialog(false);
+    closeAppWindow();
+  };
+
+  const handleCloseAllAndExit = async (remember: boolean) => {
+    if (remember) {
+      setExitPolicy('close_all');
+    }
+    setShowExitDialog(false);
+    try {
+      await fetch('/api/v1/runtime/stop', { method: 'POST' }).catch(() => {});
+    } finally {
+      closeAppWindow();
+    }
+  };
+
+  const handleCloseRequested = useCallback(() => {
+    const running = getRunningManagedEngines();
+    if (running.length === 0) {
+      closeAppWindow();
+      return;
+    }
+
+    if (exitPolicy === 'prompt') {
+      setShowExitDialog(true);
+    } else if (exitPolicy === 'close_all') {
+      handleCloseAllAndExit(false);
+    } else {
+      // keep_running
+      handleKeepRunning(false);
+    }
+  }, [getRunningManagedEngines, exitPolicy]);
+
+  // Hook into native Tauri window close button / Alt+F4
+  useEffect(() => {
+    let unlistenClose: (() => void) | undefined;
+    if (isTauri()) {
+      getCurrentWindow()
+        .onCloseRequested((event) => {
+          const running = getRunningManagedEngines();
+          if (running.length > 0 && exitPolicy === 'prompt') {
+            event.preventDefault();
+            setShowExitDialog(true);
+          }
+        })
+        .then((fn) => {
+          unlistenClose = fn;
+        })
+        .catch(() => {});
+    }
+    return () => {
+      if (unlistenClose) unlistenClose();
+    };
+  }, [getRunningManagedEngines, exitPolicy]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -138,6 +243,7 @@ export default function App() {
         hasNodes={nodes.length > 0}
         onClearCanvas={clearCanvas}
         onMaximizeChange={setIsMaximized}
+        onCloseRequested={handleCloseRequested}
       />
 
       {/* Main Workspace Layout with Global Navigation Rail and Keep-Alive View Container */}
@@ -161,6 +267,7 @@ export default function App() {
                 onStartWebui={toggleRuntime}
                 onOpenAddEngine={() => setShowAddEngineModal(true)}
                 onConfigureEngine={(inst) => setSelectedConfigInstance(inst)}
+                onViewLogs={(inst) => setSelectedLogInstance(inst)}
                 onUninstallEngine={handleUninstallEngine}
               />
             ),
@@ -229,6 +336,18 @@ export default function App() {
         isOpen={!!selectedConfigInstance}
         instance={selectedConfigInstance}
         onClose={() => setSelectedConfigInstance(null)}
+      />
+      <EngineLogViewer
+        isOpen={!!selectedLogInstance}
+        instance={selectedLogInstance}
+        onClose={() => setSelectedLogInstance(null)}
+      />
+      <ExitConfirmDialog
+        isOpen={showExitDialog}
+        runningEngines={getRunningManagedEngines()}
+        onKeepRunning={handleKeepRunning}
+        onCloseAllAndExit={handleCloseAllAndExit}
+        onCancel={() => setShowExitDialog(false)}
       />
     </div>
   );
