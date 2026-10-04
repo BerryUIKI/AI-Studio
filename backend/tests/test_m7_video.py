@@ -316,3 +316,43 @@ async def test_cloud_video_cancellation_disclaimer():
     assert cancel_res["disclaimer"] is not None
     assert "external cloud providers" in cancel_res["disclaimer"]
 
+
+@pytest.mark.asyncio
+async def test_siliconflow_video_polling_loop():
+    """Verify _call_siliconflow_video submits task and polls status until completion."""
+    from app.runners.api_runner import _call_siliconflow_video
+
+    submit_response = {"requestId": "sf_req_999"}
+    status_response = {
+        "status": "Succeed",
+        "results": {
+            "videos": [{"url": "https://api.siliconflow.cn/files/output_polled.mp4"}]
+        }
+    }
+
+    mock_client = AsyncMock()
+    mock_resp1 = AsyncMock()
+    mock_resp1.raise_for_status = lambda: None
+    mock_resp1.json = lambda: submit_response
+
+    mock_resp2 = AsyncMock()
+    mock_resp2.status_code = 200
+    mock_resp2.is_success = True
+    mock_resp2.json = lambda: status_response
+
+    mock_client.post = AsyncMock(side_effect=[mock_resp1, mock_resp2])
+
+    with patch("httpx.AsyncClient") as mock_http_cls, \
+         patch("asyncio.sleep", new=AsyncMock()):
+        mock_http_cls.return_value.__aenter__.return_value = mock_client
+
+        video_url = await _call_siliconflow_video(
+            action="txt2video",
+            prompt="cyberpunk drone soaring",
+            api_key="test_api_key",
+        )
+
+        assert video_url == "https://api.siliconflow.cn/files/output_polled.mp4"
+        assert mock_client.post.call_count == 2
+
+
