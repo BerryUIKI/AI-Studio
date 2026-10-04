@@ -9,6 +9,10 @@ import {
   Info,
   ChevronRight,
   Check,
+  Bot,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import {
   useSettingsStore,
@@ -27,13 +31,69 @@ interface SettingsViewProps {
   onOpenEnvironmentManager?: () => void;
 }
 
-type SettingsSection = 'general' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
+type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenCloudSettings,
   onOpenEnvironmentManager,
 }) => {
   const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+
+  // LLM Config state
+  const [llmConfig, setLlmConfig] = useState({
+    provider: 'ollama',
+    model: 'qwen2.5:7b',
+    base_url: 'http://127.0.0.1:11434/v1',
+    api_key: '',
+    temperature: 0.7,
+    enabled: true,
+  });
+  const [llmTesting, setLlmTesting] = useState(false);
+  const [llmTestResult, setLlmTestResult] = useState<{ valid: boolean; message: string } | null>(null);
+  const [llmSaving, setLlmSaving] = useState(false);
+
+  React.useEffect(() => {
+    fetch('/api/v1/agent/llm/config')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.provider) setLlmConfig(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveLlmConfig = async () => {
+    setLlmSaving(true);
+    try {
+      const res = await fetch('/api/v1/agent/llm/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(llmConfig),
+      });
+      if (res.ok) {
+        setLlmTestResult({ valid: true, message: 'Settings saved successfully!' });
+      }
+    } finally {
+      setLlmSaving(false);
+    }
+  };
+
+  const handleTestLlmConnection = async () => {
+    setLlmTesting(true);
+    setLlmTestResult(null);
+    try {
+      const res = await fetch('/api/v1/agent/llm/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(llmConfig),
+      });
+      const data = await res.json();
+      setLlmTestResult({ valid: data.valid, message: data.message });
+    } catch (err: any) {
+      setLlmTestResult({ valid: false, message: err.message || 'Connection failed' });
+    } finally {
+      setLlmTesting(false);
+    }
+  };
 
   const {
     language,
@@ -48,6 +108,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const sections: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
     { id: 'general', label: t('tab_general', currentLang), icon: Languages },
+    { id: 'agent', label: 'AI Agent & LLM (大模型基座)', icon: Bot },
     { id: 'startup', label: t('tab_startup', currentLang), icon: Compass },
     { id: 'exit', label: t('tab_exit', currentLang), icon: Power },
     { id: 'cloud', label: t('tab_cloud', currentLang), icon: Globe },
@@ -153,6 +214,163 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Section: AI Agent & LLM Base (Priority Localized) */}
+          {activeSection === 'agent' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Bot className="w-5 h-5 text-indigo-400" />
+                  <span>AI Agent 推理基座与大模型配置 (LLM Base)</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  为右侧常驻 AI Agents 赋予真正的大语言模型推理与自主规划能力，优先支持本地私有化部署（Ollama / vLLM / LocalAI），亦支持云端商用模型。
+                </p>
+              </div>
+
+              {/* Provider Selection */}
+              <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08] space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-200">基座供应商类型 (Provider)</label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400">启用智能 Agent 推理</span>
+                    <input
+                      type="checkbox"
+                      checked={llmConfig.enabled}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, enabled: e.target.checked })}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-slate-800 border-slate-700"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {[
+                    { id: 'ollama', label: 'Local Ollama (推荐本地)', desc: '100% 本地运行 · 零 API 费用' },
+                    { id: 'siliconflow', label: '硅基流动 (SiliconFlow)', desc: 'Qwen2.5 / DeepSeek 极速 API' },
+                    { id: 'deepseek', label: 'DeepSeek 官方', desc: 'DeepSeek-V3 / R1 推理' },
+                    { id: 'openai', label: 'OpenAI / Custom', desc: 'GPT-4o 或自定义端点' },
+                  ].map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        let newUrl = llmConfig.base_url;
+                        let newModel = llmConfig.model;
+                        if (p.id === 'ollama') {
+                          newUrl = 'http://127.0.0.1:11434/v1';
+                          newModel = 'qwen2.5:7b';
+                        } else if (p.id === 'siliconflow') {
+                          newUrl = 'https://api.siliconflow.cn/v1';
+                          newModel = 'Qwen/Qwen2.5-7B-Instruct';
+                        } else if (p.id === 'deepseek') {
+                          newUrl = 'https://api.deepseek.com/v1';
+                          newModel = 'deepseek-chat';
+                        } else if (p.id === 'openai') {
+                          newUrl = 'https://api.openai.com/v1';
+                          newModel = 'gpt-4o-mini';
+                        }
+                        setLlmConfig({
+                          ...llmConfig,
+                          provider: p.id,
+                          base_url: newUrl,
+                          model: newModel,
+                        });
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        llmConfig.provider === p.id
+                          ? 'bg-indigo-600/15 border-indigo-500/50 shadow-sm shadow-indigo-500/10'
+                          : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="text-xs font-semibold text-slate-200 block">{p.label}</span>
+                      <span className="text-[10px] text-slate-400 mt-1 block">{p.desc}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-300 block mb-1">
+                      API Base URL
+                    </label>
+                    <input
+                      type="text"
+                      value={llmConfig.base_url}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, base_url: e.target.value })}
+                      placeholder="e.g. http://127.0.0.1:11434/v1"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-300 block mb-1">
+                      模型标识 (Model Identifier)
+                    </label>
+                    <input
+                      type="text"
+                      value={llmConfig.model}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
+                      placeholder="e.g. qwen2.5:7b, deepseek-r1:8b"
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="text-[11px] font-medium text-slate-300 block mb-1">
+                      API Key (本地 Ollama 可留空)
+                    </label>
+                    <input
+                      type="password"
+                      value={llmConfig.api_key || ''}
+                      onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
+                      placeholder={llmConfig.provider === 'ollama' ? '本地运行无需 API Key' : 'sk-...'}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Test Feedback */}
+                {llmTestResult && (
+                  <div
+                    className={`p-3 rounded-xl text-xs flex items-center gap-2 ${
+                      llmTestResult.valid
+                        ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/40'
+                        : 'bg-rose-950/40 text-rose-300 border border-rose-800/40'
+                    }`}
+                  >
+                    {llmTestResult.valid ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <XCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    )}
+                    <span>{llmTestResult.message}</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestLlmConnection}
+                    disabled={llmTesting}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center gap-1.5"
+                  >
+                    {llmTesting && <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />}
+                    <span>测试连通性 (Test Connection)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveLlmConfig}
+                    disabled={llmSaving}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5"
+                  >
+                    {llmSaving ? '保存中...' : '保存配置 (Save Configuration)'}
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

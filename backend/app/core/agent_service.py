@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from app.core.workflow_catalog import WorkflowCatalog
+from app.core.llm_client import LLMClient, AGENT_TOOLS_SCHEMA, SYSTEM_PROMPT
 from app.schemas.agent import (
     AgentActionStep,
     AgentChatMessage,
@@ -38,6 +39,18 @@ class AgentService:
         self.creative_runner = creative_runner
         # In-memory conversation state: conversation_id -> list of AgentChatMessage
         self.conversations: Dict[str, List[AgentChatMessage]] = {}
+
+    def _get_llm_client(self) -> Optional[LLMClient]:
+        """Obtain active LLMClient if configured and enabled."""
+        if not self.credential_manager:
+            return None
+        try:
+            cfg = self.credential_manager.get_llm_config()
+            if cfg.enabled:
+                return LLMClient(config=cfg)
+        except Exception:
+            pass
+        return None
 
     def _extract_aspect_ratio(self, text: str) -> str:
         lower = text.lower()
@@ -172,6 +185,19 @@ class AgentService:
         user_msg = AgentChatMessage(role="user", content=req.message)
         history.append(user_msg)
 
+        # 1. First attempt inference via LLM Base (Local Ollama / SiliconFlow / OpenAI)
+        llm_client = self._get_llm_client()
+        if llm_client:
+            try:
+                llm_response = await self._process_with_llm(req, conv_id, history, llm_client)
+                if llm_response:
+                    return llm_response
+            except Exception as e:
+                # Log and fallback gracefully to deterministic heuristic engine
+                import logging
+                logging.getLogger(__name__).warning(f"LLM Agent invocation failed ({e}), falling back to heuristic engine.")
+
+        # 2. Fallback to Deterministic Heuristic Engine
         msg_lower = req.message.lower()
 
         # Check for informational questions without creative action intent
@@ -463,3 +489,154 @@ class AgentService:
                 last_asset_id = result.asset_id
 
         return results
+
+    async def _process_with_llm(
+        self,
+        req: AgentChatRequest,
+        conv_id: str,
+        history: List[AgentChatMessage],
+        llm_client: LLMClient,
+    ) -> Optional[AgentChatResponse]:
+        """Execute conversational inference with LLM and resolve function calls."""
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
+
+        # Append last 6 turns of conversation history
+        for msg in history[-7:-1]:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": req.message})
+
+        resp_data = await llm_client.chat_completion(
+            messages=messages,
+            tools=AGENT_TOOLS_SCHEMA,
+            tool_choice="auto",
+        )
+
+        choices = resp_data.get("choices", [])
+        if not choices:
+            return None
+
+        first_choice = choices[0]
+        choice_msg = first_choice.get("message", {})
+        content = choice_msg.get("content") or ""
+        tool_calls = choice_msg.get("tool_calls") or []
+
+        proposal: Optional[AgentProposal] = None
+
+        if tool_calls:
+            for tc in tool_calls:
+                fn_name = tc.get("function", {}).get("name")
+                fn_args_raw = tc.get("function", {}).get("arguments", "{}")
+                try:
+                    fn_args = json.loads(fn_args_raw)
+                except Exception:
+                    fn_args = {}
+
+                if fn_name == "propose_creative_plan":
+                    action_str = fn_args.get("action", "txt2img")
+                    prompt_val = fn_args.get("prompt", req.message)
+                    neg_val = fn_args.get("negative_prompt", "blurry, low quality, deformed")
+                    aspect = fn_args.get("aspect_ratio", "1:1")
+                    steps_cnt = int(fn_args.get("steps", 25))
+                    target_eng = fn_args.get("engine") or self._detect_engine(req.message, req.preferred_engine)[0]
+                    chain_up = bool(fn_args.get("chain_upscale", False))
+
+                    action_type = CreativeActionType(action_str) if action_str in CreativeActionType._value2member_map_ else CreativeActionType.TXT2IMG
+                    model_name = fn_args.get("model") or self._resolve_model(target_eng, action_type)
+                    cost_disc = self._detect_engine(target_eng)[1]
+
+                    chain_steps: List[AgentActionStep] = [
+                        AgentActionStep(
+                            step_number=1,
+                            action=action_type,
+                            engine_id=target_eng,
+                            model=model_name,
+                            parameters={
+                                "prompt": prompt_val,
+                                "negative_prompt": neg_val,
+                                "aspect_ratio": aspect,
+                                "steps": steps_cnt,
+                                "input_image_id": req.selected_asset_id or "",
+                            },
+                            description=f"Generate {aspect} asset using {target_eng}",
+                        )
+                    ]
+
+                    if chain_up:
+                        chain_steps.append(
+                            AgentActionStep(
+                                step_number=2,
+                                action=CreativeActionType.UPSCALE,
+                                engine_id=target_eng,
+                                model=model_name,
+                                parameters={"upscale_factor": 2.0},
+                                description="Upscale result 2x",
+                            )
+                        )
+
+                    # Build bounded reviewable workflow graph if using ComfyUI
+                    wf_graph = None
+                    if target_eng == "managed_comfyui":
+                        wf_map = {
+                            "txt2img": "comfy.txt2img.standard",
+                            "img2img": "comfy.img2img.standard",
+                            "inpaint": "comfy.inpaint.standard",
+                            "upscale": "comfy.upscale.esrgan",
+                            "img2video": "comfy.img2video.svd",
+                            "txt2video": "comfy.txt2video.animatediff",
+                        }
+                        wid = wf_map.get(action_str)
+                        if wid:
+                            try:
+                                _, wf_graph = WorkflowCatalog.construct_workflow(
+                                    workflow_id=wid,
+                                    parameters=chain_steps[0].parameters,
+                                    model_catalog=self.model_catalog,
+                                )
+                            except Exception as ex:
+                                wf_graph = ReviewableWorkflowGraph(
+                                    workflow_id=wid,
+                                    workflow_title=wid,
+                                    node_count=0,
+                                    stages=[],
+                                    required_nodes=[],
+                                    required_models=[],
+                                    missing_models=[],
+                                    is_valid=False,
+                                    validation_issues=[str(ex)],
+                                    recovery_guidance=str(ex),
+                                )
+
+                    proposal = AgentProposal(
+                        intent=action_str,
+                        title=f"AI Agent Plan: {action_str.upper()}",
+                        summary=f"Synthesize {aspect} via {target_eng} powered by LLM Agent",
+                        target_engine=target_eng,
+                        model=model_name,
+                        parameters=chain_steps[0].parameters,
+                        chain_steps=chain_steps,
+                        workflow_graph=wf_graph,
+                        estimated_calls=len(chain_steps),
+                        cost_disclaimer=cost_disc,
+                        explanation=f"LLM Agent formulated prompt: '{prompt_val}'",
+                        requires_user_approval=True,
+                        approved=False,
+                    )
+                    break
+
+        if not content and proposal:
+            content = f"I've designed an action plan for you: **{proposal.title}**.\n\nPlease review the details below and click **Approve & Run** when ready."
+
+        if not content and not proposal:
+            return None
+
+        assistant_msg = AgentChatMessage(role="assistant", content=content, proposal=proposal)
+        history.append(assistant_msg)
+
+        return AgentChatResponse(
+            conversation_id=conv_id,
+            message=assistant_msg,
+            proposal=proposal,
+        )
+

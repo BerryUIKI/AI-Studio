@@ -50,7 +50,9 @@ from app.schemas.creative import CreativeActionRequest, CreativeActionResult
 from app.schemas.cloud import (
     CloudProviderId,
     CloudProviderInfo,
+    LLMConfig,
     SetCredentialRequest,
+    SetLLMConfigRequest,
     TestKeyRequest,
     TestKeyResult,
 )
@@ -812,6 +814,37 @@ async def delete_cloud_credential(provider_id: CloudProviderId) -> dict[str, boo
     """Delete a stored BYOK API key."""
     credentials_manager.delete_key(provider_id)
     return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# LLM Provider & Agent Base Endpoints (Local Ollama / OpenAI / SiliconFlow)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/agent/llm/config", response_model=LLMConfig)
+async def get_agent_llm_config() -> LLMConfig:
+    """Get active LLM provider configuration for the Agent base (Ollama / SiliconFlow / OpenAI)."""
+    return credentials_manager.get_llm_config()
+
+
+@app.post("/api/v1/agent/llm/config", response_model=LLMConfig)
+async def set_agent_llm_config(req: SetLLMConfigRequest) -> LLMConfig:
+    """Save or update LLM provider configuration."""
+    cfg = LLMConfig(
+        provider=req.provider,
+        model=req.model,
+        base_url=req.base_url,
+        api_key=req.api_key,
+        temperature=req.temperature,
+        enabled=req.enabled,
+    )
+    credentials_manager.set_llm_config(cfg)
+    return cfg
+
+
+@app.post("/api/v1/agent/llm/test", response_model=TestKeyResult)
+async def test_agent_llm_endpoint(config: Optional[LLMConfig] = None) -> TestKeyResult:
+    """Test connectivity to configured LLM endpoint (Ollama local / remote API)."""
+    return await credentials_manager.test_llm_connection(config)
 
 
 @app.get("/api/v1/nodes", response_model=List[NodeDefinition])

@@ -126,10 +126,78 @@ class CredentialManager:
         ]
         return providers
 
+    def get_llm_config(self) -> LLMConfig:
+        """Get currently configured LLM provider and settings."""
+        stored = self._memory_creds.get("llm_config")
+        if stored and isinstance(stored, dict):
+            try:
+                return LLMConfig.model_validate(stored)
+            except Exception:
+                pass
+        # Default to local Ollama (Priority Local First)
+        return LLMConfig(
+            provider="ollama",
+            model="qwen2.5:7b",
+            base_url="http://127.0.0.1:11434/v1",
+            api_key="",
+            temperature=0.7,
+            enabled=True,
+        )
+
+    def set_llm_config(self, config: LLMConfig) -> None:
+        """Persist LLM configuration."""
+        self._memory_creds["llm_config"] = config.model_dump()
+        self._save()
+
+    async def test_llm_connection(self, config: Optional[LLMConfig] = None) -> TestKeyResult:
+        """Test connection to LLM provider endpoint (Ollama / OpenAI / SiliconFlow / DeepSeek)."""
+        cfg = config or self.get_llm_config()
+        base_url = cfg.base_url.rstrip("/")
+        # Target OpenAI-compatible /models endpoint
+        models_url = f"{base_url}/models" if not base_url.endswith("/models") else base_url
+        headers = {}
+        if cfg.api_key:
+            headers["Authorization"] = f"Bearer {cfg.api_key}"
+
+        async with httpx.AsyncClient(timeout=6.0) as client:
+            try:
+                resp = await client.get(models_url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    model_list = [m.get("id") for m in data.get("data", [])] if isinstance(data, dict) else []
+                    model_summary = f" Found models: {', '.join(model_list[:3])}" if model_list else ""
+                    return TestKeyResult(
+                        provider_id=CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI,
+                        valid=True,
+                        message=f"Connected successfully to {cfg.provider} ({cfg.model}).{model_summary}",
+                        status_code=200,
+                    )
+                elif resp.status_code in (401, 403):
+                    return TestKeyResult(
+                        provider_id=CloudProviderId.OPENAI,
+                        valid=False,
+                        message=f"Authentication failed (HTTP {resp.status_code}). Please check your API key.",
+                        status_code=resp.status_code,
+                    )
+                else:
+                    return TestKeyResult(
+                        provider_id=CloudProviderId.OPENAI,
+                        valid=False,
+                        message=f"Server returned HTTP {resp.status_code}",
+                        status_code=resp.status_code,
+                    )
+            except Exception as e:
+                err_hint = " Make sure local Ollama is running (`ollama serve`)." if "11434" in base_url or cfg.provider == "ollama" else ""
+                return TestKeyResult(
+                    provider_id=CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI,
+                    valid=False,
+                    message=f"Could not connect to {base_url}:{err_hint} ({e})",
+                )
+
     async def test_key(self, provider_id: CloudProviderId, api_key: Optional[str] = None) -> TestKeyResult:
         """Validate key against the provider's authentication endpoint."""
         key = api_key or self.get_key(provider_id)
-        if not key:
+        if not key and provider_id not in (CloudProviderId.OLLAMA,):
             return TestKeyResult(
                 provider_id=provider_id,
                 valid=False,
@@ -147,19 +215,31 @@ class CredentialManager:
                     msg = "OpenAI API key verified successfully." if valid else f"Invalid key (HTTP {resp.status_code})"
                     return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
 
+                elif provider_id == CloudProviderId.DEEPSEEK:
+                    resp = await client.get(
+                        "https://api.deepseek.com/models",
+                        headers={"Authorization": f"Bearer {key}"},
+                    )
+                    valid = resp.status_code == 200
+                    msg = "DeepSeek API key verified successfully." if valid else f"Invalid key (HTTP {resp.status_code})"
+                    return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
+
+                elif provider_id == CloudProviderId.OLLAMA:
+                    resp = await client.get("http://127.0.0.1:11434/api/tags")
+                    valid = resp.status_code == 200
+                    msg = "Local Ollama service verified successfully." if valid else f"Ollama HTTP {resp.status_code}"
+                    return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
+
                 elif provider_id == CloudProviderId.FAL:
-                    # Fal.ai key check: probe user info or model status
                     resp = await client.get(
                         "https://rest.alpha.fal.ai/tokens/current",
                         headers={"Authorization": f"Key {key}"},
                     )
-                    # Even if 404 on endpoint, 401/403 indicates invalid key, while 200 indicates valid
                     if resp.status_code == 200:
                         return TestKeyResult(provider_id=provider_id, valid=True, message="Fal.ai key verified successfully.", status_code=200)
                     elif resp.status_code in (401, 403):
                         return TestKeyResult(provider_id=provider_id, valid=False, message="Invalid Fal.ai API key.", status_code=resp.status_code)
                     else:
-                        # Fallback for alternative Fal auth format
                         return TestKeyResult(provider_id=provider_id, valid=True, message="Fal.ai key accepted.", status_code=resp.status_code)
 
                 elif provider_id == CloudProviderId.SILICONFLOW:
