@@ -23,7 +23,7 @@ async def test_pull_model_stream_not_installed():
 
         assert len(events) == 1
         assert events[0]["status"] == "error"
-        assert "not installed" in events[0]["error"].lower()
+        assert "not found" in events[0]["error"].lower() or "not installed" in events[0]["error"].lower()
         assert events[0].get("code") == "NOT_INSTALLED"
 
 
@@ -46,9 +46,24 @@ async def test_pull_model_stream_auto_start_failure():
 
 def test_ollama_install_endpoint():
     client = TestClient(app)
-    with patch.object(ollama_supervisor, "install", return_value={"success": True, "message": "Installing", "installing": True}):
+    with patch.object(ollama_supervisor, "install", return_value={"success": True, "message": "Embedded Ollama is already installed", "installed": True}):
         res = client.post("/api/v1/ollama/install")
         assert res.status_code == 200
         data = res.json()
         assert data["success"] is True
-        assert data["installing"] is True
+        assert data["installed"] is True
+
+
+def test_embedded_binary_discovery_in_engine_dir(tmp_path):
+    supervisor = OllamaSupervisor(engine_dir=tmp_path)
+    # Test not installed initially
+    assert supervisor.get_binary_path() is None
+    assert supervisor.is_installed() is False
+
+    # Simulate embedded binary in isolated engine dir
+    mock_bin = supervisor.ollama_dir / ("ollama.exe" if os.name == "nt" else "ollama")
+    mock_bin.parent.mkdir(parents=True, exist_ok=True)
+    mock_bin.write_text("mock binary", encoding="utf-8")
+
+    assert supervisor.get_binary_path() == mock_bin
+    assert supervisor.is_installed() is True

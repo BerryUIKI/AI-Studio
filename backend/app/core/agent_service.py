@@ -190,6 +190,17 @@ class AgentService:
         llm_client = self._get_llm_client()
         if llm_client:
             try:
+                # If using local Ollama, ensure embedded daemon is running
+                if llm_client.config.provider == "ollama" and "11434" in llm_client.config.base_url:
+                    from app.runtime.ollama_supervisor import ollama_supervisor
+                    if ollama_supervisor.is_installed() and not (await ollama_supervisor.check_health()):
+                        ollama_supervisor.start()
+                        import asyncio
+                        for _ in range(10):
+                            await asyncio.sleep(0.3)
+                            if await ollama_supervisor.check_health():
+                                break
+
                 llm_response = await self._process_with_llm(req, conv_id, history, llm_client)
                 if llm_response:
                     return llm_response

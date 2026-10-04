@@ -144,8 +144,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     setup_no_proxy()
     logger.info("Berry AI Studio API starting up...")
+    
+    # Auto-start embedded Ollama if installed in isolated app engine directory
+    try:
+        if ollama_supervisor.is_installed() and not ollama_supervisor.is_running():
+            logger.info("Detected installed embedded Ollama runtime, auto-starting...")
+            ollama_supervisor.start()
+    except Exception as e:
+        logger.warning(f"Failed to auto-start embedded Ollama: {e}")
+
     yield
+
     logger.info("Berry AI Studio API shutting down...")
+    try:
+        if ollama_supervisor.is_running():
+            logger.info("Stopping embedded Ollama process...")
+            ollama_supervisor.stop()
+    except Exception as e:
+        logger.debug(f"Error stopping Ollama on shutdown: {e}")
 
 
 setup_logging()

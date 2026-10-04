@@ -61,11 +61,14 @@ class OllamaSupervisor:
 
     def get_binary_path(self) -> Optional[Path]:
         """Locate embedded or system Ollama binary without polluting global environment."""
+        app_root = Path(__file__).resolve().parent.parent.parent.parent
         candidates = [
-            # 1. Bundled inside engine directory
+            # 1. Bundled inside distribution app directory runtime/ollama
+            app_root / "runtime" / "ollama" / "ollama.exe" if sys.platform == "win32" else app_root / "runtime" / "ollama" / "ollama",
+            # 2. Bundled inside isolated engine directory
             self.ollama_dir / "ollama.exe" if sys.platform == "win32" else self.ollama_dir / "ollama",
             self.ollama_dir / "bin" / "ollama.exe" if sys.platform == "win32" else self.ollama_dir / "bin" / "ollama",
-            # 2. Local app data program install
+            # 3. Local app data program install (isolated to user profile)
             Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe" if sys.platform == "win32" else None,
         ]
 
@@ -73,7 +76,7 @@ class OllamaSupervisor:
             if cand and cand.is_file():
                 return cand
 
-        # 3. System PATH check
+        # 4. System PATH check
         sys_cmd = shutil.which("ollama")
         if sys_cmd:
             return Path(sys_cmd)
@@ -234,44 +237,29 @@ class OllamaSupervisor:
         return {"success": True, "message": f"Ollama process {pid} stopped"}
 
     def install(self) -> Dict[str, Any]:
-        """Attempt to install Ollama runtime on the host system."""
+        """Provide automated or direct download instructions for the embedded Ollama runtime without polluting host global environment."""
         if self.is_installed():
             return {
                 "success": True,
-                "message": "Ollama is already installed",
+                "message": "Embedded Ollama is already installed and ready.",
                 "installed": True,
             }
 
+        target_dir = str(self.ollama_dir)
         if sys.platform == "win32":
-            winget_cmd = shutil.which("winget")
-            if winget_cmd:
-                try:
-                    subprocess.Popen(
-                        [winget_cmd, "install", "Ollama.Ollama", "--accept-source-agreements", "--accept-package-agreements", "--silent"],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                    )
-                    return {
-                        "success": True,
-                        "message": "Installing Ollama in background via winget. Please wait 1-2 minutes.",
-                        "installing": True,
-                        "method": "winget",
-                    }
-                except Exception as e:
-                    logger.warning(f"winget installation failed: {e}")
-
             return {
-                "success": False,
-                "message": "Please install Ollama from https://ollama.com",
-                "installing": False,
+                "success": True,
+                "message": f"Place ollama.exe into the isolated runtime directory: {target_dir} or install Ollama for Windows.",
+                "target_dir": target_dir,
+                "installed": False,
                 "download_url": "https://ollama.com/download/windows",
             }
         else:
             return {
-                "success": False,
-                "message": "Please install Ollama via: curl -fsSL https://ollama.com/install.sh | sh",
-                "installing": False,
+                "success": True,
+                "message": f"Place ollama into the isolated directory: {target_dir}",
+                "target_dir": target_dir,
+                "installed": False,
                 "download_url": "https://ollama.com",
             }
 
@@ -280,7 +268,7 @@ class OllamaSupervisor:
         if not self.is_installed():
             yield {
                 "status": "error",
-                "error": "Ollama is not installed. Please install Ollama from https://ollama.com first.",
+                "error": f"Embedded Ollama binary not found. Please place ollama into {self.ollama_dir} or install Ollama locally.",
                 "code": "NOT_INSTALLED",
             }
             return
