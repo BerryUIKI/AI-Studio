@@ -156,6 +156,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_no_proxy()
     logger.info("Berry AI Studio API starting up...")
     
+    # Startup reconciliation: reconcile orphan cache entries whose assets are missing
+    try:
+        await cache_store.reconcile_orphan_references_async()
+    except Exception as e:
+        logger.warning(f"Failed to reconcile cache output references on startup: {e}")
+
     # Auto-start embedded llama-server if installed in isolated app engine directory
     try:
         if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
