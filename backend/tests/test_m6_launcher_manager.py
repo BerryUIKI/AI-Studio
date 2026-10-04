@@ -100,7 +100,7 @@ def test_manager_shutdown_guards_active_tasks(client):
 
 @pytest.mark.asyncio
 async def test_engine_update_active_tasks_guard():
-    """L12: Engine update must abort if active jobs are running."""
+    """L12: Engine update must abort if active jobs are running (workflow or creative)."""
     fake_run_id = "test-update-active"
     active_cancellations[fake_run_id] = asyncio.Event()
 
@@ -114,6 +114,37 @@ async def test_engine_update_active_tasks_guard():
         assert "active generation tasks" in manifest.error_message
     finally:
         active_cancellations.pop(fake_run_id, None)
+
+
+@pytest.mark.asyncio
+async def test_engine_update_creative_task_guard():
+    """L12 / F14: Engine update must abort if an active canvas creative task is registered."""
+    from app.core.task_registry import task_registry
+
+    task_id = "disposable-creative-task-123"
+    task_registry.register_task(task_id, task_type="creative_action")
+
+    installer = IsolatedEngineInstaller()
+    try:
+        manifest = await installer.update_engine(EngineType.COMFYUI)
+        assert manifest.status == EngineUpdateStatus.FAILED
+        assert "active generation tasks" in manifest.error_message
+    finally:
+        task_registry.unregister_task(task_id)
+
+
+@pytest.mark.asyncio
+async def test_engine_update_exclusive_lease_lock():
+    """F14: Exclusive update lease rejects concurrent update attempts."""
+    from app.core.task_registry import task_registry
+
+    lock = task_registry.get_update_lock("comfyui")
+    installer = IsolatedEngineInstaller()
+
+    async with lock:
+        manifest = await installer.update_engine(EngineType.COMFYUI)
+        assert manifest.status == EngineUpdateStatus.FAILED
+        assert "already held" in manifest.error_message
 
 
 @pytest.mark.asyncio

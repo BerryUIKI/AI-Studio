@@ -41,6 +41,7 @@ from app.schemas.workflow_analysis import (
     WorkflowRepairResult,
 )
 from app.core.session import session_manager, ALLOWED_ORIGINS
+from app.core.task_registry import task_registry
 from app.core.media_validator import (
     validate_and_inspect_media,
     sanitize_filename,
@@ -482,10 +483,16 @@ async def get_engine_update_manifest(engine_type: EngineType) -> EngineUpdateMan
 @app.post("/api/v1/runtime/{engine_type}/update", response_model=EngineUpdateManifest)
 async def trigger_engine_update(engine_type: EngineType) -> EngineUpdateManifest:
     """
-    Safely update a managed engine with active job checking and rollback protection (L08, L12).
+    Safely update a managed engine with active job checking, exclusive lease, and rollback protection (L08, L12).
     """
-    has_active = len(active_cancellations) > 0
-    return await installer.update_engine(engine_type, has_active_tasks_fn=lambda: has_active)
+    def _is_busy() -> bool:
+        return (
+            len(active_cancellations) > 0
+            or len(creative_runner.active_tasks) > 0
+            or task_registry.has_active_tasks()
+        )
+
+    return await installer.update_engine(engine_type, has_active_tasks_fn=_is_busy)
 
 
 @app.get("/api/v1/updates/check")
@@ -1223,6 +1230,12 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
     # Register cancellation token
     cancel_event = asyncio.Event()
     active_cancellations[run_id] = cancel_event
+    task_registry.register_task(
+        task_id=run_id,
+        task_type="workflow_graph",
+        cancel_event=cancel_event,
+        metadata={"target_node": target_node},
+    )
 
     try:
         resolver = DAGResolver(graph)
@@ -1231,11 +1244,13 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
         await websocket.send_text(json.dumps({"type": "ERROR", "message": str(e), "run_id": run_id}))
         await websocket.close()
         active_cancellations.pop(run_id, None)
+        task_registry.unregister_task(run_id)
         return
     except ValueError as e:
         await websocket.send_text(json.dumps({"type": "ERROR", "message": str(e), "run_id": run_id}))
         await websocket.close()
         active_cancellations.pop(run_id, None)
+        task_registry.unregister_task(run_id)
         return
 
     # Check cache status for active nodes
@@ -1373,6 +1388,7 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
         cancel_event.set()
     finally:
         active_cancellations.pop(run_id, None)
+        task_registry.unregister_task(run_id)
         try:
             await websocket.close()
         except Exception:
