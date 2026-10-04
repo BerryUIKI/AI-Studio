@@ -87,3 +87,20 @@ def test_api_comfy_models_endpoint():
     data = resp.json()
     assert "checkpoints" in data
     assert "loras" in data
+
+
+@pytest.mark.asyncio
+async def test_comfy_poll_history_connection_fail_fast():
+    """Verify poll_history_outputs fails fast when ComfyUI encounters repeated connection failures."""
+    c = ComfyUIClient(host="127.0.0.1", port=8188)
+
+    with patch.object(
+        c,
+        "get_history",
+        new_callable=AsyncMock,
+        side_effect=httpx.ConnectError("Connection refused by host"),
+    ):
+        with pytest.raises(RuntimeError) as exc_info:
+            await c.poll_history_outputs(prompt_id="test_prompt_fail", max_wait=10.0, interval=0.01)
+
+        assert "ComfyUI server unreachable or crashed" in str(exc_info.value)

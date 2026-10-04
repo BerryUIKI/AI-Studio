@@ -132,11 +132,16 @@ class ComfyUIClient:
     ) -> List[Dict[str, Any]]:
         """
         Poll /history/{prompt_id} until completion, returning actual image output metadata.
+        Fails fast if connection is refused or consecutive network errors occur.
         """
         elapsed = 0.0
+        consecutive_connection_failures = 0
+        max_consecutive_failures = 5
+
         while elapsed < max_wait:
             try:
                 history_data = await self.get_history(prompt_id)
+                consecutive_connection_failures = 0
                 if prompt_id in history_data:
                     prompt_record = history_data[prompt_id]
                     status_info = prompt_record.get("status", {})
@@ -151,8 +156,32 @@ class ComfyUIClient:
                             images.extend(node_output["images"])
                     if images:
                         return images
+            except (httpx.ConnectError, httpx.ConnectTimeout, ConnectionRefusedError) as net_err:
+                consecutive_connection_failures += 1
+                logger.warning(
+                    "ComfyUI connection error during polling (%d/%d): %s",
+                    consecutive_connection_failures,
+                    max_consecutive_failures,
+                    net_err,
+                )
+                if consecutive_connection_failures >= max_consecutive_failures:
+                    raise RuntimeError(
+                        f"ComfyUI server unreachable or crashed during execution of {prompt_id}: {net_err}"
+                    ) from net_err
+            except httpx.HTTPStatusError as http_err:
+                if http_err.response.status_code >= 500:
+                    consecutive_connection_failures += 1
+                    if consecutive_connection_failures >= max_consecutive_failures:
+                        raise RuntimeError(
+                            f"ComfyUI server error ({http_err.response.status_code}) during execution: {http_err}"
+                        ) from http_err
+                elif http_err.response.status_code == 404:
+                    # 404 on history is common before execution finishes, reset counter
+                    consecutive_connection_failures = 0
+                else:
+                    raise
             except Exception as err:
-                if "ComfyUI execution error" in str(err):
+                if "ComfyUI execution error" in str(err) or "ComfyUI server" in str(err):
                     raise
                 logger.debug("Polling history for %s: %s", prompt_id, err)
 
