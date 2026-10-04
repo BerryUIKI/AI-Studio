@@ -74,6 +74,37 @@ def test_deterministic_hashing():
     assert h1 != h3
 
 
+def test_semantic_node_hash_provider_identity():
+    from app.core.cache import compute_semantic_node_hash
+    from app.runners.creative_runner import compute_creative_cache_hash
+    from app.schemas.creative import CreativeActionRequest, CreativeActionType
+
+    bindings = [("prompt", "upstream_hash_1", "text")]
+    base_params = {"model": "flux-schnell", "steps": 4}
+
+    # Different provider_id must yield different hash (Invariant #5)
+    h_fal = compute_semantic_node_hash("image.generate", base_params, bindings, provider_id="fal_ai")
+    h_sf = compute_semantic_node_hash("image.generate", base_params, bindings, provider_id="siliconflow")
+    assert h_fal != h_sf
+
+    # Creative cache hash must also differentiate between providers
+    req1 = CreativeActionRequest(
+        action=CreativeActionType.TXT2IMG,
+        prompt="neon cat",
+        model="flux-schnell",
+        engine_id="fal_ai",
+        seed=42,
+    )
+    req2 = CreativeActionRequest(
+        action=CreativeActionType.TXT2IMG,
+        prompt="neon cat",
+        model="flux-schnell",
+        engine_id="siliconflow",
+        seed=42,
+    )
+    assert compute_creative_cache_hash(req1) != compute_creative_cache_hash(req2)
+
+
 def test_workflow_plan_endpoint():
     cache_store.clear()
     graph = {
