@@ -116,7 +116,8 @@ class EngineManager:
     async def test_engine_connection(self, connection: EngineConnection) -> EngineConnection:
         """Probe engine endpoint and update status and capabilities."""
         endpoint = connection.endpoint_url
-        async with httpx.AsyncClient(timeout=4.0) as client:
+        is_local = "127.0.0.1" in endpoint or "localhost" in endpoint
+        async with httpx.AsyncClient(timeout=4.0, trust_env=not is_local) as client:
             try:
                 if connection.engine_type == EngineType.COMFYUI:
                     # Query /system_stats

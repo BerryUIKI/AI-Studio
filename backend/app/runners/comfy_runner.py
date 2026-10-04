@@ -38,9 +38,10 @@ class ComfyUIClient:
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        """Reuse long-lived pooled client to prevent socket exhaustion."""
+        """Reuse long-lived pooled client to prevent socket exhaustion, bypassing proxy for local host."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=self.timeout)
+            is_local = self.host in ("127.0.0.1", "localhost", "0.0.0.0")
+            self._client = httpx.AsyncClient(timeout=self.timeout, trust_env=not is_local)
         return self._client
 
     async def aclose(self) -> None:
