@@ -273,6 +273,7 @@ class EngineManager:
         else:
             # Common Windows candidate paths
             user_profile = os.environ.get("USERPROFILE")
+            local_appdata = os.environ.get("LOCALAPPDATA")
             if user_profile:
                 up = Path(user_profile)
                 candidates.extend([
@@ -280,6 +281,13 @@ class EngineManager:
                     up / "Desktop" / "ComfyUI",
                     up / "stable-diffusion-webui",
                     up / "Desktop" / "stable-diffusion-webui",
+                ])
+            if local_appdata:
+                lap = Path(local_appdata)
+                candidates.extend([
+                    lap / "Comfy-Desktop" / "ComfyUI-Installs" / "ComfyUI" / "ComfyUI",
+                    lap / "Comfy-Desktop" / "ComfyUI-Installs" / "ComfyUI",
+                    lap / "Programs" / "ComfyUI",
                 ])
             # Check drive roots (C:, D:, E:)
             for drive in ["C:\\", "D:\\", "E:\\"]:

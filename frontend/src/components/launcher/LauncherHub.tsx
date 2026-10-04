@@ -17,6 +17,7 @@ export interface LauncherHubProps {
   onOpenAgent?: () => void;
   onDeployEngine?: (instance: EngineInstance) => void;
   onLaunchFailed?: (instance: EngineInstance, error: string) => void;
+  onOpenSetupWizard?: () => void;
   // Legacy props kept for backward-compatibility
   comfyOnline?: boolean;
   comfyRunning?: boolean;
@@ -35,6 +36,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
   onOpenAgent,
   onDeployEngine,
   onLaunchFailed,
+  onOpenSetupWizard,
 }) => {
   const {
     instances,
@@ -65,9 +67,19 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
     <div className="flex flex-col w-full h-full overflow-y-auto bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100 p-8 select-none">
       {/* Brand Hero Header */}
       <div className="flex flex-col items-center justify-center pt-8 pb-10 text-center max-w-2xl mx-auto">
-        <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium mb-4">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Berry AI Studio Launcher Hub</span>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Berry AI Studio Launcher Hub</span>
+          </div>
+          {onOpenSetupWizard && (
+            <button
+              onClick={onOpenSetupWizard}
+              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm"
+            >
+              <span>⚡ 系统硬件体检与本地模型部署</span>
+            </button>
+          )}
         </div>
         <h1 className="text-4xl font-extrabold tracking-tight text-white mb-3">
           Creative Hub & Workspaces

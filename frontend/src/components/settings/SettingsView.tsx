@@ -13,6 +13,7 @@ import {
   Loader2,
   CheckCircle2,
   XCircle,
+  Sparkles,
 } from 'lucide-react';
 import {
   useSettingsStore,
@@ -228,6 +229,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <p className="text-xs text-slate-400 mt-0.5">
                   为右侧常驻 AI Agents 赋予真正的大语言模型推理与自主规划能力，优先支持本地私有化部署（Ollama / vLLM / LocalAI），亦支持云端商用模型。
                 </p>
+              </div>
+
+              {/* Quick Setup Wizard Banner */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-900/40 via-purple-900/30 to-slate-900/50 border border-indigo-500/30 flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>系统配置体检与本地模型一键部署向导</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-300 mt-0.5">
+                    全自动检测您的 NVIDIA 显卡显存、主机内存与磁盘，快速一键部署并下载 Qwen2.5 / DeepSeek-R1 本地大模型。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const evt = new CustomEvent('open-setup-wizard');
+                    window.dispatchEvent(evt);
+                  }}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-xl shadow-md transition hover:scale-105 active:scale-95 shrink-0 ml-3"
+                >
+                  打开部署向导
+                </button>
               </div>
 
               {/* Provider Selection */}

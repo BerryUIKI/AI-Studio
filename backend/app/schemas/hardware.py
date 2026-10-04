@@ -38,6 +38,9 @@ class HardwareReadiness(BaseModel):
     summary_message: str
     guidance_notes: List[str] = Field(default_factory=list)
     status_classification: str = "verified"  # verified, experimental, cloud_recommended
+    ram_total_mb: int = 16384
+    ram_avail_mb: int = 8192
+    recommended_llm_models: List[str] = Field(default_factory=list)
 
 
 class GpuProcessInfo(BaseModel):

@@ -347,6 +347,20 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
     if not model_storage.is_sufficient:
         guidance.append(f"Low model storage space: {model_storage.free_gb}GB available on {model_storage.path} (15GB recommended).")
 
+    from app.runtime.hardware_evaluator import get_system_ram_mb
+    ram_total_mb, ram_avail_mb = await asyncio.to_thread(get_system_ram_mb)
+
+    rec_llms: List[str] = []
+    primary_vram = gpus[0].vram_total_mb if gpus else 0
+    if primary_vram >= 15000:
+        rec_llms = ["qwen2.5:14b", "qwen2.5:7b", "deepseek-r1:14b", "llama3.1:8b"]
+    elif primary_vram >= 7000:
+        rec_llms = ["qwen2.5:7b", "deepseek-r1:8b", "llama3.2:3b", "gemma2:9b"]
+    elif primary_vram >= 4000:
+        rec_llms = ["qwen2.5:3b", "llama3.2:3b", "qwen2.5:1.5b"]
+    else:
+        rec_llms = ["qwen2.5:1.5b", "llama3.2:1b"]
+
     return HardwareReadiness(
         has_nvidia_gpu=has_nvidia,
         has_discrete_gpu=has_discrete,
@@ -360,6 +374,9 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
         summary_message=summary,
         guidance_notes=guidance,
         status_classification=status if has_discrete else "cloud_recommended",
+        ram_total_mb=ram_total_mb,
+        ram_avail_mb=ram_avail_mb,
+        recommended_llm_models=rec_llms,
     )
 
 

@@ -17,6 +17,7 @@ import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
 import { EngineConfigModal } from './components/launcher/EngineConfigModal';
 import { EngineLogViewer } from './components/launcher/EngineLogViewer';
 import { EngineNotInstalledModal } from './components/launcher/EngineNotInstalledModal';
+import { SetupWizardModal } from './components/launcher/SetupWizardModal';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
 import { ModelHubView } from './components/hub/ModelHubView';
@@ -49,6 +50,7 @@ export default function App() {
   const [notInstalledTarget, setNotInstalledTarget] = useState<EngineInstance | null>(null);
   const [notInstalledError, setNotInstalledError] = useState<string | null>(null);
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
+  const [showSetupWizard, setShowSetupWizard] = useState<boolean>(false);
 
   const { instances, fetchInstances } = useEngineStore();
   const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore();
@@ -116,9 +118,13 @@ export default function App() {
     handleHash();
     window.addEventListener('hashchange', handleHash);
 
+    const handleOpenWizard = () => setShowSetupWizard(true);
+    window.addEventListener('open-setup-wizard', handleOpenWizard);
+
     const interval = setInterval(refreshStatus, 8000);
     return () => {
       window.removeEventListener('hashchange', handleHash);
+      window.removeEventListener('open-setup-wizard', handleOpenWizard);
       clearInterval(interval);
     };
   }, []);
@@ -305,6 +311,7 @@ export default function App() {
                 onOpenAgent={() => setShowAgentPanel(true)}
                 onDeployEngine={(inst) => handlePromptDeployment(inst)}
                 onLaunchFailed={(inst, err) => handlePromptDeployment(inst, err)}
+                onOpenSetupWizard={() => setShowSetupWizard(true)}
               />
             ),
             canvas: (
@@ -393,6 +400,14 @@ export default function App() {
         }}
         onDeploy={(type) => handleStartDeployment(type)}
         onLocate={(type) => handleLocateExisting(type)}
+      />
+      <SetupWizardModal
+        isOpen={showSetupWizard}
+        onClose={() => setShowSetupWizard(false)}
+        onNavigateToAgent={() => {
+          setShowSetupWizard(false);
+          setShowAgentPanel(true);
+        }}
       />
       <EngineConfigModal
         isOpen={!!selectedConfigInstance}

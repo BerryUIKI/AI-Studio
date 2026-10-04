@@ -41,6 +41,7 @@ from app.schemas.workflow_analysis import (
 )
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
+from app.runtime.ollama_supervisor import ollama_supervisor, OllamaRuntimeStatus
 from app.runtime.engine_manager import engine_manager
 from app.runtime.hardware import check_hardware_readiness, get_gpu_stats
 from app.runtime.installer import installer, mirror_manager
@@ -845,6 +846,44 @@ async def set_agent_llm_config(req: SetLLMConfigRequest) -> LLMConfig:
 async def test_agent_llm_endpoint(config: Optional[LLMConfig] = None) -> TestKeyResult:
     """Test connectivity to configured LLM endpoint (Ollama local / remote API)."""
     return await credentials_manager.test_llm_connection(config)
+
+
+# ---------------------------------------------------------------------------
+# Embedded Ollama Runtime & Model Pull Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/ollama/status", response_model=OllamaRuntimeStatus)
+async def get_ollama_runtime_status() -> OllamaRuntimeStatus:
+    """Get active status of the embedded or system Ollama runtime."""
+    return await ollama_supervisor.get_status()
+
+
+@app.post("/api/v1/ollama/start")
+async def start_ollama_runtime() -> Dict[str, Any]:
+    """Start embedded Ollama process."""
+    return ollama_supervisor.start()
+
+
+@app.post("/api/v1/ollama/stop")
+async def stop_ollama_runtime() -> Dict[str, Any]:
+    """Stop embedded Ollama process."""
+    return ollama_supervisor.stop()
+
+
+class OllamaPullModelRequest(BaseModel):
+    model_name: str
+
+
+@app.post("/api/v1/ollama/pull")
+async def pull_ollama_model(req: OllamaPullModelRequest):
+    """Pull local LLM model from Ollama library."""
+    from fastapi.responses import StreamingResponse
+
+    async def event_generator():
+        async for chunk in ollama_supervisor.pull_model_stream(req.model_name):
+            yield json.dumps(chunk) + "\n"
+
+    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 @app.get("/api/v1/nodes", response_model=List[NodeDefinition])
