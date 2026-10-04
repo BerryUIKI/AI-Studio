@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.core.cache import cache_store
+from app.core.task_registry import task_registry
 from app.runners.api_runner import (
     _call_fal_ai,
     _call_fal_ai_action,
@@ -233,6 +234,12 @@ class CreativeRunner:
             "start_time": time.time(),
         }
         self.active_cancellations[task_id] = cancel_event
+        task_registry.register_task(
+            task_id=task_id,
+            task_type="creative_action",
+            cancel_event=cancel_event,
+            metadata={"action": req.action.value, "engine": req.engine_id, "start_time": time.time()},
+        )
 
         # Dispatch based on engine
         try:
@@ -338,6 +345,7 @@ class CreativeRunner:
         finally:
             self.active_tasks.pop(task_id, None)
             self.active_cancellations.pop(task_id, None)
+            task_registry.unregister_task(task_id)
 
     async def _run_comfy(
         self,

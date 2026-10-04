@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from app.core.task_registry import task_registry
 from app.runtime.supervisor import get_default_engine_dir
 from app.schemas.engine import (
     EngineInstallManifest,
@@ -247,111 +248,151 @@ class IsolatedEngineInstaller:
         4. Install updated requirements into isolated venv
         5. On failure, rollback to previous commit
         """
-        # Guard: active jobs
-        if has_active_tasks_fn and has_active_tasks_fn():
+        engine_key = engine_type.value
+        update_lock = task_registry.get_update_lock(engine_key)
+
+        # Acquire exclusive update lease for this engine
+        if update_lock.locked():
             manifest = self.read_update_manifest(engine_type)
             manifest.status = EngineUpdateStatus.FAILED
-            manifest.error_message = "Cannot update engine while active generation tasks are running."
+            manifest.error_message = f"An update lease is already held for {engine_type.value}."
             self.write_update_manifest(manifest)
             return manifest
 
-        manifest = EngineUpdateManifest(
-            engine_type=engine_type,
-            status=EngineUpdateStatus.CHECKING,
-            updated_at=datetime.now(timezone.utc).isoformat(),
-        )
-        self.write_update_manifest(manifest)
+        async with update_lock:
+            # Guard: active jobs recheck under exclusive lease
+            if (has_active_tasks_fn and has_active_tasks_fn()) or task_registry.has_active_tasks():
+                manifest = self.read_update_manifest(engine_type)
+                manifest.status = EngineUpdateStatus.FAILED
+                manifest.error_message = "Cannot update engine while active generation tasks are running."
+                self.write_update_manifest(manifest)
+                return manifest
 
-        engine_target = self.engine_dir / ("comfyui" if engine_type == EngineType.COMFYUI else "webui")
-        runtime_target = self.engine_dir / ("runtime" if engine_type == EngineType.COMFYUI else "webui_runtime")
-
-        if not engine_target.is_dir() or not (engine_target / ".git").is_dir():
-            manifest.status = EngineUpdateStatus.FAILED
-            manifest.error_message = f"Engine directory {engine_target} is not a valid git repository or not installed."
-            self.write_update_manifest(manifest)
-            return manifest
-
-        previous_commit: Optional[str] = None
-        try:
-            # Step 1: Capture previous commit hash
-            rev_proc = await asyncio.create_subprocess_exec(
-                "git", "rev-parse", "HEAD",
-                cwd=str(engine_target),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+            manifest = EngineUpdateManifest(
+                engine_type=engine_type,
+                status=EngineUpdateStatus.CHECKING,
+                updated_at=datetime.now(timezone.utc).isoformat(),
             )
-            rev_out, _ = await rev_proc.communicate()
-            if rev_proc.returncode == 0:
-                previous_commit = rev_out.decode().strip()
-                manifest.previous_commit = previous_commit
-
-            manifest.status = EngineUpdateStatus.UPDATING
             self.write_update_manifest(manifest)
 
-            # Step 2: Fetch and pull latest updates
-            pull_proc = await asyncio.create_subprocess_exec(
-                "git", "pull", "--ff-only",
-                cwd=str(engine_target),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            pull_out, pull_err = await pull_proc.communicate()
-            if pull_proc.returncode != 0:
-                raise RuntimeError(f"Git pull failed: {pull_err.decode(errors='replace').strip()}")
+            engine_target = self.engine_dir / ("comfyui" if engine_type == EngineType.COMFYUI else "webui")
+            runtime_target = self.engine_dir / ("runtime" if engine_type == EngineType.COMFYUI else "webui_runtime")
 
-            # Get new commit hash
-            rev_proc2 = await asyncio.create_subprocess_exec(
-                "git", "rev-parse", "HEAD",
-                cwd=str(engine_target),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            rev_out2, _ = await rev_proc2.communicate()
-            if rev_proc2.returncode == 0:
-                manifest.target_commit = rev_out2.decode().strip()
+            if not engine_target.is_dir() or not (engine_target / ".git").is_dir():
+                manifest.status = EngineUpdateStatus.FAILED
+                manifest.error_message = f"Engine directory {engine_target} is not a valid git repository or not installed."
+                self.write_update_manifest(manifest)
+                return manifest
 
-            # Step 3: Update dependencies in isolated venv
+            previous_commit: Optional[str] = None
+            previous_requirements: Optional[str] = None
             req_file = engine_target / "requirements.txt"
             pip_bin = self._get_pip_bin(runtime_target)
-            if req_file.is_file() and pip_bin.is_file():
-                pip_proc = await asyncio.create_subprocess_exec(
-                    str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file),
+
+            try:
+                # Step 1: Capture previous commit hash & requirements snapshot
+                rev_proc = await asyncio.create_subprocess_exec(
+                    "git", "rev-parse", "HEAD",
                     cwd=str(engine_target),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                _, pip_err = await pip_proc.communicate()
-                if pip_proc.returncode != 0:
-                    raise RuntimeError(f"Pip dependency update failed: {pip_err.decode(errors='replace')[:200]}")
+                rev_out, _ = await rev_proc.communicate()
+                if rev_proc.returncode == 0:
+                    previous_commit = rev_out.decode().strip()
+                    manifest.previous_commit = previous_commit
 
-            manifest.status = EngineUpdateStatus.COMPLETED
-            manifest.error_message = None
-            self.write_update_manifest(manifest)
+                if req_file.is_file():
+                    try:
+                        previous_requirements = req_file.read_text(encoding="utf-8")
+                    except Exception:
+                        pass
 
-        except Exception as e:
-            manifest.status = EngineUpdateStatus.FAILED
-            manifest.error_message = str(e)
+                # Live recheck right before modifying filesystem
+                if (has_active_tasks_fn and has_active_tasks_fn()) or task_registry.has_active_tasks():
+                    manifest.status = EngineUpdateStatus.FAILED
+                    manifest.error_message = "Active tasks started during update preparation. Update aborted."
+                    self.write_update_manifest(manifest)
+                    return manifest
 
-            # Perform rollback if previous commit was captured
-            if previous_commit:
-                try:
-                    logger.info(f"Rolling back {engine_type.value} to previous commit {previous_commit}...")
-                    rollback_proc = await asyncio.create_subprocess_exec(
-                        "git", "checkout", previous_commit,
+                manifest.status = EngineUpdateStatus.UPDATING
+                self.write_update_manifest(manifest)
+
+                # Step 2: Fetch and pull latest updates
+                pull_proc = await asyncio.create_subprocess_exec(
+                    "git", "pull", "--ff-only",
+                    cwd=str(engine_target),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                pull_out, pull_err = await pull_proc.communicate()
+                if pull_proc.returncode != 0:
+                    raise RuntimeError(f"Git pull failed: {pull_err.decode(errors='replace').strip()}")
+
+                # Get new commit hash
+                rev_proc2 = await asyncio.create_subprocess_exec(
+                    "git", "rev-parse", "HEAD",
+                    cwd=str(engine_target),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                rev_out2, _ = await rev_proc2.communicate()
+                if rev_proc2.returncode == 0:
+                    manifest.target_commit = rev_out2.decode().strip()
+
+                # Step 3: Update dependencies in isolated venv
+                if req_file.is_file() and pip_bin.is_file():
+                    pip_proc = await asyncio.create_subprocess_exec(
+                        str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file),
                         cwd=str(engine_target),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
                     )
-                    await rollback_proc.communicate()
-                    if rollback_proc.returncode == 0:
-                        manifest.status = EngineUpdateStatus.ROLLED_BACK
-                        manifest.rollback_performed = True
-                except Exception as rb_err:
-                    logger.error(f"Rollback failed for {engine_type.value}: {rb_err}")
+                    _, pip_err = await pip_proc.communicate()
+                    if pip_proc.returncode != 0:
+                        raise RuntimeError(f"Pip dependency update failed: {pip_err.decode(errors='replace')[:200]}")
 
-            self.write_update_manifest(manifest)
+                manifest.status = EngineUpdateStatus.COMPLETED
+                manifest.error_message = None
+                self.write_update_manifest(manifest)
 
-        return manifest
+            except Exception as e:
+                manifest.status = EngineUpdateStatus.FAILED
+                manifest.error_message = str(e)
+
+                # Perform comprehensive rollback (code and dependencies)
+                if previous_commit:
+                    try:
+                        logger.info(f"Rolling back {engine_type.value} to previous commit {previous_commit}...")
+                        rollback_proc = await asyncio.create_subprocess_exec(
+                            "git", "checkout", previous_commit,
+                            cwd=str(engine_target),
+                            stdout=asyncio.subprocess.PIPE,
+                            stderr=asyncio.subprocess.PIPE,
+                        )
+                        await rollback_proc.communicate()
+                        if rollback_proc.returncode == 0:
+                            # Also restore dependencies to match previous commit
+                            if req_file.is_file() and pip_bin.is_file():
+                                try:
+                                    rb_pip = await asyncio.create_subprocess_exec(
+                                        str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file),
+                                        cwd=str(engine_target),
+                                        stdout=asyncio.subprocess.PIPE,
+                                        stderr=asyncio.subprocess.PIPE,
+                                    )
+                                    await rb_pip.communicate()
+                                except Exception as p_err:
+                                    logger.warning(f"Dependency rollback warning for {engine_type.value}: {p_err}")
+
+                            manifest.status = EngineUpdateStatus.ROLLED_BACK
+                            manifest.rollback_performed = True
+                    except Exception as rb_err:
+                        logger.error(f"Rollback failed for {engine_type.value}: {rb_err}")
+
+                self.write_update_manifest(manifest)
+
+            return manifest
 
 
 class MirrorManager:
