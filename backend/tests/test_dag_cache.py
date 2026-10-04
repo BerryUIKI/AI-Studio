@@ -1,10 +1,11 @@
 """Unit tests for DAG topological sorting, cycle detection, and dirty-check caching."""
 
+import logging
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
 from app.core.dag import DAGResolver, CyclicDependencyError
-from app.core.cache import compute_node_hash, cache_store
+from app.core.cache import compute_node_hash, cache_store, CacheStore
 from app.schemas.workflow import WorkflowEdgeInstance, WorkflowGraph, WorkflowNodeInstance
 
 client = TestClient(app)
@@ -136,3 +137,28 @@ def test_workflow_plan_endpoint():
     assert plan2["cached_nodes_count"] == 1
     assert plan2["steps"][0]["is_cached"] is True
     assert plan2["steps"][1]["is_cached"] is False
+
+
+@pytest.mark.asyncio
+async def test_cache_sqlite_error_logging(caplog):
+    """Verify exceptions during SQLite operations log errors instead of silent suppression."""
+    from unittest.mock import AsyncMock, patch
+
+    broken_manager = AsyncMock()
+    broken_manager.get_connection = AsyncMock(side_effect=RuntimeError("SQLite connection lock failed"))
+
+    failing_cache = CacheStore(manager=broken_manager)
+
+    with caplog.at_level(logging.ERROR):
+        # Test get_async error logging
+        res = await failing_cache.get_async("dummy_hash")
+        assert res is None
+        assert "Cache DB get operation failed: SQLite connection lock failed" in caplog.text
+
+        # Test set_async error logging
+        await failing_cache.set_async("dummy_hash", {"out": "test"})
+        assert "Cache DB set operation failed: SQLite connection lock failed" in caplog.text
+
+        # Test clear_all_async error logging
+        await failing_cache.clear_all_async()
+        assert "Cache DB clear operation failed: SQLite connection lock failed" in caplog.text
