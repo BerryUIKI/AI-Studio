@@ -342,10 +342,8 @@ async def test_siliconflow_video_polling_loop():
 
     mock_client.post = AsyncMock(side_effect=[mock_resp1, mock_resp2])
 
-    with patch("httpx.AsyncClient") as mock_http_cls, \
+    with patch("app.runners.api_runner.get_shared_client", return_value=mock_client), \
          patch("asyncio.sleep", new=AsyncMock()):
-        mock_http_cls.return_value.__aenter__.return_value = mock_client
-
         video_url = await _call_siliconflow_video(
             action="txt2video",
             prompt="cyberpunk drone soaring",

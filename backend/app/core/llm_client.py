@@ -117,6 +117,19 @@ class LLMClient:
 
     def __init__(self, config: Optional[LLMConfig] = None) -> None:
         self.config = config or LLMConfig()
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Reuse long-lived pooled client to prevent connection exhaustion."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=30.0)
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close pooled client on shutdown."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def chat_completion(
         self,
@@ -142,10 +155,10 @@ class LLMClient:
             payload["tools"] = tools
             payload["tool_choice"] = tool_choice
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(chat_url, headers=headers, json=payload)
-            if resp.status_code != 200:
-                raise RuntimeError(
-                    f"LLM request to {chat_url} failed ({resp.status_code}): {resp.text}"
-                )
-            return resp.json()
+        client = self._get_client()
+        resp = await client.post(chat_url, headers=headers, json=payload)
+        if resp.status_code != 200:
+            raise RuntimeError(
+                f"LLM request to {chat_url} failed ({resp.status_code}): {resp.text}"
+            )
+        return resp.json()

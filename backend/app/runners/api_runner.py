@@ -30,6 +30,25 @@ class APIRunnerError(Exception):
     """Raised when a cloud API call fails unrecoverably."""
 
 
+_shared_client: Optional[httpx.AsyncClient] = None
+
+
+def get_shared_client(timeout: float = 120.0) -> httpx.AsyncClient:
+    """Return a shared persistent httpx client to prevent socket exhaustion."""
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(timeout=timeout)
+    return _shared_client
+
+
+async def close_shared_client() -> None:
+    """Close shared HTTP client."""
+    global _shared_client
+    if _shared_client and not _shared_client.is_closed:
+        await _shared_client.aclose()
+        _shared_client = None
+
+
 # ---------------------------------------------------------------------------
 # LLM Execution (OpenAI-compatible)
 # ---------------------------------------------------------------------------
@@ -80,14 +99,14 @@ async def run_llm_node(
 
     try:
         yield NodeProgressEvent(node_id=node_id, progress=0.3, message=f"Waiting for {model} response...")
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{base_url.rstrip('/')}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
+        client = get_shared_client(timeout=60.0)
+        response = await client.post(
+            f"{base_url.rstrip('/')}/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+        )
+        response.raise_for_status()
+        data = response.json()
 
         result_text: str = data["choices"][0]["message"]["content"]
         yield NodeProgressEvent(node_id=node_id, progress=0.95, message="Processing response...")
@@ -186,49 +205,49 @@ async def _call_fal_ai(model: str, prompt: str, width: int, height: int, api_key
     model_id = "fal-ai/flux/schnell" if model == "flux-schnell" else "fal-ai/flux/dev"
     if not api_key:
         raise APIRunnerError("FAL_KEY / IMAGE_API_KEY not set for Fal.ai")
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            f"https://fal.run/{model_id}",
-            headers={"Authorization": f"Key {api_key}", "Content-Type": "application/json"},
-            json={"prompt": prompt, "image_size": {"width": width, "height": height}},
-        )
-        response.raise_for_status()
-        data = response.json()
-        images = data.get("images", [])
-        return images[0]["url"] if images else None
+    client = get_shared_client(timeout=120.0)
+    response = await client.post(
+        f"https://fal.run/{model_id}",
+        headers={"Authorization": f"Key {api_key}", "Content-Type": "application/json"},
+        json={"prompt": prompt, "image_size": {"width": width, "height": height}},
+    )
+    response.raise_for_status()
+    data = response.json()
+    images = data.get("images", [])
+    return images[0]["url"] if images else None
 
 
 async def _call_openai_images(prompt: str, api_key: str) -> str | None:
     if not api_key:
         raise APIRunnerError("OPENAI_API_KEY not set for DALL-E")
-    async with httpx.AsyncClient(timeout=90.0) as client:
-        response = await client.post(
-            "https://api.openai.com/v1/images/generations",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "dall-e-3", "prompt": prompt, "n": 1, "size": "1024x1024"},
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["data"][0]["url"] if data.get("data") else None
+    client = get_shared_client(timeout=90.0)
+    response = await client.post(
+        "https://api.openai.com/v1/images/generations",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"model": "dall-e-3", "prompt": prompt, "n": 1, "size": "1024x1024"},
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["data"][0]["url"] if data.get("data") else None
 
 
 async def _call_siliconflow(prompt: str, width: int, height: int, api_key: str) -> str | None:
     if not api_key:
         raise APIRunnerError("SILICONFLOW_API_KEY / IMAGE_API_KEY not set for SiliconFlow")
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        response = await client.post(
-            "https://api.siliconflow.cn/v1/images/generations",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": "stabilityai/stable-diffusion-xl-base-1.0",
-                "prompt": prompt,
-                "n": 1,
-                "size": f"{width}x{height}",
-            },
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["data"][0]["url"] if data.get("data") else None
+    client = get_shared_client(timeout=120.0)
+    response = await client.post(
+        "https://api.siliconflow.cn/v1/images/generations",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={
+            "model": "stabilityai/stable-diffusion-xl-base-1.0",
+            "prompt": prompt,
+            "n": 1,
+            "size": f"{width}x{height}",
+        },
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["data"][0]["url"] if data.get("data") else None
 
 
 async def _call_openai_inpaint(
@@ -236,25 +255,25 @@ async def _call_openai_inpaint(
 ) -> str | None:
     if not api_key:
         raise APIRunnerError("OPENAI_API_KEY not set for OpenAI inpainting")
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        files = {
-            "image": ("image.png", image_bytes, "image/png"),
-            "mask": ("mask.png", mask_bytes, "image/png"),
-        }
-        data = {
-            "prompt": prompt,
-            "n": 1,
-            "size": "1024x1024",
-        }
-        response = await client.post(
-            "https://api.openai.com/v1/images/edits",
-            headers={"Authorization": f"Bearer {api_key}"},
-            files=files,
-            data=data,
-        )
-        response.raise_for_status()
-        resp_data = response.json()
-        return resp_data["data"][0]["url"] if resp_data.get("data") else None
+    client = get_shared_client(timeout=120.0)
+    files = {
+        "image": ("image.png", image_bytes, "image/png"),
+        "mask": ("mask.png", mask_bytes, "image/png"),
+    }
+    data = {
+        "prompt": prompt,
+        "n": 1,
+        "size": "1024x1024",
+    }
+    response = await client.post(
+        "https://api.openai.com/v1/images/edits",
+        headers={"Authorization": f"Bearer {api_key}"},
+        files=files,
+        data=data,
+    )
+    response.raise_for_status()
+    resp_data = response.json()
+    return resp_data["data"][0]["url"] if resp_data.get("data") else None
 
 
 async def _call_fal_ai_action(
@@ -272,45 +291,44 @@ async def _call_fal_ai_action(
         raise APIRunnerError("FAL_KEY / IMAGE_API_KEY not set for Fal.ai")
 
     headers = {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
+    client = get_shared_client(timeout=120.0)
+    if action == "inpaint":
+        if not image_b64 or not mask_b64:
+            raise ValueError("Image and mask required for Fal.ai inpainting")
+        endpoint = "https://fal.run/fal-ai/flux-general/inpainting"
+        payload = {
+            "prompt": prompt,
+            "image_url": f"data:image/png;base64,{image_b64}",
+            "mask_url": f"data:image/png;base64,{mask_b64}",
+        }
+    elif action == "upscale":
+        if not image_b64:
+            raise ValueError("Image required for Fal.ai upscaling")
+        endpoint = "https://fal.run/fal-ai/clarity-upscaler"
+        payload = {
+            "image_url": f"data:image/png;base64,{image_b64}",
+            "scale": int(upscale_factor),
+        }
+    elif action == "img2img":
+        if not image_b64:
+            raise ValueError("Image required for Fal.ai img2img")
+        endpoint = "https://fal.run/fal-ai/flux/dev/image-to-image"
+        payload = {
+            "prompt": prompt,
+            "image_url": f"data:image/png;base64,{image_b64}",
+            "strength": max(0.1, min(1.0, 1.0 - denoise)),
+        }
+    else:
+        endpoint = "https://fal.run/fal-ai/flux/schnell"
+        payload = {"prompt": prompt, "image_size": {"width": width, "height": height}}
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        if action == "inpaint":
-            if not image_b64 or not mask_b64:
-                raise ValueError("Image and mask required for Fal.ai inpainting")
-            endpoint = "https://fal.run/fal-ai/flux-general/inpainting"
-            payload = {
-                "prompt": prompt,
-                "image_url": f"data:image/png;base64,{image_b64}",
-                "mask_url": f"data:image/png;base64,{mask_b64}",
-            }
-        elif action == "upscale":
-            if not image_b64:
-                raise ValueError("Image required for Fal.ai upscaling")
-            endpoint = "https://fal.run/fal-ai/clarity-upscaler"
-            payload = {
-                "image_url": f"data:image/png;base64,{image_b64}",
-                "scale": int(upscale_factor),
-            }
-        elif action == "img2img":
-            if not image_b64:
-                raise ValueError("Image required for Fal.ai img2img")
-            endpoint = "https://fal.run/fal-ai/flux/dev/image-to-image"
-            payload = {
-                "prompt": prompt,
-                "image_url": f"data:image/png;base64,{image_b64}",
-                "strength": max(0.1, min(1.0, 1.0 - denoise)),
-            }
-        else:
-            endpoint = "https://fal.run/fal-ai/flux/schnell"
-            payload = {"prompt": prompt, "image_size": {"width": width, "height": height}}
-
-        response = await client.post(endpoint, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        if "image" in data and isinstance(data["image"], dict):
-            return data["image"].get("url")
-        images = data.get("images", [])
-        return images[0]["url"] if images else None
+    response = await client.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    data = response.json()
+    if "image" in data and isinstance(data["image"], dict):
+        return data["image"].get("url")
+    images = data.get("images", [])
+    return images[0]["url"] if images else None
 
 
 async def _call_fal_ai_video(
@@ -327,33 +345,32 @@ async def _call_fal_ai_video(
         raise APIRunnerError("FAL_KEY / IMAGE_API_KEY not set for Fal.ai video")
 
     headers = {"Authorization": f"Key {api_key}", "Content-Type": "application/json"}
+    client = get_shared_client(timeout=180.0)
+    if action == "img2video":
+        if not image_b64:
+            raise ValueError("Source image required for Fal.ai img2video")
+        endpoint = "https://fal.run/fal-ai/fast-svd/image-to-video"
+        payload = {
+            "image_url": f"data:image/png;base64,{image_b64}",
+            "motion_bucket_id": motion_bucket_id,
+            "fps": fps,
+            "cond_aug": 0.02,
+            "steps": 25,
+        }
+    else:  # txt2video
+        endpoint = "https://fal.run/fal-ai/luma-dream-machine"
+        payload = {
+            "prompt": prompt,
+            "aspect_ratio": "16:9",
+            "loop": False,
+        }
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        if action == "img2video":
-            if not image_b64:
-                raise ValueError("Source image required for Fal.ai img2video")
-            endpoint = "https://fal.run/fal-ai/fast-svd/image-to-video"
-            payload = {
-                "image_url": f"data:image/png;base64,{image_b64}",
-                "motion_bucket_id": motion_bucket_id,
-                "fps": fps,
-                "cond_aug": 0.02,
-                "steps": 25,
-            }
-        else:  # txt2video
-            endpoint = "https://fal.run/fal-ai/luma-dream-machine"
-            payload = {
-                "prompt": prompt,
-                "aspect_ratio": "16:9",
-                "loop": False,
-            }
-
-        response = await client.post(endpoint, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        if "video" in data and isinstance(data["video"], dict):
-            return data["video"].get("url")
-        return data.get("video_url") or data.get("url")
+    response = await client.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    data = response.json()
+    if "video" in data and isinstance(data["video"], dict):
+        return data["video"].get("url")
+    return data.get("video_url") or data.get("url")
 
 
 async def _call_siliconflow_video(
@@ -367,80 +384,79 @@ async def _call_siliconflow_video(
         raise APIRunnerError("SILICONFLOW_API_KEY not set for SiliconFlow video")
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    client = get_shared_client(timeout=180.0)
+    endpoint = "https://api.siliconflow.cn/v1/video/submit"
+    payload: Dict[str, Any] = {
+        "model": "THUDM/CogVideoX-5b",
+        "prompt": prompt,
+    }
+    if action == "img2video" and image_b64:
+        payload["image"] = f"data:image/png;base64,{image_b64}"
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        endpoint = "https://api.siliconflow.cn/v1/video/submit"
-        payload: Dict[str, Any] = {
-            "model": "THUDM/CogVideoX-5b",
-            "prompt": prompt,
-        }
-        if action == "img2video" and image_b64:
-            payload["image"] = f"data:image/png;base64,{image_b64}"
+    response = await client.post(endpoint, headers=headers, json=payload)
+    response.raise_for_status()
+    data = response.json()
 
-        response = await client.post(endpoint, headers=headers, json=payload)
-        response.raise_for_status()
-        data = response.json()
+    # Check if direct video URL is already present in response
+    if "uri" in data and isinstance(data["uri"], str) and (data["uri"].startswith("http") or data["uri"].startswith("blob")):
+        return data["uri"]
+    if "data" in data and isinstance(data["data"], dict) and data["data"].get("url"):
+        return data["data"].get("url")
+    if data.get("url") and isinstance(data["url"], str) and data["url"].startswith("http"):
+        return data["url"]
 
-        # Check if direct video URL is already present in response
-        if "uri" in data and isinstance(data["uri"], str) and (data["uri"].startswith("http") or data["uri"].startswith("blob")):
-            return data["uri"]
-        if "data" in data and isinstance(data["data"], dict) and data["data"].get("url"):
-            return data["data"].get("url")
-        if data.get("url") and isinstance(data["url"], str) and data["url"].startswith("http"):
-            return data["url"]
+    # If asynchronous job was submitted, poll job status
+    job_id = (
+        data.get("requestId")
+        or data.get("jobId")
+        or data.get("id")
+        or (data.get("data", {}).get("id") if isinstance(data.get("data"), dict) else None)
+    )
+    if not job_id:
+        # Fallback to whatever URL/URI field is provided if not a recognized job ID
+        return data.get("uri") or data.get("url")
 
-        # If asynchronous job was submitted, poll job status
-        job_id = (
-            data.get("requestId")
-            or data.get("jobId")
-            or data.get("id")
-            or (data.get("data", {}).get("id") if isinstance(data.get("data"), dict) else None)
+    poll_endpoint = "https://api.siliconflow.cn/v1/video/status"
+    start_poll = time.time()
+    poll_timeout = 180.0
+
+    while time.time() - start_poll < poll_timeout:
+        await asyncio.sleep(2.0)
+        status_resp = await client.post(
+            poll_endpoint,
+            headers=headers,
+            json={"requestId": job_id},
         )
-        if not job_id:
-            # Fallback to whatever URL/URI field is provided if not a recognized job ID
-            return data.get("uri") or data.get("url")
-
-        poll_endpoint = "https://api.siliconflow.cn/v1/video/status"
-        start_poll = time.time()
-        poll_timeout = 180.0
-
-        while time.time() - start_poll < poll_timeout:
-            await asyncio.sleep(2.0)
-            status_resp = await client.post(
-                poll_endpoint,
+        if status_resp.status_code in (400, 404):
+            status_resp = await client.get(
+                f"{poll_endpoint}?requestId={job_id}",
                 headers=headers,
-                json={"requestId": job_id},
             )
-            if status_resp.status_code in (400, 404):
-                status_resp = await client.get(
-                    f"{poll_endpoint}?requestId={job_id}",
-                    headers=headers,
-                )
 
-            if not status_resp.is_success:
-                continue
+        if not status_resp.is_success:
+            continue
 
-            status_data = status_resp.json()
-            status = str(
-                status_data.get("status")
-                or (status_data.get("data", {}).get("status") if isinstance(status_data.get("data"), dict) else "")
-            ).lower()
+        status_data = status_resp.json()
+        status = str(
+            status_data.get("status")
+            or (status_data.get("data", {}).get("status") if isinstance(status_data.get("data"), dict) else "")
+        ).lower()
 
-            if status in ("succeed", "succeeded", "success", "completed"):
-                results = status_data.get("results") or status_data.get("data", {})
-                if isinstance(results, dict):
-                    videos = results.get("videos")
-                    if isinstance(videos, list) and len(videos) > 0 and isinstance(videos[0], dict):
-                        return videos[0].get("url")
-                    return results.get("url") or results.get("video_url")
-                elif isinstance(results, list) and len(results) > 0 and isinstance(results[0], dict):
-                    return results[0].get("url")
-                return status_data.get("url")
-            elif status in ("failed", "error"):
-                reason = status_data.get("reason") or status_data.get("message") or "Video generation task failed"
-                raise APIRunnerError(f"SiliconFlow video generation failed: {reason}")
+        if status in ("succeed", "succeeded", "success", "completed"):
+            results = status_data.get("results") or status_data.get("data", {})
+            if isinstance(results, dict):
+                videos = results.get("videos")
+                if isinstance(videos, list) and len(videos) > 0 and isinstance(videos[0], dict):
+                    return videos[0].get("url")
+                return results.get("url") or results.get("video_url")
+            elif isinstance(results, list) and len(results) > 0 and isinstance(results[0], dict):
+                return results[0].get("url")
+            return status_data.get("url")
+        elif status in ("failed", "error"):
+            reason = status_data.get("reason") or status_data.get("message") or "Video generation task failed"
+            raise APIRunnerError(f"SiliconFlow video generation failed: {reason}")
 
-        raise APIRunnerError("SiliconFlow video generation timed out after 180 seconds")
+    raise APIRunnerError("SiliconFlow video generation timed out after 180 seconds")
 
 
 

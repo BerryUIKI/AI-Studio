@@ -35,6 +35,19 @@ class ComfyUIClient:
         self.timeout = timeout
         self.base_url = f"http://{self.host}:{self.port}"
         self.ws_url = f"ws://{self.host}:{self.port}/ws"
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Reuse long-lived pooled client to prevent socket exhaustion."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.timeout)
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close pooled HTTP connections."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def check_status(self) -> Dict[str, Any]:
         """
@@ -42,18 +55,18 @@ class ComfyUIClient:
         Returns a dict with 'online' boolean and device stats if available.
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(f"{self.base_url}/system_stats")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    devices = data.get("devices", [])
-                    return {
-                        "online": True,
-                        "host": self.host,
-                        "port": self.port,
-                        "devices": devices,
-                        "system": data.get("system", {}),
-                    }
+            client = self._get_client()
+            resp = await client.get(f"{self.base_url}/system_stats")
+            if resp.status_code == 200:
+                data = resp.json()
+                devices = data.get("devices", [])
+                return {
+                    "online": True,
+                    "host": self.host,
+                    "port": self.port,
+                    "devices": devices,
+                    "system": data.get("system", {}),
+                }
         except (httpx.ConnectError, httpx.TimeoutException, Exception) as err:
             logger.debug("ComfyUI offline or unreachable: %s", err)
 
@@ -71,21 +84,21 @@ class ComfyUIClient:
         loras: List[str] = []
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(f"{self.base_url}/object_info")
-                if resp.status_code == 200:
-                    info = resp.json()
-                    ckpt_loader = info.get("CheckpointLoaderSimple", {})
-                    input_info = ckpt_loader.get("input", {}).get("required", {})
-                    ckpt_names = input_info.get("ckpt_name", [[]])[0]
-                    if isinstance(ckpt_names, list):
-                        checkpoints = ckpt_names
+            client = self._get_client()
+            resp = await client.get(f"{self.base_url}/object_info")
+            if resp.status_code == 200:
+                info = resp.json()
+                ckpt_loader = info.get("CheckpointLoaderSimple", {})
+                input_info = ckpt_loader.get("input", {}).get("required", {})
+                ckpt_names = input_info.get("ckpt_name", [[]])[0]
+                if isinstance(ckpt_names, list):
+                    checkpoints = ckpt_names
 
-                    lora_loader = info.get("LoraLoader", {})
-                    lora_input = lora_loader.get("input", {}).get("required", {})
-                    lora_names = lora_input.get("lora_name", [[]])[0]
-                    if isinstance(lora_names, list):
-                        loras = lora_names
+                lora_loader = info.get("LoraLoader", {})
+                lora_input = lora_loader.get("input", {}).get("required", {})
+                lora_names = lora_input.get("lora_name", [[]])[0]
+                if isinstance(lora_names, list):
+                    loras = lora_names
         except Exception as err:
             logger.debug("Failed to retrieve ComfyUI models: %s", err)
 
@@ -102,17 +115,17 @@ class ComfyUIClient:
         cid = client_id or str(uuid.uuid4())
         payload = {"prompt": prompt_graph, "client_id": cid}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(f"{self.base_url}/prompt", json=payload)
-            resp.raise_for_status()
-            return resp.json()
+        client = self._get_client()
+        resp = await client.post(f"{self.base_url}/prompt", json=payload)
+        resp.raise_for_status()
+        return resp.json()
 
     async def get_history(self, prompt_id: str) -> Dict[str, Any]:
         """Retrieve execution history for a given prompt_id."""
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(f"{self.base_url}/history/{prompt_id}")
-            resp.raise_for_status()
-            return resp.json()
+        client = self._get_client()
+        resp = await client.get(f"{self.base_url}/history/{prompt_id}")
+        resp.raise_for_status()
+        return resp.json()
 
     async def poll_history_outputs(
         self, prompt_id: str, max_wait: float = 120.0, interval: float = 0.5
@@ -155,9 +168,9 @@ class ComfyUIClient:
     async def interrupt(self) -> bool:
         """Interrupt active execution on ComfyUI via POST /interrupt."""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(f"{self.base_url}/interrupt")
-                return resp.status_code == 200
+            client = self._get_client()
+            resp = await client.post(f"{self.base_url}/interrupt")
+            return resp.status_code == 200
         except Exception as err:
             logger.debug("ComfyUI interrupt failed or not reachable: %s", err)
             return False
