@@ -95,20 +95,64 @@ class LlamaServerSupervisor:
         self.llama_dir.mkdir(parents=True, exist_ok=True)
         self.models_dir.mkdir(parents=True, exist_ok=True)
 
+    def _is_owned_executable(self, exe_path: Path) -> bool:
+        """Ensure the executable matches the expected llama-server binary or lives in self.llama_dir."""
+        try:
+            exe_res = exe_path.resolve()
+            expected_bin = self.get_binary_path()
+            if expected_bin and exe_res == expected_bin.resolve():
+                return True
+            llama_res = self.llama_dir.resolve()
+            if llama_res in exe_res.parents:
+                return "llama" in exe_res.name.lower()
+        except Exception:
+            pass
+        return False
+
+    def _verify_process_identity(self, pid: int) -> bool:
+        """Verify the process at pid is actually llama-server owned by this supervisor."""
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                kernel32 = ctypes.windll.kernel32
+                handle = kernel32.OpenProcess(0x1000, False, pid)
+                if not handle:
+                    return False
+                try:
+                    buf = ctypes.create_unicode_buffer(1024)
+                    size = wintypes.DWORD(1024)
+                    success = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
+                    if success:
+                        exe_path = Path(buf.value)
+                        return self._is_owned_executable(exe_path)
+                    return False
+                finally:
+                    kernel32.CloseHandle(handle)
+            except Exception:
+                return False
+        else:
+            try:
+                proc_exe = Path(f"/proc/{pid}/exe")
+                if proc_exe.exists():
+                    resolved = Path(os.readlink(proc_exe))
+                    if self._is_owned_executable(resolved):
+                        return True
+                proc_cmdline = Path(f"/proc/{pid}/cmdline")
+                if proc_cmdline.is_file():
+                    content = proc_cmdline.read_text(encoding="latin1", errors="ignore")
+                    if "llama-server" in content or str(self.llama_dir) in content:
+                        return True
+                return False
+            except (OSError, Exception):
+                return False
+
     def get_pid(self) -> Optional[int]:
         if not self.pid_file.is_file():
             return None
         try:
             pid = int(self.pid_file.read_text(encoding="utf-8").strip())
-            if sys.platform == "win32":
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                handle = kernel32.OpenProcess(0x1000, False, pid)
-                if handle:
-                    kernel32.CloseHandle(handle)
-                    return pid
-            else:
-                os.kill(pid, 0)
+            if self._verify_process_identity(pid):
                 return pid
         except (ValueError, OSError):
             pass
@@ -266,11 +310,19 @@ class LlamaServerSupervisor:
         if not pid:
             return {"success": True, "message": "llama-server is not running"}
 
+        if not self._verify_process_identity(pid):
+            self._clean_pid_file()
+            return {
+                "success": False,
+                "message": f"Process {pid} is not a verified llama-server process; refusing to terminate.",
+            }
+
         try:
             if sys.platform == "win32":
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
             else:
                 os.kill(pid, 15)
+            return {"success": True, "message": f"llama-server process {pid} terminated"}
         except Exception as e:
             return {"success": False, "message": f"Error terminating llama-server: {e}"}
         finally:
