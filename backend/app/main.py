@@ -41,6 +41,11 @@ from app.schemas.workflow_analysis import (
     WorkflowRepairResult,
 )
 from app.core.session import session_manager, ALLOWED_ORIGINS
+from app.core.media_validator import (
+    validate_and_inspect_media,
+    sanitize_filename,
+    MEDIA_SECURITY_HEADERS,
+)
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.llama_server.llama_supervisor import (
@@ -800,9 +805,10 @@ async def execute_creative_action(req: CreativeActionRequest) -> CreativeActionR
 async def upload_creative_asset(file: UploadFile = File(...)) -> AssetRecord:
     """Upload user image asset directly onto the creative canvas."""
     data = await file.read()
-    filename = file.filename or "uploaded_image.png"
-    content_type = file.content_type or "image/png"
-    return await asset_store.save_bytes(data, filename=filename, media_type=content_type)
+    filename = sanitize_filename(file.filename)
+    validated_mime, w, h = validate_and_inspect_media(data, filename)
+    category = "video" if validated_mime.startswith("video/") else "image"
+    return await asset_store.save_bytes(data, filename=filename, media_type=category)
 
 
 class AssetUploadBase64Request(BaseModel):
@@ -820,7 +826,10 @@ async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRe
         data = base64.b64decode(req.content_base64, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}")
-    return await asset_store.save_bytes(data, filename=req.filename, media_type=req.media_type)
+    filename = sanitize_filename(req.filename)
+    validated_mime, w, h = validate_and_inspect_media(data, filename)
+    category = "video" if validated_mime.startswith("video/") else "image"
+    return await asset_store.save_bytes(data, filename=filename, media_type=category)
 
 
 agent_service = AgentService(
@@ -1081,10 +1090,28 @@ async def get_asset_content(asset_id: str) -> FileResponse:
     if not abs_path.is_file():
         raise HTTPException(status_code=404, detail="Asset file missing on disk")
 
-    import mimetypes
-    guessed_type, _ = mimetypes.guess_type(str(abs_path))
-    content_type = guessed_type or ("video/mp4" if rec.media_type == "video" else "image/png")
-    return FileResponse(abs_path, media_type=content_type, filename=rec.filename, content_disposition_type="inline")
+    ext = abs_path.suffix.lower()
+    safe_types = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".webp": "image/webp",
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+    }
+    content_type = safe_types.get(ext)
+    disposition = "inline"
+    if not content_type:
+        content_type = "application/octet-stream"
+        disposition = "attachment"
+
+    return FileResponse(
+        abs_path,
+        media_type=content_type,
+        filename=sanitize_filename(rec.filename),
+        content_disposition_type=disposition,
+        headers=MEDIA_SECURITY_HEADERS,
+    )
 
 
 @app.post("/api/v1/workflow/cancel/{run_id}")
