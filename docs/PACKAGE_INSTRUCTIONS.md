@@ -20,14 +20,17 @@ When built, the portable release directory `dist/Berry-AI-Studio-v0.1.0-windows-
 
 ```text
 Berry-AI-Studio-v0.1.0-windows-x64/
-├── berry.exe                # Native Windows Rust launcher & environment manager
-├── Berry.bat                # Convenient double-click launcher wrapper
+├── Berry AI Studio.exe      # Native Tauri desktop application window (WebView2)
+├── berry.exe                # Native Windows Rust launcher, supervisor & CLI manager
+├── Berry.bat                # Double-click launcher wrapper
 ├── README.txt               # Quickstart guide & support links
 ├── runtime/
-│   └── python/              # Isolated, hermetic Python runtime with dependencies pre-installed
-│       ├── python.exe
-│       ├── Lib/site-packages/
-│       └── Scripts/
+│   ├── python/              # Isolated, hermetic Python runtime with dependencies pre-installed
+│   │   ├── python.exe
+│   │   ├── Lib/site-packages/
+│   │   └── Scripts/
+│   └── llama_server/        # Embedded local LLM engine (llama.cpp)
+│       └── llama-server.exe
 ├── backend/                 # Backend application services (FastAPI, schemas, runners, storage)
 │   ├── app/
 │   ├── requirements.txt
@@ -50,10 +53,17 @@ powershell -ExecutionPolicy Bypass -File scripts\package-windows-release.ps1
 
 ### Build Stages Executed:
 1. **`[1/5] Building native Rust launcher`**: Compiles `launcher/target/release/berry.exe` with optimizations.
-2. **`[2/5] Building frontend bundle`**: Runs `pnpm build` to compile the Vite React application into `frontend/dist/`.
-3. **`[3/5] Staging directory`**: Creates a clean directory at `dist/Berry-AI-Studio-v<version>-windows-x64/`.
-4. **`[4/5] Populating components`**: Copies the launcher, frontend assets, backend services, and bundles the isolated Python runtime. Generates `Berry.bat` and `README.txt`.
-5. **`[5/5] Compressing archive`**: Compresses the staged directory into a `.zip` archive ready for distribution.
+2. **`[1b/5] Building native Tauri desktop application`**: Compiles `frontend/src-tauri/target/release/berry-app.exe` (staged as `Berry AI Studio.exe`).
+3. **`[2/5] Building frontend bundle`**: Runs `pnpm build` to compile the Vite React application into `frontend/dist/`.
+4. **`[3/5] Staging directory`**: Creates a clean staging directory at `dist/Berry-AI-Studio-v<version>-windows-x64/`.
+5. **`[4/5] Populating components`**:
+   - Copies the Rust launcher (`berry.exe`) and Tauri desktop binary (`Berry AI Studio.exe`).
+   - Bundles the frontend production assets into `frontend/dist/`.
+   - Copies the backend service source code.
+   - Stages the hermetic Python virtual environment into `runtime/python/`.
+   - Stages the embedded `llama-server` runtime into `runtime/llama_server/` (if present).
+   - Generates `Berry.bat` and `README.txt`.
+6. **`[5/5] Compressing archive`**: Compresses the staged directory into a `.zip` archive ready for distribution.
 
 ---
 
