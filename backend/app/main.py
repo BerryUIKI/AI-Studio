@@ -43,6 +43,11 @@ from app.schemas.workflow_analysis import (
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.ollama_supervisor import ollama_supervisor, OllamaRuntimeStatus
+from app.runtime.llama_server.llama_supervisor import (
+    llama_server_supervisor,
+    LlamaServerRuntimeStatus,
+    LlamaModelInfo,
+)
 from app.runtime.engine_manager import engine_manager
 from app.runtime.hardware import check_hardware_readiness, get_gpu_stats
 from app.runtime.installer import installer, mirror_manager
@@ -145,7 +150,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_no_proxy()
     logger.info("Berry AI Studio API starting up...")
     
-    # Auto-start embedded Ollama if installed in isolated app engine directory
+    # Auto-start embedded llama-server or Ollama if installed in isolated app engine directory
+    try:
+        if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
+            models = llama_server_supervisor.list_local_models()
+            if models:
+                logger.info(f"Detected installed embedded llama-server, auto-starting with {models[0].name}...")
+                llama_server_supervisor.start(models[0].name)
+    except Exception as e:
+        logger.warning(f"Failed to auto-start embedded llama-server: {e}")
+
     try:
         if ollama_supervisor.is_installed() and not ollama_supervisor.is_running():
             logger.info("Detected installed embedded Ollama runtime, auto-starting...")
@@ -156,6 +170,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("Berry AI Studio API shutting down...")
+    try:
+        if llama_server_supervisor.is_running():
+            logger.info("Stopping embedded llama-server process...")
+            llama_server_supervisor.stop()
+    except Exception as e:
+        logger.debug(f"Error stopping llama-server on shutdown: {e}")
+
     try:
         if ollama_supervisor.is_running():
             logger.info("Stopping embedded Ollama process...")
@@ -943,6 +964,47 @@ async def pull_ollama_model(req: OllamaPullModelRequest):
             yield json.dumps(chunk) + "\n"
 
     return StreamingResponse(event_generator(), media_type="application/x-ndjson")
+
+
+# ---------------------------------------------------------------------------
+# Embedded llama-server (llama.cpp) Runtime & Model Endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/v1/llama-server/status", response_model=LlamaServerRuntimeStatus)
+async def get_llama_server_runtime_status() -> LlamaServerRuntimeStatus:
+    """Get active status of the embedded llama-server runtime."""
+    return await llama_server_supervisor.get_status()
+
+
+class LlamaServerStartRequest(BaseModel):
+    model_name: Optional[str] = None
+    vram_gpu_layers: int = 99
+
+
+@app.post("/api/v1/llama-server/start")
+async def start_llama_server_runtime(req: Optional[LlamaServerStartRequest] = None) -> Dict[str, Any]:
+    """Start embedded llama-server process with selected GGUF model."""
+    model_name = req.model_name if req else None
+    gpu_layers = req.vram_gpu_layers if req else 99
+    return llama_server_supervisor.start(model_name, vram_gpu_layers=gpu_layers)
+
+
+@app.post("/api/v1/llama-server/stop")
+async def stop_llama_server_runtime() -> Dict[str, Any]:
+    """Stop embedded llama-server process."""
+    return llama_server_supervisor.stop()
+
+
+@app.post("/api/v1/llama-server/install")
+async def install_llama_server_runtime() -> Dict[str, Any]:
+    """Provision or download pre-compiled standalone llama-server binary."""
+    return await llama_server_supervisor.install()
+
+
+@app.get("/api/v1/llama-server/models", response_model=List[LlamaModelInfo])
+async def list_llama_server_models() -> List[LlamaModelInfo]:
+    """List local .gguf models available in engine/models/llm and shared canvas models."""
+    return llama_server_supervisor.list_local_models()
 
 
 @app.get("/api/v1/nodes", response_model=List[NodeDefinition])

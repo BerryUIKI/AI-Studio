@@ -84,60 +84,92 @@ class DownloadWorker:
         last_time = time.monotonic()
         bytes_since_last = 0
 
-        try:
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                async with client.stream("GET", self.source_url, headers=headers) as response:
-                    if response.status_code in [200, 206]:
-                        content_range = response.headers.get("content-range")
-                        content_length = response.headers.get("content-length")
-                        if content_length and existing_bytes == 0:
-                            self.total_bytes = int(content_length)
+        # Build candidate URL list with selected source_url first, followed by all alternative sources
+        candidate_urls = [self.source_url] if self.source_url else []
+        for src in self.model.sources:
+            if src.url and src.url not in candidate_urls:
+                candidate_urls.append(src.url)
 
-                        mode = "ab" if existing_bytes > 0 and response.status_code == 206 else "wb"
-                        if mode == "wb":
-                            self.downloaded_bytes = 0
+        last_error = None
+        download_success = False
 
-                        with open(self.part_path, mode) as f:
-                            async for chunk in response.aiter_bytes(chunk_size=65536):
-                                if self._cancel_flag:
-                                    self.status = "cancelled"
-                                    if self.part_path.exists():
-                                        try:
-                                            self.part_path.unlink()
-                                        except Exception:
-                                            pass
-                                    return
+        for url in candidate_urls:
+            if self._cancel_flag:
+                self.status = "cancelled"
+                return
 
-                                while not self._pause_event.is_set():
-                                    self.status = "paused"
-                                    self.speed_bps = 0
-                                    await asyncio.sleep(0.5)
+            try:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(connect=15.0, read=180.0, write=60.0, pool=15.0),
+                    follow_redirects=True,
+                    trust_env=False,
+                ) as client:
+                    async with client.stream("GET", url, headers=headers) as response:
+                        if response.status_code in [200, 206]:
+                            content_range = response.headers.get("content-range")
+                            content_length = response.headers.get("content-length")
+                            if content_length and existing_bytes == 0:
+                                self.total_bytes = int(content_length)
+
+                            mode = "ab" if existing_bytes > 0 and response.status_code == 206 else "wb"
+                            if mode == "wb":
+                                self.downloaded_bytes = 0
+
+                            with open(self.part_path, mode) as f:
+                                async for chunk in response.aiter_bytes(chunk_size=65536):
                                     if self._cancel_flag:
                                         self.status = "cancelled"
+                                        if self.part_path.exists():
+                                            try:
+                                                self.part_path.unlink()
+                                            except Exception:
+                                                pass
                                         return
-                                    self.status = "downloading"
 
-                                f.write(chunk)
-                                chunk_len = len(chunk)
-                                self.downloaded_bytes += chunk_len
-                                bytes_since_last += chunk_len
+                                    while not self._pause_event.is_set():
+                                        self.status = "paused"
+                                        self.speed_bps = 0
+                                        await asyncio.sleep(0.5)
+                                        if self._cancel_flag:
+                                            self.status = "cancelled"
+                                            return
+                                        self.status = "downloading"
 
-                                now = time.monotonic()
-                                elapsed = now - last_time
-                                if elapsed >= 1.0:
-                                    self.speed_bps = int(bytes_since_last / elapsed)
-                                    remaining_bytes = max(0, self.total_bytes - self.downloaded_bytes)
-                                    self.eta_seconds = (
-                                        int(remaining_bytes / self.speed_bps)
-                                        if self.speed_bps > 0
-                                        else None
-                                    )
-                                    last_time = now
-                                    bytes_since_last = 0
-                    else:
-                        raise RuntimeError(f"HTTP error {response.status_code} fetching model")
+                                    f.write(chunk)
+                                    chunk_len = len(chunk)
+                                    self.downloaded_bytes += chunk_len
+                                    bytes_since_last += chunk_len
 
-            # Download finished: atomic rename to destination
+                                    now = time.monotonic()
+                                    elapsed = now - last_time
+                                    if elapsed >= 1.0:
+                                        self.speed_bps = int(bytes_since_last / elapsed)
+                                        remaining_bytes = max(0, self.total_bytes - self.downloaded_bytes)
+                                        self.eta_seconds = (
+                                            int(remaining_bytes / self.speed_bps)
+                                            if self.speed_bps > 0
+                                            else None
+                                        )
+                                        last_time = now
+                                        bytes_since_last = 0
+
+                            download_success = True
+                            break
+                        else:
+                            last_error = f"HTTP {response.status_code} from {url}"
+            except Exception as e:
+                last_error = str(e)
+                continue
+
+        if not download_success:
+            if not self._cancel_flag:
+                self.status = "failed"
+                self.error_message = f"Failed to download model across candidate sources: {last_error}"
+                self.speed_bps = 0
+            return
+
+        # Download finished: atomic rename to destination
+        try:
             if self.part_path.exists():
                 if self.target_path.exists():
                     self.target_path.unlink()
@@ -153,6 +185,14 @@ class DownloadWorker:
                 await model_store.scan_all_roots_async()
             except Exception:
                 pass
+
+            # Notify llama_server_supervisor if category is llm
+            if self.model.category == "llm":
+                try:
+                    from app.runtime.llama_server.llama_supervisor import llama_server_supervisor
+                    llama_server_supervisor.list_local_models()
+                except Exception:
+                    pass
 
         except Exception as e:
             if not self._cancel_flag:
@@ -170,11 +210,11 @@ class ModelDownloader:
     def _resolve_target_path(self, model: HubModelRecord, target_engine: str) -> Path:
         """Resolve engine destination directory based on model category."""
         filename = Path(model.sources[0].url.split("?")[0]).name if model.sources else f"{model.id}.safetensors"
-        if not filename.endswith((".safetensors", ".pth", ".bin")):
+        if not filename.endswith((".safetensors", ".pth", ".bin", ".gguf")):
             filename = f"{filename}.safetensors"
 
         # Determine engine root
-        if target_engine == "comfyui":
+        if target_engine in ("comfyui", "llama_server"):
             engine_root = installer.engine_dir
             if model.category == "checkpoint":
                 sub = engine_root / "models" / "checkpoints"
@@ -186,6 +226,8 @@ class ModelDownloader:
                 sub = engine_root / "models" / "upscale_models"
             elif model.category == "vae":
                 sub = engine_root / "models" / "vae"
+            elif model.category == "llm":
+                sub = engine_root / "models" / "llm"
             else:
                 sub = engine_root / "models" / "other"
         else:
@@ -201,6 +243,8 @@ class ModelDownloader:
                 sub = engine_root / "models" / "ESRGAN"
             elif model.category == "vae":
                 sub = engine_root / "models" / "VAE"
+            elif model.category == "llm":
+                sub = engine_root / "models" / "llm"
             else:
                 sub = engine_root / "models" / "other"
 

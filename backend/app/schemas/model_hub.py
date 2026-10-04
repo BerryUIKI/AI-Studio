@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict, Literal
 from pydantic import BaseModel, Field
 
-HubModelCategory = Literal["checkpoint", "lora", "controlnet", "upscaler", "vae"]
+HubModelCategory = Literal["checkpoint", "lora", "controlnet", "upscaler", "vae", "llm"]
 CompatibilityTier = Literal["optimal", "playable_offload", "heavy_paging", "unsupported"]
 
 

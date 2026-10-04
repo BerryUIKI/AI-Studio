@@ -48,6 +48,13 @@ class AgentService:
         try:
             cfg = self.credential_manager.get_llm_config()
             if cfg.enabled:
+                if cfg.provider == "llama_server":
+                    try:
+                        from app.runtime.llama_server.llama_supervisor import llama_server_supervisor
+                        if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
+                            llama_server_supervisor.start(cfg.model)
+                    except Exception:
+                        pass
                 return LLMClient(config=cfg)
         except Exception:
             pass

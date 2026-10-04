@@ -54,7 +54,9 @@ def test_ollama_install_endpoint():
         assert data["installed"] is True
 
 
-def test_embedded_binary_discovery_in_engine_dir(tmp_path):
+def test_embedded_binary_discovery_in_engine_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv('LOCALAPPDATA', str(tmp_path / 'empty_appdata'))
+    monkeypatch.setattr('shutil.which', lambda x: None)
     supervisor = OllamaSupervisor(engine_dir=tmp_path)
     # Test not installed initially
     assert supervisor.get_binary_path() is None
