@@ -1,6 +1,7 @@
 """Unit tests for multi-mirror resumable model download engine (MH-M4)."""
 
 import pytest
+import asyncio
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -113,3 +114,134 @@ def test_downloader_task_lifecycle_controls():
     assert downloader.cancel_task("dl_lifecycle_1") is True
     assert worker.status == "cancelled"
     assert worker._cancel_flag is True
+
+
+@pytest.mark.asyncio
+async def test_download_worker_size_mismatch_rejection(tmp_path):
+    """Verify that artifact size mismatch rejects promotion and leaves existing target untouched."""
+    target_file = tmp_path / "model.safetensors"
+    target_file.write_text("existing_good_version")
+    part_file = tmp_path / "model.safetensors.part"
+    part_file.write_bytes(b"short")
+
+    dummy_model = HubModelRecord(
+        id="test-model",
+        name="Test Model",
+        architecture="flux",
+        category="checkpoint",
+        version="1.0",
+        size_bytes=100,  # Expects 100 bytes, part is only 5 bytes
+        parameter_count="12B",
+        author="test",
+        description="test",
+        preview_image_url="test",
+        min_vram_mb=4000,
+        optimal_vram_mb=8000,
+    )
+
+    worker = DownloadWorker(
+        task_id="test_size_fail",
+        model=dummy_model,
+        target_engine="comfyui",
+        target_path=target_file,
+        source_url="https://example.com/test",
+    )
+    # Bypass actual network download loop
+    worker._download_loop = MagicMock(return_value=asyncio.sleep(0, result=True))
+
+    await worker.run()
+
+    assert worker.status == "failed"
+    assert "size mismatch" in worker.error_message
+    assert target_file.exists()
+    assert target_file.read_text() == "existing_good_version"
+    assert part_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_download_worker_sha256_mismatch_rejection(tmp_path):
+    """Verify that SHA-256 integrity mismatch rejects promotion and preserves existing target."""
+    target_file = tmp_path / "model.safetensors"
+    target_file.write_text("existing_good_version")
+    part_file = tmp_path / "model.safetensors.part"
+    part_file.write_bytes(b"corrupted_content")
+
+    dummy_model = HubModelRecord(
+        id="test-model",
+        name="Test Model",
+        architecture="flux",
+        category="checkpoint",
+        version="1.0",
+        size_bytes=len(b"corrupted_content"),
+        sha256="0000000000000000000000000000000000000000000000000000000000000000",
+        parameter_count="12B",
+        author="test",
+        description="test",
+        preview_image_url="test",
+        min_vram_mb=4000,
+        optimal_vram_mb=8000,
+    )
+
+    worker = DownloadWorker(
+        task_id="test_sha_fail",
+        model=dummy_model,
+        target_engine="comfyui",
+        target_path=target_file,
+        source_url="https://example.com/test",
+    )
+    worker._download_loop = MagicMock(return_value=asyncio.sleep(0, result=True))
+
+    await worker.run()
+
+    assert worker.status == "failed"
+    assert "SHA-256 integrity mismatch" in worker.error_message
+    assert target_file.exists()
+    assert target_file.read_text() == "existing_good_version"
+
+
+@pytest.mark.asyncio
+async def test_download_worker_atomic_promotion_success(tmp_path):
+    """Verify that valid download promotes part file atomically and overwrites destination."""
+    import hashlib
+
+    target_file = tmp_path / "model.safetensors"
+    target_file.write_text("old_version")
+    part_file = tmp_path / "model.safetensors.part"
+    valid_content = b"new_verified_model_weights_12345"
+    part_file.write_bytes(valid_content)
+
+    correct_sha256 = hashlib.sha256(valid_content).hexdigest()
+
+    dummy_model = HubModelRecord(
+        id="test-model",
+        name="Test Model",
+        architecture="flux",
+        category="checkpoint",
+        version="1.0",
+        size_bytes=len(valid_content),
+        sha256=correct_sha256,
+        parameter_count="12B",
+        author="test",
+        description="test",
+        preview_image_url="test",
+        min_vram_mb=4000,
+        optimal_vram_mb=8000,
+    )
+
+    worker = DownloadWorker(
+        task_id="test_success",
+        model=dummy_model,
+        target_engine="comfyui",
+        target_path=target_file,
+        source_url="https://example.com/test",
+    )
+    worker._download_loop = MagicMock(return_value=asyncio.sleep(0, result=True))
+
+    await worker.run()
+
+    assert worker.status == "completed"
+    assert worker.error_message is None
+    assert not part_file.exists()
+    assert target_file.exists()
+    assert target_file.read_bytes() == valid_content
+
