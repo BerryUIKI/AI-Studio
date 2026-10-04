@@ -43,8 +43,23 @@ def compute_semantic_node_hash(
     hasher = hashlib.sha256()
     hasher.update(node_type.encode("utf-8"))
 
-    # Canonicalize params: exclude transient secrets from hash
-    clean_params = {k: v for k, v in params.items() if not k.lower().endswith("key")}
+    # Canonicalize params: exclude transient secrets from hash via explicit denylist
+    secret_keys = {
+        "api_key",
+        "apikey",
+        "secret",
+        "secret_key",
+        "token",
+        "access_token",
+        "auth_token",
+        "password",
+        "bearer_token",
+        "app_secret",
+    }
+    clean_params = {
+        k: v for k, v in params.items()
+        if k.lower() not in secret_keys and not k.lower().endswith("_api_key") and not k.lower().endswith("_token")
+    }
 
     # Invariant #5: Canonical Params must include provider identity & runner version
     resolved_prov = provider_id or params.get("__provider") or params.get("provider") or params.get("engine_id")
