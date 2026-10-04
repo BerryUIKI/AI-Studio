@@ -10,14 +10,76 @@ pub struct AppState {
     pub is_ready: bool,
 }
 
+#[derive(serde::Deserialize)]
+pub struct CloseAppPayload {
+    pub mode: Option<String>, // "keep_running" | "stop_owned"
+    pub force: Option<bool>,
+    pub stop_managed_engines: Option<bool>,
+}
+
+#[derive(serde::Serialize)]
+pub struct CloseAppResult {
+    pub success: bool,
+    pub refused: bool,
+    pub message: String,
+}
+
 #[tauri::command]
-fn close_app(app_handle: tauri::AppHandle, window: tauri::Window) {
+fn close_app(
+    app_handle: tauri::AppHandle,
+    window: tauri::Window,
+    payload: Option<CloseAppPayload>,
+) -> CloseAppResult {
     let state = app_handle.state::<AppState>();
-    if let Ok(mut guard) = state.backend_child.lock() {
-        backend::shutdown_backend(state.port, guard.take());
+    let mode_str = payload.as_ref().and_then(|p| p.mode.as_deref()).unwrap_or("stop_owned");
+    let force = payload.as_ref().and_then(|p| p.force).unwrap_or(false);
+    let stop_engines = payload.as_ref().and_then(|p| p.stop_managed_engines);
+
+    let shutdown_mode = if mode_str == "keep_running" {
+        backend::ShutdownMode::KeepRunning
+    } else {
+        backend::ShutdownMode::StopOwned {
+            force,
+            stop_managed_engines: stop_engines,
+        }
+    };
+
+    let mut guard = state.backend_child.lock().unwrap();
+    let child = guard.take();
+    let (res, preserved_child) = backend::shutdown_backend(state.port, child, shutdown_mode);
+
+    match res {
+        backend::ShutdownResult::RefusedActiveTasks => {
+            // Restore child back into AppState
+            *guard = preserved_child;
+            CloseAppResult {
+                success: false,
+                refused: true,
+                message: "Shutdown refused: active generation tasks are running.".to_string(),
+            }
+        }
+        backend::ShutdownResult::Completed => {
+            // If keep_running, child is preserved in background or consumed
+            *guard = preserved_child;
+            let _ = window.destroy();
+            app_handle.exit(0);
+            CloseAppResult {
+                success: true,
+                refused: false,
+                message: "Application closed successfully.".to_string(),
+            }
+        }
+        backend::ShutdownResult::UnownedIgnored => {
+            *guard = None;
+            let _ = window.destroy();
+            app_handle.exit(0);
+            CloseAppResult {
+                success: true,
+                refused: false,
+                message: "Unowned backend preserved, window closed.".to_string(),
+            }
+        }
     }
-    let _ = window.destroy();
-    app_handle.exit(0);
 }
 
 #[tauri::command]
@@ -188,7 +250,17 @@ python -m venv .venv
             if let tauri::WindowEvent::Destroyed = event {
                 let state = window.state::<AppState>();
                 let mut guard = state.backend_child.lock().unwrap();
-                backend::shutdown_backend(state.port, guard.take());
+                let child = guard.take();
+                // When window is destroyed directly (e.g. OS kill / Alt+F4), stop owned child cleanly
+                let (_, remaining) = backend::shutdown_backend(
+                    state.port,
+                    child,
+                    backend::ShutdownMode::StopOwned {
+                        force: false,
+                        stop_managed_engines: None,
+                    },
+                );
+                *guard = remaining;
             }
         })
         .run(tauri::generate_context!())

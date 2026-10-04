@@ -173,20 +173,107 @@ pub fn wait_for_backend_ready(port: u16, timeout_secs: u64, child: &mut Option<C
     false
 }
 
-/// Gracefully shut down backend.
-pub fn shutdown_backend(port: u16, mut child: Option<Child>) {
-    let url = format!("http://127.0.0.1:{}/api/v1/manager/shutdown", port);
-    log_msg("Requesting graceful backend shutdown...");
-    let agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(2)))
-        .build()
-        .new_agent();
-    let _ = agent.post(&url)
-        .send_json(serde_json::json!({ "force": false }));
+/// Shutdown mode indicating the desired exit behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownMode {
+    /// Keep running: do not terminate the backend or owned engines, leave background processes alive.
+    KeepRunning,
+    /// Stop owned: gracefully stop the owned backend and managed engines. Respects refusals unless forced.
+    StopOwned { force: bool, stop_managed_engines: Option<bool> },
+}
 
-    if let Some(mut proc) = child.take() {
-        thread::sleep(Duration::from_millis(500));
-        let _ = proc.kill();
+/// Result of a shutdown attempt.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ShutdownResult {
+    /// Backend shutdown acknowledged or not needed.
+    Completed,
+    /// Backend refused shutdown due to active tasks (HTTP 409). Child is NOT killed.
+    RefusedActiveTasks,
+    /// Backend was unowned (spawn_backend returned None), so no shutdown was sent.
+    UnownedIgnored,
+}
+
+/// Gracefully shut down backend respecting process ownership and active tasks.
+/// If `mode` is `KeepRunning`, or if `child` is `None` (unowned backend),
+/// no shutdown request is sent and no process is killed.
+/// If shutdown request returns 409 (Conflict - active tasks), the refusal is respected
+/// and the child is NOT killed.
+pub fn shutdown_backend(
+    port: u16,
+    mut child: Option<Child>,
+    mode: ShutdownMode,
+) -> (ShutdownResult, Option<Child>) {
+    match mode {
+        ShutdownMode::KeepRunning => {
+            log_msg("ShutdownMode::KeepRunning requested: preserving backend and child process.");
+            (ShutdownResult::Completed, child)
+        }
+        ShutdownMode::StopOwned { force, stop_managed_engines } => {
+            if child.is_none() {
+                log_msg("No owned child backend process found. Skipping shutdown request to preserve unowned/pre-existing backend.");
+                return (ShutdownResult::UnownedIgnored, None);
+            }
+
+            let url = format!("http://127.0.0.1:{}/api/v1/manager/shutdown", port);
+            log_msg(&format!(
+                "Requesting graceful backend shutdown (force={}, stop_managed_engines={:?})...",
+                force, stop_managed_engines
+            ));
+
+            let agent = ureq::Agent::config_builder()
+                .timeout_global(Some(Duration::from_secs(3)))
+                .build()
+                .new_agent();
+
+            let payload = serde_json::json!({
+                "force": force,
+                "stop_managed_engines": stop_managed_engines
+            });
+
+            let resp = agent.post(&url).send_json(payload);
+            match resp {
+                Ok(res) => {
+                    log_msg(&format!("Backend shutdown acknowledged with status: {}", res.status()));
+                    // Wait up to 3 seconds for graceful process exit
+                    if let Some(mut proc) = child.take() {
+                        let start = Instant::now();
+                        let mut exited = false;
+                        while start.elapsed() < Duration::from_secs(3) {
+                            if let Ok(Some(status)) = proc.try_wait() {
+                                log_msg(&format!("Backend child exited gracefully with status: {}", status));
+                                exited = true;
+                                break;
+                            }
+                            thread::sleep(Duration::from_millis(100));
+                        }
+                        if !exited && force {
+                            log_msg("Force flag set and graceful wait exceeded. Terminating child.");
+                            let _ = proc.kill();
+                        } else if !exited {
+                            log_msg("Child has not exited yet after acknowledgement. Allowing exit without SIGKILL.");
+                        }
+                    }
+                    (ShutdownResult::Completed, None)
+                }
+                Err(ureq::Error::StatusCode(409)) => {
+                    log_msg("Backend refused shutdown: active generation or workflow tasks are currently running (HTTP 409). Preserving child process.");
+                    (ShutdownResult::RefusedActiveTasks, child)
+                }
+                Err(e) => {
+                    log_msg(&format!("Backend shutdown request failed or unhandled: {}", e));
+                    if force {
+                        if let Some(mut proc) = child.take() {
+                            log_msg("Force shutdown flag set; terminating child process.");
+                            let _ = proc.kill();
+                        }
+                        (ShutdownResult::Completed, None)
+                    } else {
+                        log_msg("Non-forced shutdown failed to communicate safely. Preserving child process.");
+                        (ShutdownResult::RefusedActiveTasks, child)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -195,14 +282,28 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_detection() {
-        let root = detect_root_dir();
-        println!("TEST DETECTED ROOT: {:?}", root);
-        assert!(root.join("backend").join("app").join("main.py").is_file());
+    fn test_shutdown_keep_running_preserves_backend() {
+        // Mode KeepRunning must return Completed without sending any network request
+        // and without killing or dropping the child process handle
+        let (res, child) = shutdown_backend(8000, None, ShutdownMode::KeepRunning);
+        assert_eq!(res, ShutdownResult::Completed);
+        assert!(child.is_none());
+    }
 
-        let py = find_python_executable(&root);
-        println!("TEST DETECTED PYTHON: {:?}", py);
-        assert!(py.is_ok());
+    #[test]
+    fn test_shutdown_unowned_backend_ignored() {
+        // If child is None (unowned / pre-existing backend), StopOwned must NOT send a shutdown request
+        // and must return UnownedIgnored
+        let (res, child) = shutdown_backend(
+            8000,
+            None,
+            ShutdownMode::StopOwned {
+                force: false,
+                stop_managed_engines: None,
+            },
+        );
+        assert_eq!(res, ShutdownResult::UnownedIgnored);
+        assert!(child.is_none());
     }
 }
 

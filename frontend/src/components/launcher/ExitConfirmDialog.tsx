@@ -9,14 +9,16 @@ export interface RunningEngineItem {
 interface ExitConfirmDialogProps {
   isOpen: boolean;
   runningEngines: RunningEngineItem[];
+  activeTasksCount?: number;
   onKeepRunning: (remember: boolean) => void;
-  onCloseAllAndExit: (remember: boolean) => void;
+  onCloseAllAndExit: (remember: boolean, force?: boolean) => void;
   onCancel: () => void;
 }
 
 export const ExitConfirmDialog: React.FC<ExitConfirmDialogProps> = ({
   isOpen,
   runningEngines,
+  activeTasksCount = 0,
   onKeepRunning,
   onCloseAllAndExit,
   onCancel,
@@ -24,6 +26,8 @@ export const ExitConfirmDialog: React.FC<ExitConfirmDialogProps> = ({
   const [rememberChoice, setRememberChoice] = useState(false);
 
   if (!isOpen) return null;
+
+  const hasTasks = activeTasksCount > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm select-none">
@@ -43,25 +47,39 @@ export const ExitConfirmDialog: React.FC<ExitConfirmDialogProps> = ({
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-base font-bold text-white">Engines Still Running</h2>
-            <p className="text-xs text-slate-400">Background inference services are active</p>
+            <h2 className="text-base font-bold text-white">
+              {hasTasks ? 'Active Generation Tasks Running' : 'Engines Still Running'}
+            </h2>
+            <p className="text-xs text-slate-400">
+              {hasTasks
+                ? `${activeTasksCount} creative task(s) in progress`
+                : 'Background inference services are active'}
+            </p>
           </div>
         </div>
 
-        {/* Running Engines List */}
+        {/* Running Tasks or Engines List */}
         <div className="mb-4">
-          <p className="text-xs text-slate-300 mb-2">
-            The following managed engines are currently running in the background:
-          </p>
-          <div className="space-y-1.5 bg-slate-950/60 rounded-xl p-3 border border-slate-800">
-            {runningEngines.map((engine) => (
-              <div key={engine.id} className="flex items-center gap-2 text-xs text-slate-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-                <span className="font-semibold">{engine.name}</span>
-                <span className="text-[11px] text-slate-500">(Active process)</span>
-              </div>
-            ))}
-          </div>
+          {hasTasks ? (
+            <p className="text-xs text-amber-300/90 mb-2 font-medium">
+              Closing now will abort running tasks unless you Keep Running.
+            </p>
+          ) : (
+            <p className="text-xs text-slate-300 mb-2">
+              The following managed engines are currently running in the background:
+            </p>
+          )}
+          {runningEngines.length > 0 && (
+            <div className="space-y-1.5 bg-slate-950/60 rounded-xl p-3 border border-slate-800">
+              {runningEngines.map((engine) => (
+                <div key={engine.id} className="flex items-center gap-2 text-xs text-slate-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                  <span className="font-semibold">{engine.name}</span>
+                  <span className="text-[11px] text-slate-500">(Active process)</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Remember Choice Checkbox */}
