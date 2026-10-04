@@ -16,89 +16,109 @@ from app.schemas.cloud import LLMConfig
 logger = logging.getLogger(__name__)
 
 
-AGENT_TOOLS_SCHEMA = [
-    {
-        "type": "function",
-        "function": {
-            "name": "propose_creative_plan",
-            "description": "Formulate a concrete creative generative plan (text-to-image, image-to-image, video, upscale, inpaint) for user review and approval.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["txt2img", "img2img", "inpaint", "upscale", "txt2video", "img2video"],
-                        "description": "Primary generative action type.",
+def get_valid_engine_identifiers() -> List[str]:
+    """Retrieve all valid engine IDs dynamically from the engine connection manager and runners."""
+    valid_engines = ["managed_comfyui", "fal_ai", "siliconflow", "managed_webui"]
+    try:
+        from app.runtime.engine_manager import engine_manager
+        engines = [e.id for e in engine_manager.list_engines()]
+        for eng in engines:
+            if eng not in valid_engines:
+                valid_engines.append(eng)
+    except Exception:
+        pass
+    return valid_engines
+
+
+def get_agent_tools_schema(engine_ids: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    """Dynamically populate valid engine identifiers into the LLM Agent Tool Schema."""
+    engines = engine_ids or get_valid_engine_identifiers()
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "propose_creative_plan",
+                "description": "Formulate a concrete creative generative plan (text-to-image, image-to-image, video, upscale, inpaint) for user review and approval.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["txt2img", "img2img", "inpaint", "upscale", "txt2video", "img2video"],
+                            "description": "Primary generative action type.",
+                        },
+                        "prompt": {
+                            "type": "string",
+                            "description": "Detailed, high-quality descriptive generation prompt.",
+                        },
+                        "negative_prompt": {
+                            "type": "string",
+                            "description": "Negative prompt keywords to avoid low quality or unwanted elements.",
+                        },
+                        "aspect_ratio": {
+                            "type": "string",
+                            "enum": ["1:1", "16:9", "9:16", "4:3", "3:4"],
+                            "description": "Target image/video aspect ratio.",
+                        },
+                        "steps": {
+                            "type": "integer",
+                            "description": "Sampling inference steps (typically 20-30).",
+                        },
+                        "engine": {
+                            "type": "string",
+                            "enum": engines,
+                            "description": f"Target execution engine ({', '.join(engines)}).",
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "Optional model checkpoint name if specified.",
+                        },
+                        "chain_upscale": {
+                            "type": "boolean",
+                            "description": "Whether to chain an automated 2x super-resolution upscaling pass.",
+                        },
                     },
-                    "prompt": {
-                        "type": "string",
-                        "description": "Detailed, high-quality descriptive generation prompt.",
-                    },
-                    "negative_prompt": {
-                        "type": "string",
-                        "description": "Negative prompt keywords to avoid low quality or unwanted elements.",
-                    },
-                    "aspect_ratio": {
-                        "type": "string",
-                        "enum": ["1:1", "16:9", "9:16", "4:3", "3:4"],
-                        "description": "Target image/video aspect ratio.",
-                    },
-                    "steps": {
-                        "type": "integer",
-                        "description": "Sampling inference steps (typically 20-30).",
-                    },
-                    "engine": {
-                        "type": "string",
-                        "enum": ["managed_comfyui", "fal_ai", "siliconflow", "managed_webui"],
-                        "description": "Target execution engine. Default to managed_comfyui for privacy or fal_ai/siliconflow for cloud.",
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Optional model checkpoint name if specified.",
-                    },
-                    "chain_upscale": {
-                        "type": "boolean",
-                        "description": "Whether to chain an automated 2x super-resolution upscaling pass.",
-                    },
+                    "required": ["action", "prompt"],
                 },
-                "required": ["action", "prompt"],
             },
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "inspect_system_models",
-            "description": "Check currently available model checkpoints and indexed local weights.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "category": {
-                        "type": "string",
-                        "description": "Filter category such as 'checkpoint', 'lora', 'upscaler'.",
-                    }
+        {
+            "type": "function",
+            "function": {
+                "name": "inspect_system_models",
+                "description": "Check currently available model checkpoints and indexed local weights.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "Filter category such as 'checkpoint', 'lora', 'upscaler'.",
+                        }
+                    },
                 },
             },
         },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "diagnose_or_repair_workflow",
-            "description": "Diagnose issues or recommend repairs for a ComfyUI DAG workflow.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "issue_description": {
-                        "type": "string",
-                        "description": "Error message or observed problem in the workflow.",
-                    }
+        {
+            "type": "function",
+            "function": {
+                "name": "diagnose_or_repair_workflow",
+                "description": "Diagnose issues or recommend repairs for a ComfyUI DAG workflow.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "issue_description": {
+                            "type": "string",
+                            "description": "Error message or observed problem in the workflow.",
+                        }
+                    },
+                    "required": ["issue_description"],
                 },
-                "required": ["issue_description"],
             },
         },
-    },
-]
+    ]
+
+
+AGENT_TOOLS_SCHEMA = get_agent_tools_schema()
 
 
 SYSTEM_PROMPT = """You are Berry AI Studio's autonomous creative assistant and workflow architect.
