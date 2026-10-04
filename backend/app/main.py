@@ -10,9 +10,9 @@ import os
 from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect, UploadFile, File, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.core.cache import (
@@ -40,6 +40,7 @@ from app.schemas.workflow_analysis import (
     WorkflowValidationReport,
     WorkflowRepairResult,
 )
+from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.runtime.llama_server.llama_supervisor import (
@@ -181,14 +182,39 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS for local web canvas
+# Enable CORS for local web canvas and desktop clients
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=list(ALLOWED_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_boundary_middleware(request: Request, call_next):
+    origin = request.headers.get("origin")
+
+    # 1. Reject untrusted cross-origin requests
+    if origin and not session_manager.is_origin_allowed(origin):
+        logger.warning(f"Blocked request from untrusted origin: {origin} to {request.url.path}")
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Cross-origin request forbidden from untrusted origin"},
+        )
+
+    # 2. Check session token if supplied
+    token = session_manager.extract_token(request)
+    if token and not session_manager.is_valid_token(token):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Invalid or expired session token"},
+        )
+
+    response = await call_next(request)
+    return response
+
 
 # Active run cancellation tracker: run_id -> asyncio.Event
 active_cancellations: Dict[str, asyncio.Event] = {}
@@ -200,12 +226,19 @@ async def health_check() -> dict[str, str]:
     return {"status": "ok", "service": "ai-workflow-backend"}
 
 
+@app.get("/api/v1/auth/session")
+async def get_session_token() -> dict[str, str]:
+    """Get active session token for the current app launch."""
+    return {"session_token": session_manager.get_token()}
+
+
 @app.get("/api/v1/info")
 async def system_info() -> dict[str, object]:
     installed = supervisor.is_installed()
     return {
         "name": "Berry AI Studio",
         "version": "0.1.0",
+        "session_token": session_manager.get_token(),
         "runners": {
             "api": {"status": "ready", "type": "cloud"},
             "comfyui": {"status": "optional", "installed": installed, "connected": False},
@@ -1129,6 +1162,18 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
     - Strict failure boundaries (aborts dependent child nodes)
     - Run cancellation support
     """
+    origin = websocket.headers.get("origin")
+    if origin and not session_manager.is_origin_allowed(origin):
+        logger.warning(f"Rejecting WebSocket handshake from unauthorized origin: {origin}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    token = websocket.query_params.get("token") or websocket.headers.get("x-session-token")
+    if token and not session_manager.is_valid_token(token):
+        logger.warning("Rejecting WebSocket handshake with invalid session token")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await websocket.accept()
     try:
         raw = await websocket.receive_text()
