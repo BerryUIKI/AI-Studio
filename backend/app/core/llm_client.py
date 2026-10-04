@@ -140,9 +140,9 @@ class LLMClient:
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
-        """Reuse long-lived pooled client to prevent connection exhaustion."""
+        """Reuse long-lived pooled client to prevent connection exhaustion, bypassing system proxy."""
         if self._client is None or self._client.is_closed:
-            self._client = httpx.AsyncClient(timeout=30.0)
+            self._client = httpx.AsyncClient(timeout=30.0, trust_env=False)
         return self._client
 
     async def aclose(self) -> None:

@@ -227,29 +227,24 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
   const handleInstallOllama = async () => {
     setInstallingOllama(true);
-    setInstallMessage(isZh ? '正在发起 Ollama 安装...' : 'Initiating Ollama install...');
+    setInstallMessage(isZh ? '正在检查内置 Ollama 引擎状态...' : 'Checking embedded Ollama engine status...');
     try {
       const res = await fetch('/api/v1/ollama/install', { method: 'POST' });
       const data = await res.json();
-      if (data.installing) {
+      if (data.installed) {
+        setInstallMessage(isZh ? '内置 Ollama 引擎已就绪。' : 'Embedded Ollama engine is ready.');
+      } else if (data.target_dir) {
         setInstallMessage(
           isZh
-            ? '已通过 winget 在后台启动静默安装，约需 1~2 分钟，请稍候点击“重新体检”刷新状态。'
-            : 'Installing Ollama in background via winget. Please wait 1-2 minutes and rescan.'
-        );
-      } else if (data.download_url) {
-        window.open(data.download_url, '_blank');
-        setInstallMessage(
-          isZh
-            ? '已打开 Ollama 官网下载页面。请安装后点击下方“重新体检”。'
-            : 'Opened Ollama download site. Please install and rescan.'
+            ? `请将 ollama 可执行文件放置于软件独立运行目录：${data.target_dir}，或点击右侧下载安装。`
+            : `Place ollama into isolated directory: ${data.target_dir}`
         );
       } else {
-        setInstallMessage(data.message || (isZh ? '未能启动安装' : 'Install request failed'));
+        setInstallMessage(data.message || (isZh ? '已完成检查' : 'Check completed'));
       }
-      setTimeout(() => fetchDiagnostics(), 4000);
+      setTimeout(() => fetchDiagnostics(), 2000);
     } catch (e: any) {
-      setInstallMessage(e?.message || (isZh ? '请求安装失败' : 'Failed to request install'));
+      setInstallMessage(e?.message || (isZh ? '请求检查失败' : 'Failed to check embedded status'));
     } finally {
       setInstallingOllama(false);
     }
@@ -667,16 +662,16 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                           className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition shadow-sm"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          <span>{installingOllama ? (isZh ? '安装中...' : 'Installing...') : (isZh ? '一键安装' : 'Install')}</span>
+                          <span>{installingOllama ? (isZh ? '检查中...' : 'Checking...') : (isZh ? '初始化引擎' : 'Init Engine')}</span>
                         </button>
                         <a
-                          href="https://ollama.com"
+                          href="https://ollama.com/download/windows"
                           target="_blank"
                           rel="noreferrer"
                           className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-white/10 transition"
                         >
                           <ExternalLink className="w-3 h-3" />
-                          <span>{isZh ? '官网下载' : 'Website'}</span>
+                          <span>{isZh ? '获取引擎' : 'Get Engine'}</span>
                         </a>
                       </>
                     ) : !ollamaStatus?.running ? (
@@ -723,8 +718,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                     <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                     <span>
                       {isZh
-                        ? '注意：未检测到本地 Ollama 运行环境。拉取与部署模型需要本地已安装 Ollama。'
-                        : 'Notice: Ollama is not installed. Models require Ollama runtime.'}
+                        ? '注意：未检测到独立 Ollama 引擎。模型部署需嵌入独立执行引擎（无需改变系统环境变量）。'
+                        : 'Notice: Embedded Ollama engine not detected. Model deployment requires the isolated engine.'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -733,15 +728,15 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                       disabled={installingOllama}
                       className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium text-[11px] transition shadow"
                     >
-                      {installingOllama ? (isZh ? '安装中...' : 'Installing...') : (isZh ? '一键安装' : 'Install')}
+                      {installingOllama ? (isZh ? '检查中...' : 'Checking...') : (isZh ? '初始化引擎' : 'Init Engine')}
                     </button>
                     <a
-                      href="https://ollama.com"
+                      href="https://ollama.com/download/windows"
                       target="_blank"
                       rel="noreferrer"
                       className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition border border-white/10"
                     >
-                      {isZh ? '官网下载' : 'Website'}
+                      {isZh ? '获取引擎' : 'Get Engine'}
                     </a>
                   </div>
                 </div>
