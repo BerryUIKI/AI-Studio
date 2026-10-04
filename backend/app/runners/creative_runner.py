@@ -51,14 +51,73 @@ from app.storage.asset_store import asset_store
 logger = logging.getLogger(__name__)
 
 
-def compute_creative_cache_hash(req: CreativeActionRequest, input_hash: str = "", mask_hash: str = "") -> str:
-    """Compute deterministic semantic cache hash for a creative action."""
+def resolve_effective_provider(req: CreativeActionRequest) -> str:
+    """Resolve the concrete provider identity that will execute this request (Invariant #5)."""
+    engine_id = (req.engine_id or "").lower()
+    model = (req.model or "").lower()
+
+    if "webui" in engine_id:
+        return "webui"
+    if "comfy" in engine_id:
+        return "comfyui"
+
+    if req.action == CreativeActionType.INPAINT:
+        if "openai" in engine_id or "dall-e" in model:
+            return "openai"
+        return "fal_ai"
+
+    if req.action == CreativeActionType.UPSCALE:
+        return "fal_ai"
+
+    if req.action == CreativeActionType.IMG2IMG:
+        return "fal_ai"
+
+    if req.action == CreativeActionType.IMG2VIDEO:
+        if engine_id in ("siliconflow", "silicon"):
+            return "siliconflow"
+        if not credentials_manager.get_key(CloudProviderId.FAL) and credentials_manager.get_key(CloudProviderId.SILICONFLOW):
+            return "siliconflow"
+        return "fal_ai"
+
+    if req.action == CreativeActionType.TXT2VIDEO:
+        if engine_id in ("siliconflow", "silicon"):
+            return "siliconflow"
+        if engine_id in ("fal_ai", "fal"):
+            return "fal_ai"
+        if credentials_manager.get_key(CloudProviderId.FAL):
+            return "fal_ai"
+        if credentials_manager.get_key(CloudProviderId.SILICONFLOW):
+            return "siliconflow"
+        return "cloud_video"
+
+    # TXT2IMG
+    if "flux" in model or engine_id in ("cloud_fal", "fal_ai", "fal"):
+        return "fal_ai"
+    if "dall-e" in model or "openai" in engine_id:
+        return "openai"
+    if credentials_manager.get_key(CloudProviderId.SILICONFLOW):
+        return "siliconflow"
+    if credentials_manager.get_key(CloudProviderId.FAL):
+        return "fal_ai"
+    return "cloud_default"
+
+
+def compute_creative_cache_hash(
+    req: CreativeActionRequest,
+    input_hash: str = "",
+    mask_hash: str = "",
+    provider_id: Optional[str] = None,
+) -> str:
+    """Compute deterministic semantic cache hash for a creative action (Invariant #5)."""
+    effective_provider = provider_id or resolve_effective_provider(req)
     canonical_payload = {
         "action": req.action.value,
         "prompt": req.prompt.strip(),
         "negative_prompt": req.negative_prompt.strip(),
         "model": req.model,
         "engine_id": req.engine_id,
+        "provider_id": effective_provider,
+        "runner_version": "0.1.0",
         "width": req.width,
         "height": req.height,
         "steps": req.steps,

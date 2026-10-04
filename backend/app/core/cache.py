@@ -26,11 +26,14 @@ def compute_semantic_node_hash(
     node_type: str,
     params: Dict[str, Any],
     input_bindings: List[Tuple[str, str, str]],  # (target_handle, upstream_content_hash, source_handle)
+    provider_id: Optional[str] = None,
+    runner_version: Optional[str] = None,
 ) -> str:
     """
     Compute a deterministic port-aware SHA-256 hash representing a node's exact semantic state.
     NodeHash = SHA256(NodeType + SerializedCanonicalParams + OrderedPortBindings)
 
+    Canonical params strictly incorporate provider identity and runner version (Invariant #5).
     OrderedPortBindings strictly associates input ports to upstream outputs:
     target_handle:source_handle:content_hash
     """
@@ -39,6 +42,15 @@ def compute_semantic_node_hash(
 
     # Canonicalize params: exclude transient secrets from hash
     clean_params = {k: v for k, v in params.items() if not k.lower().endswith("key")}
+
+    # Invariant #5: Canonical Params must include provider identity & runner version
+    resolved_prov = provider_id or params.get("__provider") or params.get("provider") or params.get("engine_id")
+    if resolved_prov:
+        clean_params["__provider"] = str(resolved_prov)
+
+    resolved_ver = runner_version or params.get("__runner_version") or "0.1.0"
+    clean_params["__runner_version"] = str(resolved_ver)
+
     params_str = json.dumps(clean_params, sort_keys=True, default=str)
     hasher.update(params_str.encode("utf-8"))
 
