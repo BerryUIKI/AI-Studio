@@ -9,7 +9,7 @@ ownership: never attempts to kill external processes or mutate user installation
 import asyncio
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import httpx
 
 from app.runtime.supervisor import supervisor as comfy_supervisor

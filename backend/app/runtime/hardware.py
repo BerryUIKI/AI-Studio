@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from app.runtime.supervisor import get_default_engine_dir
 from app.schemas.hardware import GpuInfo, HardwareReadiness, StorageInfo
