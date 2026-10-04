@@ -24,6 +24,7 @@ import { ModelHubView } from './components/hub/ModelHubView';
 import { FloatingDownloadWidget } from './components/hub/FloatingDownloadWidget';
 import { DownloadManagerDrawer } from './components/hub/DownloadManagerDrawer';
 import { SettingsView } from './components/settings/SettingsView';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
 import { useEngineStore, type EngineInstance } from './stores/useEngineStore';
@@ -322,41 +323,51 @@ export default function App() {
               />
             ),
             canvas: (
-              <div className="flex-1 flex w-full h-full overflow-hidden relative">
-                {showNodePalette && <NodePalette />}
-                <main className="flex-1 relative w-full h-full">
-                  <FlowCanvas />
-                  <CreationDock />
-                </main>
-              </div>
+              <ErrorBoundary fallbackTitle="Canvas Rendering Error" onReset={clearCanvas}>
+                <div className="flex-1 flex w-full h-full overflow-hidden relative">
+                  {showNodePalette && <NodePalette />}
+                  <main className="flex-1 relative w-full h-full">
+                    <FlowCanvas />
+                    <CreationDock />
+                  </main>
+                </div>
+              </ErrorBoundary>
             ),
-            models: <ModelHubView />,
+            models: (
+              <ErrorBoundary fallbackTitle="Model Hub Error">
+                <ModelHubView />
+              </ErrorBoundary>
+            ),
             comfyui: (
-              <EmbeddedEngineView
-                engineType="comfyui"
-                title="ComfyUI"
-                port={comfyStatus?.port || 8188}
-                isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
-                isInstalled={Boolean(
-                  instances.find((i) => i.id === 'comfyui-managed')?.status !== 'not_installed' &&
-                  runtimeStatus?.installed !== false
-                )}
-                onStartEngine={toggleRuntime}
-                onDeployEngine={() => handleStartDeployment('comfyui')}
-                onOpenDirectory={() => setShowManagerModal(true)}
-              />
+              <ErrorBoundary fallbackTitle="ComfyUI View Error">
+                <EmbeddedEngineView
+                  engineType="comfyui"
+                  title="ComfyUI"
+                  port={comfyStatus?.port || 8188}
+                  isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
+                  isInstalled={Boolean(
+                    instances.find((i) => i.id === 'comfyui-managed')?.status !== 'not_installed' &&
+                    runtimeStatus?.installed !== false
+                  )}
+                  onStartEngine={toggleRuntime}
+                  onDeployEngine={() => handleStartDeployment('comfyui')}
+                  onOpenDirectory={() => setShowManagerModal(true)}
+                />
+              </ErrorBoundary>
             ),
             webui: (
-              <EmbeddedEngineView
-                engineType="webui"
-                title="SD WebUI"
-                port={7860}
-                isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
-                isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
-                onStartEngine={toggleRuntime}
-                onDeployEngine={() => handleStartDeployment('webui')}
-                onOpenDirectory={() => setShowManagerModal(true)}
-              />
+              <ErrorBoundary fallbackTitle="SD WebUI View Error">
+                <EmbeddedEngineView
+                  engineType="webui"
+                  title="SD WebUI"
+                  port={7860}
+                  isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
+                  isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
+                  onStartEngine={toggleRuntime}
+                  onDeployEngine={() => handleStartDeployment('webui')}
+                  onOpenDirectory={() => setShowManagerModal(true)}
+                />
+              </ErrorBoundary>
             ),
             settings: (
               <SettingsView
