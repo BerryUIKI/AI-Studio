@@ -42,7 +42,6 @@ from app.schemas.workflow_analysis import (
 )
 from app.runtime.supervisor import supervisor
 from app.runtime.webui_supervisor import webui_supervisor
-from app.runtime.ollama_supervisor import ollama_supervisor, OllamaRuntimeStatus
 from app.runtime.llama_server.llama_supervisor import (
     llama_server_supervisor,
     LlamaServerRuntimeStatus,
@@ -150,7 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_no_proxy()
     logger.info("Berry AI Studio API starting up...")
     
-    # Auto-start embedded llama-server or Ollama if installed in isolated app engine directory
+    # Auto-start embedded llama-server if installed in isolated app engine directory
     try:
         if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
             models = llama_server_supervisor.list_local_models()
@@ -159,13 +158,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 llama_server_supervisor.start(models[0].name)
     except Exception as e:
         logger.warning(f"Failed to auto-start embedded llama-server: {e}")
-
-    try:
-        if ollama_supervisor.is_installed() and not ollama_supervisor.is_running():
-            logger.info("Detected installed embedded Ollama runtime, auto-starting...")
-            ollama_supervisor.start()
-    except Exception as e:
-        logger.warning(f"Failed to auto-start embedded Ollama: {e}")
 
     yield
 
@@ -176,13 +168,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             llama_server_supervisor.stop()
     except Exception as e:
         logger.debug(f"Error stopping llama-server on shutdown: {e}")
-
-    try:
-        if ollama_supervisor.is_running():
-            logger.info("Stopping embedded Ollama process...")
-            ollama_supervisor.stop()
-    except Exception as e:
-        logger.debug(f"Error stopping Ollama on shutdown: {e}")
 
 
 setup_logging()
@@ -892,12 +877,12 @@ async def delete_cloud_credential(provider_id: CloudProviderId) -> dict[str, boo
 
 
 # ---------------------------------------------------------------------------
-# LLM Provider & Agent Base Endpoints (Local Ollama / OpenAI / SiliconFlow)
+# LLM Provider & Agent Base Endpoints (Local llama.cpp / OpenAI / SiliconFlow)
 # ---------------------------------------------------------------------------
 
 @app.get("/api/v1/agent/llm/config", response_model=LLMConfig)
 async def get_agent_llm_config() -> LLMConfig:
-    """Get active LLM provider configuration for the Agent base (Ollama / SiliconFlow / OpenAI)."""
+    """Get active LLM provider configuration for the Agent base (llama-server / SiliconFlow / OpenAI)."""
     return credentials_manager.get_llm_config()
 
 
@@ -918,52 +903,8 @@ async def set_agent_llm_config(req: SetLLMConfigRequest) -> LLMConfig:
 
 @app.post("/api/v1/agent/llm/test", response_model=TestKeyResult)
 async def test_agent_llm_endpoint(config: Optional[LLMConfig] = None) -> TestKeyResult:
-    """Test connectivity to configured LLM endpoint (Ollama local / remote API)."""
+    """Test connectivity to configured LLM endpoint (llama-server local / remote API)."""
     return await credentials_manager.test_llm_connection(config)
-
-
-# ---------------------------------------------------------------------------
-# Embedded Ollama Runtime & Model Pull Endpoints
-# ---------------------------------------------------------------------------
-
-@app.get("/api/v1/ollama/status", response_model=OllamaRuntimeStatus)
-async def get_ollama_runtime_status() -> OllamaRuntimeStatus:
-    """Get active status of the embedded or system Ollama runtime."""
-    return await ollama_supervisor.get_status()
-
-
-@app.post("/api/v1/ollama/start")
-async def start_ollama_runtime() -> Dict[str, Any]:
-    """Start embedded Ollama process."""
-    return ollama_supervisor.start()
-
-
-@app.post("/api/v1/ollama/stop")
-async def stop_ollama_runtime() -> Dict[str, Any]:
-    """Stop embedded Ollama process."""
-    return ollama_supervisor.stop()
-
-
-@app.post("/api/v1/ollama/install")
-async def install_ollama_runtime() -> Dict[str, Any]:
-    """Trigger background installation or get installation instructions for Ollama."""
-    return ollama_supervisor.install()
-
-
-class OllamaPullModelRequest(BaseModel):
-    model_name: str
-
-
-@app.post("/api/v1/ollama/pull")
-async def pull_ollama_model(req: OllamaPullModelRequest):
-    """Pull local LLM model from Ollama library."""
-    from fastapi.responses import StreamingResponse
-
-    async def event_generator():
-        async for chunk in ollama_supervisor.pull_model_stream(req.model_name):
-            yield json.dumps(chunk) + "\n"
-
-    return StreamingResponse(event_generator(), media_type="application/x-ndjson")
 
 
 # ---------------------------------------------------------------------------

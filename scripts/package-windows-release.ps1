@@ -129,15 +129,6 @@ if (Test-Path "$SourceLlamaServer\llama-server.exe") {
     Write-Host "  -> runtime/llama_server/llama-server.exe staged successfully" -ForegroundColor Green
 }
 
-# Prepare embedded Ollama runtime in runtime/ollama if provided (legacy)
-$SourceOllama = "$RepoRoot\runtime\ollama"
-if (Test-Path "$SourceOllama\ollama.exe") {
-    Write-Host "  -> Bundling embedded Ollama binary into runtime/ollama..." -ForegroundColor Yellow
-    New-Item -ItemType Directory -Path "$TargetDir\runtime\ollama" -Force | Out-Null
-    Copy-Item -Recurse "$SourceOllama\*" -Destination "$TargetDir\runtime\ollama\" -Force
-    Write-Host "  -> runtime/ollama/ollama.exe staged successfully" -ForegroundColor Green
-}
-
 # Create Berry.bat launcher wrapper
 $BatContent = @"
 @echo off

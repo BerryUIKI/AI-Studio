@@ -162,7 +162,7 @@ class CredentialManager:
         self._save()
 
     async def test_llm_connection(self, config: Optional[LLMConfig] = None) -> TestKeyResult:
-        """Test connection to LLM provider endpoint (Ollama / OpenAI / SiliconFlow / DeepSeek)."""
+        """Test connection to LLM provider endpoint (llama-server / OpenAI / SiliconFlow / DeepSeek)."""
         cfg = config or self.get_llm_config()
         base_url = cfg.base_url.rstrip("/")
         # Target OpenAI-compatible /models endpoint
@@ -179,7 +179,7 @@ class CredentialManager:
                     model_list = [m.get("id") for m in data.get("data", [])] if isinstance(data, dict) else []
                     model_summary = f" Found models: {', '.join(model_list[:3])}" if model_list else ""
                     return TestKeyResult(
-                        provider_id=CloudProviderId.LLAMA_SERVER if cfg.provider == "llama_server" else (CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI),
+                        provider_id=CloudProviderId.LLAMA_SERVER if cfg.provider == "llama_server" else CloudProviderId.OPENAI,
                         valid=True,
                         message=f"Connected successfully to {cfg.provider} ({cfg.model}).{model_summary}",
                         status_code=200,
@@ -199,9 +199,9 @@ class CredentialManager:
                         status_code=resp.status_code,
                     )
             except Exception as e:
-                err_hint = " Make sure local llama-server is running." if "8080" in base_url or cfg.provider == "llama_server" else (" Make sure local Ollama is running (`ollama serve`)." if "11434" in base_url or cfg.provider == "ollama" else "")
+                err_hint = " Make sure local llama-server is running." if "8080" in base_url or cfg.provider == "llama_server" else ""
                 return TestKeyResult(
-                    provider_id=CloudProviderId.LLAMA_SERVER if cfg.provider == "llama_server" else (CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI),
+                    provider_id=CloudProviderId.LLAMA_SERVER if cfg.provider == "llama_server" else CloudProviderId.OPENAI,
                     valid=False,
                     message=f"Could not connect to {base_url}:{err_hint} ({e})",
                 )
@@ -209,7 +209,7 @@ class CredentialManager:
     async def test_key(self, provider_id: CloudProviderId, api_key: Optional[str] = None) -> TestKeyResult:
         """Validate key against the provider's authentication endpoint."""
         key = api_key or self.get_key(provider_id)
-        if not key and provider_id not in (CloudProviderId.OLLAMA,):
+        if not key and provider_id not in (CloudProviderId.LLAMA_SERVER,):
             return TestKeyResult(
                 provider_id=provider_id,
                 valid=False,
@@ -242,12 +242,6 @@ class CredentialManager:
                         resp = await client.get("http://127.0.0.1:8080/v1/models")
                     valid = resp.status_code == 200
                     msg = "Embedded llama-server verified successfully." if valid else f"llama-server HTTP {resp.status_code}"
-                    return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
-
-                elif provider_id == CloudProviderId.OLLAMA:
-                    resp = await client.get("http://127.0.0.1:11434/api/tags")
-                    valid = resp.status_code == 200
-                    msg = "Local Ollama service verified successfully." if valid else f"Ollama HTTP {resp.status_code}"
                     return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
 
                 elif provider_id == CloudProviderId.FAL:

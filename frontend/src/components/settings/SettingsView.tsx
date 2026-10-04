@@ -227,7 +227,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <span>AI Agent 推理基座与大模型配置 (LLM Base)</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  为右侧常驻 AI Agents 赋予真正的大语言模型推理与自主规划能力，优先支持本地私有化部署（Ollama / vLLM / LocalAI），亦支持云端商用模型。
+                  为右侧常驻 AI Agents 赋予真正的大语言模型推理与自主规划能力，优先支持本地私有化部署（内置 llama.cpp 嵌入引擎），亦支持云端商用模型。
                 </p>
               </div>
 
@@ -269,10 +269,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {[
                     { id: 'llama_server', label: 'llama.cpp (内置嵌入)', desc: '免安装 · 零污染 · 画布通用' },
-                    { id: 'ollama', label: 'Local Ollama', desc: '100% 本地运行 · 零 API 费用' },
                     { id: 'siliconflow', label: '硅基流动 (SiliconFlow)', desc: 'Qwen2.5 / DeepSeek 极速 API' },
                     { id: 'deepseek', label: 'DeepSeek 官方', desc: 'DeepSeek-V3 / R1 推理' },
                     { id: 'openai', label: 'OpenAI / Custom', desc: 'GPT-4o 或自定义端点' },
@@ -286,9 +285,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         if (p.id === 'llama_server') {
                           newUrl = 'http://127.0.0.1:8080/v1';
                           newModel = 'qwen2.5-7b-instruct-q4_k_m.gguf';
-                        } else if (p.id === 'ollama') {
-                          newUrl = 'http://127.0.0.1:11434/v1';
-                          newModel = 'qwen2.5:7b';
                         } else if (p.id === 'siliconflow') {
                           newUrl = 'https://api.siliconflow.cn/v1';
                           newModel = 'Qwen/Qwen2.5-7B-Instruct';
@@ -327,7 +323,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="text"
                       value={llmConfig.base_url}
                       onChange={(e) => setLlmConfig({ ...llmConfig, base_url: e.target.value })}
-                      placeholder="e.g. http://127.0.0.1:11434/v1"
+                      placeholder="e.g. http://127.0.0.1:8080/v1"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -340,20 +336,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="text"
                       value={llmConfig.model}
                       onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
-                      placeholder="e.g. qwen2.5:7b, deepseek-r1:8b"
+                      placeholder="e.g. qwen2.5-7b-instruct-q4_k_m.gguf"
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
 
                   <div className="sm:col-span-2">
                     <label className="text-[11px] font-medium text-slate-300 block mb-1">
-                      API Key (本地 Ollama 可留空)
+                      API Key (本地 llama.cpp 可留空)
                     </label>
                     <input
                       type="password"
                       value={llmConfig.api_key || ''}
                       onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
-                      placeholder={llmConfig.provider === 'llama_server' || llmConfig.provider === 'ollama' ? '本地运行无需 API Key' : 'sk-...'}
+                      placeholder={llmConfig.provider === 'llama_server' ? '本地运行无需 API Key' : 'sk-...'}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>

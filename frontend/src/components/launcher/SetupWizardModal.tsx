@@ -9,10 +9,8 @@ import {
   X,
   Play,
   RotateCw,
-  Server,
   Zap,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 
@@ -74,19 +72,6 @@ interface LlamaServerStatus {
   models: LlamaModelInfo[];
 }
 
-interface OllamaStatus {
-  installed: boolean;
-  running: boolean;
-  pid?: number;
-  port?: number;
-  endpoint: string;
-  models: Array<{
-    name: string;
-    size_bytes: number;
-    parameter_size?: string;
-  }>;
-}
-
 interface SetupWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -95,7 +80,7 @@ interface SetupWizardModalProps {
 
 interface PresetModelDef {
   name: string;
-  hubModelId?: string;
+  hubModelId: string;
   labelZh: string;
   labelEn: string;
   size: string;
@@ -135,15 +120,6 @@ const PRESET_MODELS: PresetModelDef[] = [
     descZh: '深度强化学习强力推理模型，长思考链路，擅长复杂提示词逻辑设计与工作流诊断。',
     descEn: 'DeepSeek R1 reasoning architecture for complex creative prompt composition.',
   },
-  {
-    name: 'llama3.2:3b',
-    labelZh: 'Llama 3.2 (3B) - 轻量极速',
-    labelEn: 'Llama 3.2 (3B) - Lightweight',
-    size: '2.0 GB',
-    vramReqMb: 3072,
-    descZh: 'Meta 超轻量高效模型，启动迅捷，可在低显存或CPU流畅运行。',
-    descEn: 'Ultra-lightweight Meta model, ultra-fast and CPU/low-VRAM friendly.',
-  },
 ];
 
 export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
@@ -163,9 +139,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
   const [llamaStatus, setLlamaStatus] = useState<LlamaServerStatus | null>(null);
   const [loadingLlama, setLoadingLlama] = useState(false);
   const [installingLlama, setInstallingLlama] = useState(false);
-  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [loadingOllama, setLoadingOllama] = useState(false);
-  const [installingOllama, setInstallingOllama] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('qwen2.5:7b');
@@ -178,7 +151,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
   const fetchDiagnostics = async () => {
     setLoadingHardware(true);
-    setLoadingOllama(true);
     setHardwareError(null);
 
     try {
@@ -212,18 +184,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       console.warn('Failed to fetch llama-server status:', e);
     } finally {
       setLoadingLlama(false);
-    }
-
-    try {
-      const olRes = await fetch('/api/v1/ollama/status');
-      if (olRes.ok) {
-        const olData: OllamaStatus = await olRes.json();
-        setOllamaStatus(olData);
-      }
-    } catch (e) {
-      console.warn('Failed to fetch ollama status:', e);
-    } finally {
-      setLoadingOllama(false);
     }
   };
 
@@ -268,49 +228,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       setInstallMessage(e?.message || (isZh ? '初始化请求失败' : 'Failed to initialize'));
     } finally {
       setInstallingLlama(false);
-    }
-  };
-
-  const handleStartOllama = async () => {
-    setLoadingOllama(true);
-    setStartError(null);
-    try {
-      const res = await fetch('/api/v1/ollama/start', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!data.success) {
-        setStartError(data.message || (isZh ? '启动 Ollama 失败' : 'Failed to start Ollama'));
-      }
-      await fetchDiagnostics();
-    } catch (e: any) {
-      console.error(e);
-      setStartError(e?.message || (isZh ? '启动失败' : 'Start failed'));
-    } finally {
-      setLoadingOllama(false);
-    }
-  };
-
-  const handleInstallOllama = async () => {
-    setInstallingOllama(true);
-    setInstallMessage(isZh ? '正在检查内置 Ollama 引擎状态...' : 'Checking embedded Ollama engine status...');
-    try {
-      const res = await fetch('/api/v1/ollama/install', { method: 'POST' });
-      const data = await res.json();
-      if (data.installed) {
-        setInstallMessage(isZh ? '内置 Ollama 引擎已就绪。' : 'Embedded Ollama engine is ready.');
-      } else if (data.target_dir) {
-        setInstallMessage(
-          isZh
-            ? `请将 ollama 可执行文件放置于软件独立运行目录：${data.target_dir}，或点击右侧下载安装。`
-            : `Place ollama into isolated directory: ${data.target_dir}`
-        );
-      } else {
-        setInstallMessage(data.message || (isZh ? '已完成检查' : 'Check completed'));
-      }
-      setTimeout(() => fetchDiagnostics(), 2000);
-    } catch (e: any) {
-      setInstallMessage(e?.message || (isZh ? '请求检查失败' : 'Failed to check embedded status'));
-    } finally {
-      setInstallingOllama(false);
     }
   };
 
@@ -401,70 +318,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       }
     }
 
-    // Fallback: Ollama model pull stream
-    if (ollamaStatus && !ollamaStatus.installed) {
-      setPullError(
-        isZh
-          ? '未检测到 Ollama 运行环境。请先完成安装。'
-          : 'Ollama is not installed. Please install Ollama first.'
-      );
+    if (!preset?.hubModelId) {
+      setPullError(isZh ? '未找到对应的 GGUF 模型配置' : 'GGUF model configuration not found');
       setIsPulling(false);
       return;
-    }
-
-    setPullProgress({ status: isZh ? '正在建立下载连接...' : 'Connecting...', percent: 0 });
-
-    try {
-      const resp = await fetch('/api/v1/ollama/pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model_name: modelName }),
-      });
-
-      if (!resp.ok) {
-        throw new Error(`Server returned HTTP ${resp.status}`);
-      }
-
-      const reader = resp.body?.getReader();
-      if (!reader) throw new Error('Readable stream not supported');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const data = JSON.parse(line);
-            if (data.error) {
-              setPullError(data.error);
-              setIsPulling(false);
-              return;
-            }
-            const status = data.status || '';
-            const total = data.total || 0;
-            const completed = data.completed || 0;
-            const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-            setPullProgress({ status, percent: pct });
-          } catch {
-            // ignore
-          }
-        }
-      }
-
-      setIsPulling(false);
-      await fetchDiagnostics();
-      setActiveStep(3);
-    } catch (err: any) {
-      setPullError(err?.message || 'Download failed');
-      setIsPulling(false);
     }
   };
 
@@ -515,13 +372,13 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <span>{isZh ? '系统硬件体检与本地模型部署向导' : 'Hardware Diagnostics & Model Setup'}</span>
                 <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Built-in Ollama
+                  Embedded llama.cpp
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
                 {isZh
-                  ? '一站式真实检测硬件配置、管理内置 Ollama 服务与极速部署本地大模型'
-                  : 'Live GPU diagnosis, embedded Ollama lifecycle & instant local model provisioning'}
+                  ? '一站式真实检测硬件配置、管理内置 llama.cpp 嵌入引擎与极速部署本地大模型'
+                  : 'Live GPU diagnosis, embedded llama.cpp lifecycle & instant local model provisioning'}
               </p>
             </div>
           </div>
@@ -811,87 +668,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                     )}
                   </div>
                 </div>
-              </div>
 
-              {/* Ollama Service Status Card */}
-              <div className="p-4 rounded-xl bg-slate-800/40 border border-white/[0.06] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300">
-                      <Server className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-white flex items-center gap-2">
-                        <span>{isZh ? '内置 Ollama 运行状态' : 'Embedded Ollama Runtime'}</span>
-                        {ollamaStatus?.running ? (
-                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        ) : !ollamaStatus?.installed ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-medium">
-                            {isZh ? '未安装' : 'Not Installed'}
-                          </span>
-                        ) : (
-                          <span className="w-2 h-2 rounded-full bg-amber-400" />
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
-                        {ollamaStatus?.running
-                          ? (isZh ? `已就绪并监听端口 ${ollamaStatus.port}` : `Active on port ${ollamaStatus.port}`)
-                          : !ollamaStatus?.installed
-                          ? (isZh ? '未检测到 Ollama 运行环境，需先安装' : 'Ollama runtime not found on host')
-                          : (isZh ? '服务尚未运行，点击右侧立即启动' : 'Service is currently stopped')}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    {!ollamaStatus?.installed ? (
-                      <>
-                        <button
-                          onClick={handleInstallOllama}
-                          disabled={installingOllama}
-                          className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition shadow-sm"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>{installingOllama ? (isZh ? '检查中...' : 'Checking...') : (isZh ? '初始化引擎' : 'Init Engine')}</span>
-                        </button>
-                        <a
-                          href="https://ollama.com/download/windows"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-white/10 transition"
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                          <span>{isZh ? '获取引擎' : 'Get Engine'}</span>
-                        </a>
-                      </>
-                    ) : !ollamaStatus?.running ? (
-                      <button
-                        onClick={handleStartOllama}
-                        disabled={loadingOllama}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
-                      >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>{loadingOllama ? (isZh ? '启动中...' : 'Starting...') : (isZh ? '启动服务' : 'Start Service')}</span>
-                      </button>
-                    ) : (
-                      <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{isZh ? '已在线运行' : 'Running'}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {installMessage && (
-                  <div className="p-2.5 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-200">
-                    {installMessage}
-                  </div>
-                )}
-
-                {startError && (
-                  <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-500/30 text-xs text-rose-300 flex items-center gap-2">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>{startError}</span>
+                {(installMessage || startError) && (
+                  <div className={`p-2.5 rounded-lg text-xs border ${startError ? 'bg-rose-950/40 border-rose-500/30 text-rose-300' : 'bg-indigo-950/30 border-indigo-500/20 text-indigo-300'}`}>
+                    {startError || installMessage}
                   </div>
                 )}
               </div>
@@ -901,37 +681,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           {/* STEP 2: Deploy Model */}
           {activeStep === 2 && (
             <div className="space-y-4">
-              {/* Ollama Not Ready Warning Banner */}
-              {ollamaStatus && !ollamaStatus.installed && (
-                <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/30 text-xs text-amber-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>
-                      {isZh
-                        ? '注意：未检测到独立 Ollama 引擎。模型部署需嵌入独立执行引擎（无需改变系统环境变量）。'
-                        : 'Notice: Embedded Ollama engine not detected. Model deployment requires the isolated engine.'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleInstallOllama}
-                      disabled={installingOllama}
-                      className="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-white font-medium text-[11px] transition shadow"
-                    >
-                      {installingOllama ? (isZh ? '检查中...' : 'Checking...') : (isZh ? '初始化引擎' : 'Init Engine')}
-                    </button>
-                    <a
-                      href="https://ollama.com/download/windows"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] transition border border-white/10"
-                    >
-                      {isZh ? '获取引擎' : 'Get Engine'}
-                    </a>
-                  </div>
-                </div>
-              )}
-
               <div className="p-3 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-xs text-slate-200 leading-relaxed">
                 <span className="text-indigo-300 font-semibold">{isZh ? '硬件适配诊断：' : 'Hardware Telemetry: '}</span>
                 <span>
@@ -944,9 +693,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
               <div className="space-y-2.5">
                 {PRESET_MODELS.map((model) => {
                   const isSelected = selectedModel === model.name;
-                  const isAlreadyInstalled = (
-                    llamaStatus?.models?.some((m) => m.name.toLowerCase().includes(model.name.split(':')[0].toLowerCase()) || (model.hubModelId && m.name.includes(model.hubModelId))) ||
-                    ollamaStatus?.models?.some((m) => m.name === model.name || m.name.startsWith(model.name.split(':')[0]))
+                  const isAlreadyInstalled = llamaStatus?.models?.some(
+                    (m) =>
+                      m.name.toLowerCase().includes(model.name.split(':')[0].toLowerCase()) ||
+                      (model.hubModelId && m.name.includes(model.hubModelId))
                   );
 
                   // Dynamic match check: does hardware support full GPU or RAM?
@@ -1068,13 +818,13 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 </p>
               </div>
 
-              {ollamaStatus?.models && ollamaStatus.models.length > 0 && (
+              {llamaStatus?.models && llamaStatus.models.length > 0 && (
                 <div className="w-full max-w-sm p-3 rounded-xl bg-slate-800/40 border border-white/[0.06] text-left text-xs">
                   <div className="font-semibold text-slate-300 mb-1">
-                    {isZh ? '已加载本地模型清单:' : 'Loaded Local Models:'}
+                    {isZh ? '已加载 GGUF 本地模型清单:' : 'Loaded GGUF Models:'}
                   </div>
                   <div className="space-y-1">
-                    {ollamaStatus.models.map((m) => (
+                    {llamaStatus.models.map((m) => (
                       <div key={m.name} className="flex justify-between text-slate-400 font-mono text-[11px]">
                         <span>• {m.name}</span>
                         <span>{Math.round((m.size_bytes / (1024 * 1024 * 1024)) * 10) / 10} GB</span>
