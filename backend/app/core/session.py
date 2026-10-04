@@ -32,6 +32,7 @@ ALLOWED_ORIGINS: Set[str] = {
 SENSITIVE_PREFIXES = (
     "/api/v1/runtime/",
     "/api/v1/shutdown",
+    "/api/v1/manager/",
     "/api/v1/creative/execute",
     "/api/v1/workflow/run",
     "/api/v1/agent/llm/config",

@@ -157,13 +157,51 @@ export default function App() {
     return running;
   }, [instances, runtimeStatus]);
 
-  const closeAppWindow = async () => {
+  const [activeTasksCount, setActiveTasksCount] = useState<number>(0);
+
+  const checkActiveTasks = async (): Promise<number> => {
+    try {
+      const res = await fetch('/api/v1/tasks/active');
+      if (res.ok) {
+        const data = await res.json();
+        const count = data.active_tasks_count ?? 0;
+        setActiveTasksCount(count);
+        return count;
+      }
+    } catch {
+      // Fallback: check canvas executing state
+    }
+    const count = isExecuting ? 1 : 0;
+    setActiveTasksCount(count);
+    return count;
+  };
+
+  const closeAppWindow = async (options?: {
+    mode?: 'keep_running' | 'stop_owned';
+    force?: boolean;
+    stopManagedEngines?: boolean;
+  }) => {
+    const mode = options?.mode || 'stop_owned';
+    const force = options?.force || false;
+    const stopManagedEngines = options?.stopManagedEngines;
+
     try {
       const isDesktop = isTauri() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window));
       if (isDesktop) {
         const { invoke } = await import('@tauri-apps/api/core');
         try {
-          await invoke('close_app');
+          const res = await invoke<{ success: boolean; refused: boolean; message: string }>('close_app', {
+            payload: {
+              mode,
+              force,
+              stop_managed_engines: stopManagedEngines,
+            },
+          });
+          if (res && res.refused) {
+            console.warn('Backend refused shutdown due to active tasks:', res.message);
+            setShowExitDialog(true);
+            return;
+          }
           return;
         } catch (e) {
           console.warn('invoke close_app failed, falling back to window destroy:', e);
@@ -192,10 +230,10 @@ export default function App() {
       setExitPolicy('keep_running');
     }
     setShowExitDialog(false);
-    closeAppWindow();
+    closeAppWindow({ mode: 'keep_running' });
   };
 
-  const handleCloseAllAndExit = async (remember: boolean) => {
+  const handleCloseAllAndExit = async (remember: boolean, force = true) => {
     if (remember) {
       setExitPolicy('close_all');
     }
@@ -203,37 +241,46 @@ export default function App() {
     try {
       await fetch('/api/v1/runtime/stop', { method: 'POST' }).catch(() => {});
     } finally {
-      closeAppWindow();
+      closeAppWindow({ mode: 'stop_owned', force, stopManagedEngines: true });
     }
   };
 
-  const handleCloseRequested = useCallback(() => {
+  const handleCloseRequested = useCallback(async () => {
     const running = getRunningManagedEngines();
-    if (running.length === 0) {
-      closeAppWindow();
+    const tasks = await checkActiveTasks();
+
+    if (running.length === 0 && tasks === 0) {
+      closeAppWindow({ mode: 'stop_owned', force: false });
       return;
     }
 
-    if (exitPolicy === 'prompt') {
+    if (tasks > 0 || exitPolicy === 'prompt') {
       setShowExitDialog(true);
     } else if (exitPolicy === 'close_all') {
-      handleCloseAllAndExit(false);
+      handleCloseAllAndExit(false, false);
     } else {
       // keep_running
       handleKeepRunning(false);
     }
-  }, [getRunningManagedEngines, exitPolicy]);
+  }, [getRunningManagedEngines, exitPolicy, isExecuting]);
 
   // Hook into native Tauri window close button / Alt+F4
   useEffect(() => {
     let unlistenClose: (() => void) | undefined;
     if (isTauri()) {
       getCurrentWindow()
-        .onCloseRequested((event) => {
+        .onCloseRequested(async (event) => {
           const running = getRunningManagedEngines();
-          if (running.length > 0 && exitPolicy === 'prompt') {
+          const tasks = await checkActiveTasks();
+          if ((running.length > 0 || tasks > 0) && (exitPolicy === 'prompt' || tasks > 0)) {
             event.preventDefault();
             setShowExitDialog(true);
+          } else if (exitPolicy === 'keep_running') {
+            event.preventDefault();
+            handleKeepRunning(false);
+          } else if (exitPolicy === 'close_all') {
+            event.preventDefault();
+            handleCloseAllAndExit(false, false);
           }
         })
         .then((fn) => {
@@ -448,6 +495,7 @@ export default function App() {
       <ExitConfirmDialog
         isOpen={showExitDialog}
         runningEngines={getRunningManagedEngines()}
+        activeTasksCount={activeTasksCount}
         onKeepRunning={handleKeepRunning}
         onCloseAllAndExit={handleCloseAllAndExit}
         onCancel={() => setShowExitDialog(false)}
