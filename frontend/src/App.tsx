@@ -338,37 +338,45 @@ export default function App() {
                 <ModelHubView />
               </ErrorBoundary>
             ),
-            comfyui: (
-              <ErrorBoundary fallbackTitle="ComfyUI View Error">
-                <EmbeddedEngineView
-                  engineType="comfyui"
-                  title="ComfyUI"
-                  port={comfyStatus?.port || 8188}
-                  isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
-                  isInstalled={Boolean(
-                    instances.find((i) => i.id === 'comfyui-managed')?.status !== 'not_installed' &&
-                    runtimeStatus?.installed !== false
-                  )}
-                  onStartEngine={toggleRuntime}
-                  onDeployEngine={() => handleStartDeployment('comfyui')}
-                  onOpenDirectory={() => setShowManagerModal(true)}
-                />
-              </ErrorBoundary>
-            ),
-            webui: (
-              <ErrorBoundary fallbackTitle="SD WebUI View Error">
-                <EmbeddedEngineView
-                  engineType="webui"
-                  title="SD WebUI"
-                  port={7860}
-                  isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
-                  isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
-                  onStartEngine={toggleRuntime}
-                  onDeployEngine={() => handleStartDeployment('webui')}
-                  onOpenDirectory={() => setShowManagerModal(true)}
-                />
-              </ErrorBoundary>
-            ),
+            comfyui: (() => {
+              const comfyInst = instances.find((i) => i.id === 'comfyui-managed' || i.type === 'comfyui');
+              const dynamicPort = comfyStatus?.port || (comfyInst?.endpoint ? Number(new URL(comfyInst.endpoint).port) : 8188) || 8188;
+              return (
+                <ErrorBoundary fallbackTitle="ComfyUI View Error">
+                  <EmbeddedEngineView
+                    engineType="comfyui"
+                    title="ComfyUI"
+                    port={dynamicPort}
+                    isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
+                    isInstalled={Boolean(
+                      instances.find((i) => i.id === 'comfyui-managed')?.status !== 'not_installed' &&
+                      runtimeStatus?.installed !== false
+                    )}
+                    onStartEngine={toggleRuntime}
+                    onDeployEngine={() => handleStartDeployment('comfyui')}
+                    onOpenDirectory={() => setShowManagerModal(true)}
+                  />
+                </ErrorBoundary>
+              );
+            })(),
+            webui: (() => {
+              const webuiInst = instances.find((i) => i.id === 'webui-managed' || i.type === 'webui');
+              const dynamicPort = (webuiInst?.endpoint ? Number(new URL(webuiInst.endpoint).port) : 7860) || 7860;
+              return (
+                <ErrorBoundary fallbackTitle="SD WebUI View Error">
+                  <EmbeddedEngineView
+                    engineType="webui"
+                    title="SD WebUI"
+                    port={dynamicPort}
+                    isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
+                    isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
+                    onStartEngine={toggleRuntime}
+                    onDeployEngine={() => handleStartDeployment('webui')}
+                    onOpenDirectory={() => setShowManagerModal(true)}
+                  />
+                </ErrorBoundary>
+              );
+            })(),
             settings: (
               <SettingsView
                 onOpenCloudSettings={() => setShowCloudModal(true)}
