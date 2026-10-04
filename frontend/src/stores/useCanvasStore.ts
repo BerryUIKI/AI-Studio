@@ -403,44 +403,99 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws/workflow/run`;
 
-    try {
-      const ws = new WebSocket(wsUrl);
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 3;
+    let heartbeatTimer: any = null;
+    let isTerminated = false;
 
-      ws.onopen = () => {
-        ws.send(JSON.stringify(runPayload));
-      };
+    const stopHeartbeat = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    };
 
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          if (msg.type === 'NODE_STATUS') {
-            setNodeStatus(msg.node_id, msg.status);
-          } else if (msg.type === 'NODE_OUTPUT') {
-            setNodeOutput(msg.node_id, msg.output);
-          } else if (msg.type === 'GRAPH_FINISHED') {
-            set({ isExecuting: false, currentRunId: null });
-          } else if (msg.type === 'RUN_CANCELLED') {
-            set({ isExecuting: false, currentRunId: null });
-          } else if (msg.type === 'ERROR' || msg.type === 'NODE_ERROR') {
-            if (msg.node_id) {
-              setNodeStatus(msg.node_id, 'error');
-            }
-            set({ isExecuting: false, currentRunId: null });
-          }
-        } catch {
-          // ignore parsing error
-        }
-      };
-
-      ws.onerror = () => {
-        set({ isExecuting: false, currentRunId: null });
-      };
-
-      ws.onclose = () => {
-        set({ isExecuting: false, currentRunId: null });
-      };
-    } catch {
+    const cleanupExecution = () => {
+      isTerminated = true;
+      stopHeartbeat();
       set({ isExecuting: false, currentRunId: null });
-    }
+    };
+
+    const connect = () => {
+      if (isTerminated || !get().isExecuting) return;
+
+      try {
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+          reconnectAttempts = 0;
+          ws.send(JSON.stringify(runPayload));
+
+          // Start client-side keepalive ping to maintain connection through proxies
+          stopHeartbeat();
+          heartbeatTimer = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(JSON.stringify({ type: 'PING' }));
+              } catch {
+                // ignore send error
+              }
+            }
+          }, 15000);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'PONG') {
+              return;
+            }
+            if (msg.type === 'NODE_STATUS') {
+              setNodeStatus(msg.node_id, msg.status);
+            } else if (msg.type === 'NODE_OUTPUT') {
+              setNodeOutput(msg.node_id, msg.output);
+            } else if (msg.type === 'GRAPH_FINISHED') {
+              cleanupExecution();
+            } else if (msg.type === 'RUN_CANCELLED') {
+              cleanupExecution();
+            } else if (msg.type === 'ERROR' || msg.type === 'NODE_ERROR') {
+              if (msg.node_id) {
+                setNodeStatus(msg.node_id, 'error');
+              }
+              cleanupExecution();
+            }
+          } catch {
+            // ignore parsing error
+          }
+        };
+
+        ws.onerror = () => {
+          stopHeartbeat();
+        };
+
+        ws.onclose = () => {
+          stopHeartbeat();
+          // If clean termination occurred or run concluded, do not reconnect
+          if (isTerminated || !get().isExecuting) return;
+
+          // Attempt reconnection if abruptly disconnected
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts += 1;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 4000);
+            setTimeout(() => {
+              if (get().isExecuting && !isTerminated) {
+                connect();
+              }
+            }, delay);
+          } else {
+            cleanupExecution();
+          }
+        };
+      } catch {
+        cleanupExecution();
+      }
+    };
+
+    connect();
   },
 }));
