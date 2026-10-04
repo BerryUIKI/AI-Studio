@@ -2,10 +2,13 @@
 
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.storage.db import DatabaseManager, db_manager
+
+logger = logging.getLogger(__name__)
 
 
 def compute_content_hash(value: Any) -> str:
@@ -115,8 +118,8 @@ class CacheStore:
                     output = json.loads(row["output_json"])
                     self._store[node_hash] = output
                     return output
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Cache DB get operation failed: %s", e)
         return None
 
     async def set_async(self, node_hash: str, output: Dict[str, Any]) -> None:
@@ -133,8 +136,8 @@ class CacheStore:
                 (node_hash, json.dumps(output), json.dumps([]), now),
             )
             await conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Cache DB set operation failed: %s", e)
 
     async def has_async(self, node_hash: str) -> bool:
         """Check if output exists in memory or SQLite."""
@@ -151,8 +154,8 @@ class CacheStore:
             conn = await self.manager.get_connection()
             await conn.execute("DELETE FROM cache_entries")
             await conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Cache DB clear operation failed: %s", e)
 
     def size(self) -> int:
         """Return number of in-memory cached node states."""
