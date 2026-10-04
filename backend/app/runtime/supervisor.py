@@ -62,8 +62,28 @@ class ComfySupervisor:
         """Check if the sandboxed isolated virtual environment is ready."""
         return self.get_python_bin().is_file()
 
+    def _is_owned_executable(self, exe_path: Path) -> bool:
+        """Ensure the executable strictly resides in the isolated virtualenv or engine directory."""
+        try:
+            exe_res = exe_path.resolve()
+            expected_bin = self.get_python_bin().resolve()
+            if exe_res == expected_bin:
+                return True
+            runtime_res = self.runtime_dir.resolve()
+            if runtime_res in exe_res.parents:
+                return True
+            engine_res = self.engine_dir.resolve()
+            if engine_res in exe_res.parents:
+                return True
+            comfy_res = self.comfy_dir.resolve()
+            if comfy_res in exe_res.parents:
+                return True
+        except Exception:
+            pass
+        return False
+
     def _verify_process_identity(self, pid: int) -> bool:
-        """Verify the process at pid is actually python/comfy, avoiding recycled PID collision."""
+        """Verify the process at pid is actually owned by this supervisor, avoiding recycled PID collision."""
         if sys.platform == "win32":
             try:
                 import ctypes
@@ -72,25 +92,32 @@ class ComfySupervisor:
                 handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
                 if not handle:
                     return False
-                buf = ctypes.create_unicode_buffer(1024)
-                size = wintypes.DWORD(1024)
-                success = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
-                kernel32.CloseHandle(handle)
-                if success:
-                    exe_name = buf.value.lower()
-                    return "python" in exe_name
-                return False
+                try:
+                    buf = ctypes.create_unicode_buffer(1024)
+                    size = wintypes.DWORD(1024)
+                    success = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
+                    if success:
+                        exe_path = Path(buf.value)
+                        return self._is_owned_executable(exe_path)
+                    return False
+                finally:
+                    kernel32.CloseHandle(handle)
             except Exception:
                 return False
         else:
             try:
+                proc_exe = Path(f"/proc/{pid}/exe")
+                if proc_exe.exists():
+                    resolved = Path(os.readlink(proc_exe))
+                    if self._is_owned_executable(resolved):
+                        return True
                 proc_cmdline = Path(f"/proc/{pid}/cmdline")
                 if proc_cmdline.is_file():
-                    content = proc_cmdline.read_text(encoding="latin1", errors="ignore").lower()
-                    return "python" in content
-                os.kill(pid, 0)
-                return True
-            except OSError:
+                    content = proc_cmdline.read_text(encoding="latin1", errors="ignore")
+                    if str(self.comfy_dir) in content or str(self.runtime_dir) in content:
+                        return True
+                return False
+            except (OSError, Exception):
                 return False
 
     def get_pid(self) -> Optional[int]:
