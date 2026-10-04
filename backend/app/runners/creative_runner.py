@@ -45,6 +45,7 @@ from app.schemas.creative import (
     CreativeActionRequest,
     CreativeActionResult,
     CreativeActionType,
+    CreativeExecutionPlan,
     GenerationProvenance,
 )
 from app.storage.asset_store import asset_store
@@ -52,55 +53,120 @@ from app.storage.asset_store import asset_store
 logger = logging.getLogger(__name__)
 
 
-def resolve_effective_provider(req: CreativeActionRequest) -> str:
-    """Resolve the concrete provider identity that will execute this request (Invariant #5)."""
+def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
+    """Resolve a unified capability-checked execution plan for a creative action (Invariant #5).
+
+    The resolved plan is the single source of truth for:
+    1. Pre-execution dispatch
+    2. Deterministic cache key hashing
+    3. Provenance and UI disclosure
+    """
     engine_id = (req.engine_id or "").lower()
     model = (req.model or "").lower()
+    action = req.action
 
     if "webui" in engine_id:
-        return "webui"
+        if action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO):
+            raise ValueError("WebUI engine currently does not support native video generation. Use ComfyUI or Cloud.")
+        return CreativeExecutionPlan(
+            engine="webui",
+            provider_id="webui",
+            target_model=req.model,
+            action=action,
+        )
+
     if "comfy" in engine_id:
-        return "comfyui"
+        return CreativeExecutionPlan(
+            engine="comfyui",
+            provider_id="comfyui",
+            target_model=req.model,
+            action=action,
+        )
 
-    if req.action == CreativeActionType.INPAINT:
-        if "openai" in engine_id or "dall-e" in model:
-            return "openai"
-        return "fal_ai"
+    # Cloud Engine resolution
+    # 1. Explicit cloud provider requested
+    if engine_id in ("fal_ai", "fal", "cloud_fal"):
+        target_model = req.model
+        if action == CreativeActionType.TXT2IMG:
+            target_model = "flux-schnell" if "schnell" in model else ("flux-dev" if "flux" in model else req.model)
+        elif action == CreativeActionType.IMG2VIDEO:
+            target_model = req.model if "svd" in model else "svd_xt"
+        return CreativeExecutionPlan(
+            engine="cloud",
+            provider_id="fal_ai",
+            target_model=target_model,
+            action=action,
+        )
 
-    if req.action == CreativeActionType.UPSCALE:
-        return "fal_ai"
+    if engine_id in ("siliconflow", "silicon", "cloud_siliconflow"):
+        if action in (CreativeActionType.UPSCALE, CreativeActionType.IMG2IMG):
+            raise ValueError(
+                f"SiliconFlow does not support {action.value}. Use Fal.ai or local ComfyUI/WebUI."
+            )
+        target_model = req.model
+        if action == CreativeActionType.TXT2VIDEO:
+            target_model = req.model if "cogvideo" in model else "CogVideoX-5b"
+        elif action == CreativeActionType.IMG2VIDEO:
+            target_model = req.model if "cogvideo" in model else "CogVideoX-5b-I2V"
+        elif action == CreativeActionType.TXT2IMG:
+            target_model = req.model or "stabilityai/stable-diffusion-xl-base-1.0"
+        return CreativeExecutionPlan(
+            engine="cloud",
+            provider_id="siliconflow",
+            target_model=target_model,
+            action=action,
+        )
 
-    if req.action == CreativeActionType.IMG2IMG:
-        return "fal_ai"
+    if engine_id in ("openai", "cloud_openai"):
+        if action in (CreativeActionType.UPSCALE, CreativeActionType.IMG2IMG, CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO):
+            raise ValueError(
+                f"OpenAI does not support {action.value}. Use Fal.ai, SiliconFlow, or local ComfyUI."
+            )
+        target_model = req.model if "dall-e" in model else "dall-e-3"
+        return CreativeExecutionPlan(
+            engine="cloud",
+            provider_id="openai",
+            target_model=target_model,
+            action=action,
+        )
 
-    if req.action == CreativeActionType.IMG2VIDEO:
-        if engine_id in ("siliconflow", "silicon"):
-            return "siliconflow"
+    # 2. Generic cloud engine (engine_id == "cloud", "cloud_default", etc.)
+    if action == CreativeActionType.INPAINT:
+        if "dall-e" in model:
+            return CreativeExecutionPlan(engine="cloud", provider_id="openai", target_model=req.model, action=action)
+        return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model=req.model, action=action)
+
+    if action in (CreativeActionType.UPSCALE, CreativeActionType.IMG2IMG):
+        return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model=req.model, action=action)
+
+    if action == CreativeActionType.IMG2VIDEO:
         if not credentials_manager.get_key(CloudProviderId.FAL) and credentials_manager.get_key(CloudProviderId.SILICONFLOW):
-            return "siliconflow"
-        return "fal_ai"
+            return CreativeExecutionPlan(engine="cloud", provider_id="siliconflow", target_model=req.model or "CogVideoX-5b-I2V", action=action)
+        return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model=req.model or "svd_xt", action=action)
 
-    if req.action == CreativeActionType.TXT2VIDEO:
-        if engine_id in ("siliconflow", "silicon"):
-            return "siliconflow"
-        if engine_id in ("fal_ai", "fal"):
-            return "fal_ai"
+    if action == CreativeActionType.TXT2VIDEO:
         if credentials_manager.get_key(CloudProviderId.FAL):
-            return "fal_ai"
+            return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model=req.model or "fast-svd-lcm", action=action)
         if credentials_manager.get_key(CloudProviderId.SILICONFLOW):
-            return "siliconflow"
-        return "cloud_video"
+            return CreativeExecutionPlan(engine="cloud", provider_id="siliconflow", target_model=req.model or "CogVideoX-5b", action=action)
+        return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model=req.model or "fast-svd-lcm", action=action)
 
     # TXT2IMG
-    if "flux" in model or engine_id in ("cloud_fal", "fal_ai", "fal"):
-        return "fal_ai"
-    if "dall-e" in model or "openai" in engine_id:
-        return "openai"
+    if "flux" in model:
+        target_model = "flux-schnell" if "schnell" in model else "flux-dev"
+        return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model=target_model, action=action)
+    if "dall-e" in model:
+        return CreativeExecutionPlan(engine="cloud", provider_id="openai", target_model=req.model, action=action)
     if credentials_manager.get_key(CloudProviderId.SILICONFLOW):
-        return "siliconflow"
+        return CreativeExecutionPlan(engine="cloud", provider_id="siliconflow", target_model=req.model or "stabilityai/stable-diffusion-xl-base-1.0", action=action)
     if credentials_manager.get_key(CloudProviderId.FAL):
-        return "fal_ai"
-    return "cloud_default"
+        return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model="flux-schnell", action=action)
+    return CreativeExecutionPlan(engine="cloud", provider_id="cloud_default", target_model=req.model, action=action)
+
+
+def resolve_effective_provider(req: CreativeActionRequest) -> str:
+    """Resolve the concrete provider identity that will execute this request (Invariant #5)."""
+    return resolve_execution_plan(req).provider_id
 
 
 def compute_creative_cache_hash(
@@ -180,6 +246,7 @@ class CreativeRunner:
         task_id = f"task_{int(time.time() * 1000)}"
         start_time = time.monotonic()
         cancel_event = asyncio.Event()
+        is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
 
         # Resolve aspect ratio dimensions if default 512
         if req.aspect_ratio in ASPECT_RATIO_DIMENSIONS:
@@ -207,10 +274,41 @@ class CreativeRunner:
                 mask_hash = m_rec.content_hash
                 mask_file_path = asset_store.get_absolute_path(m_rec)
 
-        # Check deterministic cache
-        cache_key = compute_creative_cache_hash(req, input_hash, mask_hash)
+        # Validate required source assets for asset-dependent actions
+        if req.action in (CreativeActionType.IMG2IMG, CreativeActionType.UPSCALE, CreativeActionType.IMG2VIDEO):
+            if not input_file_path or not input_file_path.is_file():
+                return CreativeActionResult(
+                    success=False,
+                    task_id=task_id,
+                    error_message=f"Source image required (source image is required for {req.action.value}).",
+                    width=req.width,
+                    height=req.height,
+                )
+        elif req.action == CreativeActionType.INPAINT:
+            if not input_file_path or not input_file_path.is_file() or not mask_file_path or not mask_file_path.is_file():
+                return CreativeActionResult(
+                    success=False,
+                    task_id=task_id,
+                    error_message="Source image and mask required for inpainting.",
+                    width=req.width,
+                    height=req.height,
+                )
+
+        try:
+            # 1. Resolve unified execution plan before cache check & dispatch
+            plan = resolve_execution_plan(req)
+        except Exception as e:
+            return CreativeActionResult(
+                success=False,
+                task_id=task_id,
+                error_message=str(e),
+                width=req.width,
+                height=req.height,
+            )
+
+        # Check deterministic cache with plan's resolved provider_id
+        cache_key = compute_creative_cache_hash(req, input_hash, mask_hash, provider_id=plan.provider_id)
         cached_result = await cache_store.get_async(cache_key)
-        is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
 
         if cached_result:
             return CreativeActionResult(
@@ -230,7 +328,8 @@ class CreativeRunner:
         # Register active task
         self.active_tasks[task_id] = {
             "action": req.action.value,
-            "engine": req.engine_id,
+            "engine": plan.engine,
+            "provider_id": plan.provider_id,
             "start_time": time.time(),
         }
         self.active_cancellations[task_id] = cancel_event
@@ -238,13 +337,12 @@ class CreativeRunner:
             task_id=task_id,
             task_type="creative_action",
             cancel_event=cancel_event,
-            metadata={"action": req.action.value, "engine": req.engine_id, "start_time": time.time()},
+            metadata={"action": req.action.value, "engine": plan.engine, "provider_id": plan.provider_id, "start_time": time.time()},
         )
 
-        # Dispatch based on engine
+        # Dispatch based on plan.engine
         try:
-            is_cloud = "cloud" in req.engine_id or req.engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai")
-            if "webui" in req.engine_id:
+            if plan.engine == "webui":
                 if is_video:
                     raise ValueError("WebUI engine currently does not support native video generation. Use ComfyUI or Cloud.")
                 runner = WebUIRunner()
@@ -253,25 +351,20 @@ class CreativeRunner:
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
-            elif "comfy" in req.engine_id:
+            elif plan.engine == "comfyui":
                 action_data = await self._run_comfy(req, input_file_path, mask_file_path)
                 asset_id = action_data["asset_id"]
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
-            elif is_cloud:
-                action_data = await self._run_cloud(req, input_file_path, mask_file_path)
+            elif plan.engine == "cloud":
+                action_data = await self._run_cloud(req, plan, input_file_path, mask_file_path)
                 asset_id = action_data["asset_id"]
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
             else:
-                # Default to ComfyUI fallback
-                action_data = await self._run_comfy(req, input_file_path, mask_file_path)
-                asset_id = action_data["asset_id"]
-                image_url = action_data["image_url"]
-                out_w = action_data.get("width", req.width)
-                out_h = action_data.get("height", req.height)
+                raise ValueError(f"Unknown engine in plan: {plan.engine}")
 
             if cancel_event.is_set():
                 return CreativeActionResult(
@@ -288,8 +381,9 @@ class CreativeRunner:
                 action=req.action,
                 prompt=req.prompt,
                 negative_prompt=req.negative_prompt,
-                model=req.model,
+                model=plan.target_model,
                 engine_id=req.engine_id,
+                provider_id=plan.provider_id,
                 seed=req.seed,
                 steps=req.steps,
                 cfg_scale=req.cfg_scale,
@@ -462,11 +556,11 @@ class CreativeRunner:
     async def _run_cloud(
         self,
         req: CreativeActionRequest,
+        plan: CreativeExecutionPlan,
         input_file: Optional[Path] = None,
         mask_file: Optional[Path] = None,
     ) -> Dict[str, Any]:
-        """Dispatch creative action to cloud API using BYOK key."""
-        model = req.model.lower()
+        """Dispatch creative action to cloud API according to resolved plan using BYOK key."""
         image_b64: Optional[str] = None
         mask_b64: Optional[str] = None
         image_bytes: Optional[bytes] = None
@@ -482,23 +576,21 @@ class CreativeRunner:
 
         out_w = req.width
         out_h = req.height
+        remote_url: Optional[str] = None
 
         if req.action == CreativeActionType.INPAINT:
             if not image_bytes or not mask_bytes:
                 raise ValueError("Source image and mask are required for cloud inpainting.")
 
-            if "openai" in req.engine_id or "dall-e" in model:
+            if plan.provider_id == "openai":
                 key = credentials_manager.get_key(CloudProviderId.OPENAI)
                 if not key:
                     raise RuntimeError("OpenAI API key missing. Configure it in Cloud Providers (BYOK).")
                 remote_url = await _call_openai_inpaint(req.prompt, image_bytes, mask_bytes, key)
-            else:
+            elif plan.provider_id == "fal_ai":
                 key = credentials_manager.get_key(CloudProviderId.FAL)
                 if not key:
-                    raise RuntimeError(
-                        "Fal.ai API key is required for cloud inpainting. "
-                        "Configure Fal.ai or OpenAI in Cloud Settings (BYOK)."
-                    )
+                    raise RuntimeError("Fal.ai API key is required for cloud inpainting. Configure it in Cloud Settings (BYOK).")
                 remote_url = await _call_fal_ai_action(
                     action="inpaint",
                     prompt=req.prompt,
@@ -506,50 +598,52 @@ class CreativeRunner:
                     image_b64=image_b64,
                     mask_b64=mask_b64,
                 )
+            else:
+                raise ValueError(f"Provider {plan.provider_id} does not support cloud inpainting.")
 
         elif req.action == CreativeActionType.UPSCALE:
             if not image_b64:
                 raise ValueError("Source image is required for cloud upscaling.")
 
-            key = credentials_manager.get_key(CloudProviderId.FAL)
-            if not key:
-                raise RuntimeError(
-                    "Cloud upscaling requires Fal.ai API key. "
-                    "OpenAI DALL-E 3 does not offer an upscaling endpoint. "
-                    "Please configure a Fal.ai BYOK key or use local ComfyUI/WebUI."
+            if plan.provider_id == "fal_ai":
+                key = credentials_manager.get_key(CloudProviderId.FAL)
+                if not key:
+                    raise RuntimeError("Cloud upscaling requires Fal.ai API key. Please configure a Fal.ai BYOK key.")
+                remote_url = await _call_fal_ai_action(
+                    action="upscale",
+                    prompt=req.prompt,
+                    api_key=key,
+                    image_b64=image_b64,
+                    upscale_factor=req.upscale_factor,
                 )
-            remote_url = await _call_fal_ai_action(
-                action="upscale",
-                prompt=req.prompt,
-                api_key=key,
-                image_b64=image_b64,
-                upscale_factor=req.upscale_factor,
-            )
-            out_w = int(req.width * req.upscale_factor)
-            out_h = int(req.height * req.upscale_factor)
+                out_w = int(req.width * req.upscale_factor)
+                out_h = int(req.height * req.upscale_factor)
+            else:
+                raise ValueError(f"Provider {plan.provider_id} does not support cloud upscaling.")
 
         elif req.action == CreativeActionType.IMG2IMG:
             if not image_b64:
                 raise ValueError("Source image is required for cloud image-to-image.")
 
-            key = credentials_manager.get_key(CloudProviderId.FAL)
-            if not key:
-                raise RuntimeError(
-                    "Cloud image-to-image currently requires Fal.ai (FLUX img2img). "
-                    "Please configure a Fal.ai BYOK key or use local ComfyUI/WebUI."
+            if plan.provider_id == "fal_ai":
+                key = credentials_manager.get_key(CloudProviderId.FAL)
+                if not key:
+                    raise RuntimeError("Cloud image-to-image requires Fal.ai BYOK key. Configure it in Cloud Settings.")
+                remote_url = await _call_fal_ai_action(
+                    action="img2img",
+                    prompt=req.prompt,
+                    api_key=key,
+                    image_b64=image_b64,
+                    denoise=req.denoise,
                 )
-            remote_url = await _call_fal_ai_action(
-                action="img2img",
-                prompt=req.prompt,
-                api_key=key,
-                image_b64=image_b64,
-                denoise=req.denoise,
-            )
+            else:
+                raise ValueError(f"Provider {plan.provider_id} does not support cloud img2img.")
 
         elif req.action == CreativeActionType.IMG2VIDEO:
             if not image_b64:
                 raise ValueError("Source image is required for cloud img2video.")
-            if req.engine_id in ("siliconflow", "silicon"):
+
+            if plan.provider_id == "siliconflow":
                 key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
                 if not key_sf:
                     raise RuntimeError("SiliconFlow API key missing. Configure it in Cloud Providers (BYOK).")
@@ -559,35 +653,24 @@ class CreativeRunner:
                     api_key=key_sf,
                     image_b64=image_b64,
                 )
-            else:
+            elif plan.provider_id == "fal_ai":
                 key_fal = credentials_manager.get_key(CloudProviderId.FAL)
                 if not key_fal:
-                    key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
-                    if key_sf:
-                        remote_url = await _call_siliconflow_video(
-                            action="img2video",
-                            prompt=req.prompt,
-                            api_key=key_sf,
-                            image_b64=image_b64,
-                        )
-                    else:
-                        raise RuntimeError(
-                            "Cloud img2video requires a Fal.ai BYOK key (Fast SVD) or SiliconFlow key (CogVideoX). "
-                            "Configure Fal.ai or SiliconFlow in Cloud Providers or use local ComfyUI."
-                        )
-                else:
-                    remote_url = await _call_fal_ai_video(
-                        action="img2video",
-                        prompt=req.prompt,
-                        api_key=key_fal,
-                        image_b64=image_b64,
-                        fps=req.fps,
-                        num_frames=req.num_frames,
-                        motion_bucket_id=req.motion_bucket_id,
-                    )
+                    raise RuntimeError("Fal.ai API key missing. Configure it in Cloud Providers (BYOK).")
+                remote_url = await _call_fal_ai_video(
+                    action="img2video",
+                    prompt=req.prompt,
+                    api_key=key_fal,
+                    image_b64=image_b64,
+                    fps=req.fps,
+                    num_frames=req.num_frames,
+                    motion_bucket_id=req.motion_bucket_id,
+                )
+            else:
+                raise ValueError(f"Provider {plan.provider_id} does not support cloud img2video.")
 
         elif req.action == CreativeActionType.TXT2VIDEO:
-            if req.engine_id in ("siliconflow", "silicon"):
+            if plan.provider_id == "siliconflow":
                 key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
                 if not key_sf:
                     raise RuntimeError("SiliconFlow API key missing. Configure it in Cloud Providers (BYOK).")
@@ -596,7 +679,7 @@ class CreativeRunner:
                     prompt=req.prompt,
                     api_key=key_sf,
                 )
-            elif req.engine_id in ("fal_ai", "fal"):
+            elif plan.provider_id == "fal_ai":
                 key_fal = credentials_manager.get_key(CloudProviderId.FAL)
                 if not key_fal:
                     raise RuntimeError("Fal.ai API key missing. Configure it in Cloud Providers (BYOK).")
@@ -608,54 +691,27 @@ class CreativeRunner:
                     num_frames=req.num_frames,
                 )
             else:
-                key_fal = credentials_manager.get_key(CloudProviderId.FAL)
-                if key_fal:
-                    remote_url = await _call_fal_ai_video(
-                        action="txt2video",
-                        prompt=req.prompt,
-                        api_key=key_fal,
-                        fps=req.fps,
-                        num_frames=req.num_frames,
-                    )
-                else:
-                    key_sf = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
-                    if not key_sf:
-                        raise RuntimeError(
-                            "No cloud API key configured for video generation. "
-                            "Configure a Fal.ai or SiliconFlow BYOK key in Cloud Settings."
-                        )
-                    remote_url = await _call_siliconflow_video(
-                        action="txt2video",
-                        prompt=req.prompt,
-                        api_key=key_sf,
-                    )
+                raise ValueError(f"Provider {plan.provider_id} does not support cloud txt2video.")
 
         else:
             # TXT2IMG
-            if "flux" in model or req.engine_id == "cloud_fal":
-                provider_id = CloudProviderId.FAL
-                key = credentials_manager.get_key(provider_id)
+            if plan.provider_id == "fal_ai":
+                key = credentials_manager.get_key(CloudProviderId.FAL)
                 if not key:
                     raise RuntimeError("Fal.ai API key is missing. Configure it in Cloud Providers (BYOK).")
-                target_model = "flux-schnell" if "schnell" in model else "flux-dev"
-                remote_url = await _call_fal_ai(target_model, req.prompt, req.width, req.height, key)
-            elif "dall-e" in model or "openai" in req.engine_id:
-                provider_id = CloudProviderId.OPENAI
-                key = credentials_manager.get_key(provider_id)
+                remote_url = await _call_fal_ai(plan.target_model, req.prompt, req.width, req.height, key)
+            elif plan.provider_id == "openai":
+                key = credentials_manager.get_key(CloudProviderId.OPENAI)
                 if not key:
                     raise RuntimeError("OpenAI API key is missing. Configure it in Cloud Providers (BYOK).")
                 remote_url = await _call_openai_images(req.prompt, key)
-            else:
-                provider_id = CloudProviderId.SILICONFLOW
-                key = credentials_manager.get_key(provider_id)
+            elif plan.provider_id == "siliconflow":
+                key = credentials_manager.get_key(CloudProviderId.SILICONFLOW)
                 if not key:
-                    key = credentials_manager.get_key(CloudProviderId.FAL)
-                    if key:
-                        remote_url = await _call_fal_ai("flux-schnell", req.prompt, req.width, req.height, key)
-                    else:
-                        raise RuntimeError("No cloud provider API key configured. Please set up a BYOK key in Cloud Settings.")
-                else:
-                    remote_url = await _call_siliconflow(req.prompt, req.width, req.height, key)
+                    raise RuntimeError("SiliconFlow API key is missing. Configure it in Cloud Providers (BYOK).")
+                remote_url = await _call_siliconflow(req.prompt, req.width, req.height, key)
+            else:
+                raise RuntimeError("No cloud provider API key configured. Please set up a BYOK key in Cloud Settings.")
 
         if not remote_url:
             raise RuntimeError(f"Cloud provider returned no media URL for action {req.action}.")
