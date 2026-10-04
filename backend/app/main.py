@@ -1075,128 +1075,140 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
     node_outputs: Dict[str, Dict[str, Any]] = {}
 
     start_time = time.monotonic()
-    await websocket.send_text(
-        GraphStartedEvent(run_id=run_id, total_nodes=len(sorted_nodes), cached_nodes=cached_count).model_dump_json()
-    )
-
     failed_node_ids: set[str] = set()
 
-    for node in sorted_nodes:
-        # Check cancellation
-        if cancel_event.is_set():
-            await websocket.send_text(RunCancelledEvent(run_id=run_id).model_dump_json())
-            elapsed_ms = (time.monotonic() - start_time) * 1000
-            await websocket.send_text(
-                GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="cancelled").model_dump_json()
-            )
-            break
-
-        # Check if any upstream ancestor failed
-        ancestors = resolver._get_ancestors(node.id)
-        if any(anc in failed_node_ids for anc in ancestors):
-            # Abort this node due to upstream failure
-            await websocket.send_text(
-                NodeStatusEvent(node_id=node.id, status="cancelled", run_id=run_id).model_dump_json()
-            )
-            continue
-
-        # Resolve inputs and compute deterministic port bindings
-        inputs: Dict[str, Any] = {}
-        bindings: List[tuple[str, str, str]] = []
-
-        for edge in graph.edges:
-            if edge.target == node.id and edge.source in node_outputs:
-                source_output = node_outputs[edge.source]
-                if edge.source_handle in source_output:
-                    val = source_output[edge.source_handle]
-                    inputs[edge.target_handle] = val
-                    bindings.append((edge.target_handle, compute_content_hash(val), edge.source_handle))
-
-        # Compute port-aware semantic hash
-        if bindings:
-            node_hash = compute_semantic_node_hash(node.type, node.params, bindings)
-        else:
-            node_hash = compute_node_hash(node.type, node.params, [])
-
-        # Check cache (memory or SQLite)
-        cached_output = await cache_store.get_async(node_hash)
-        if cached_output is not None:
-            await websocket.send_text(NodeStatusEvent(node_id=node.id, status="cached", run_id=run_id).model_dump_json())
-            await websocket.send_text(
-                NodeOutputEvent(node_id=node.id, output=cached_output, run_id=run_id).model_dump_json()
-            )
-            node_outputs[node.id] = cached_output
-            continue
-
-        # Dispatch to runner
-        runner = NODE_RUNNERS.get(node.type)
-        if runner is None:
-            failed_node_ids.add(node.id)
-            err_msg = f"No runner for node type: {node.type}"
-            await websocket.send_text(NodeErrorEvent(node_id=node.id, message=err_msg, run_id=run_id).model_dump_json())
-            await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error", run_id=run_id).model_dump_json())
-            continue
-
-        output: Dict[str, Any] = {}
-        node_has_error = False
-
-        try:
-            if node.type == "input.text":
-                async for event in run_input_text_node(node.id, node.params):
-                    if cancel_event.is_set():
-                        break
-                    event.run_id = run_id
-                    await websocket.send_text(event.model_dump_json())
-                    if isinstance(event, NodeOutputEvent):
-                        output = event.output
-            else:
-                async for event in runner(node.id, inputs, node.params):
-                    if cancel_event.is_set():
-                        break
-                    event.run_id = run_id
-                    await websocket.send_text(event.model_dump_json())
-                    if isinstance(event, NodeErrorEvent):
-                        node_has_error = True
-                    elif isinstance(event, NodeOutputEvent):
-                        output = event.output
-        except Exception as e:
-            node_has_error = True
-            await websocket.send_text(NodeErrorEvent(node_id=node.id, message=str(e), run_id=run_id).model_dump_json())
-            await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error", run_id=run_id).model_dump_json())
-
-        if node_has_error:
-            failed_node_ids.add(node.id)
-            # Notify cancellation for all unexecuted descendants
-            descendants = resolver.get_descendants(node.id)
-            for desc_id in descendants:
-                await websocket.send_text(
-                    NodeStatusEvent(node_id=desc_id, status="cancelled", run_id=run_id).model_dump_json()
-                )
-            # Conclude run as failed
-            elapsed_ms = (time.monotonic() - start_time) * 1000
-            await websocket.send_text(
-                GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="failed").model_dump_json()
-            )
-            break
-
-        # Cache successful output
-        if output:
-            await cache_store.set_async(node_hash, output)
-            node_outputs[node.id] = output
-
-    else:
-        # Loop completed without break
-        elapsed_ms = (time.monotonic() - start_time) * 1000
+    try:
         await websocket.send_text(
-            GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="completed").model_dump_json()
+            GraphStartedEvent(run_id=run_id, total_nodes=len(sorted_nodes), cached_nodes=cached_count).model_dump_json()
         )
 
-    active_cancellations.pop(run_id, None)
+        for node in sorted_nodes:
+            # Check cancellation
+            if cancel_event.is_set():
+                await websocket.send_text(RunCancelledEvent(run_id=run_id).model_dump_json())
+                elapsed_ms = (time.monotonic() - start_time) * 1000
+                await websocket.send_text(
+                    GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="cancelled").model_dump_json()
+                )
+                break
 
-    try:
-        await websocket.close()
-    except Exception:
-        pass
+            # Check if any upstream ancestor failed
+            ancestors = resolver._get_ancestors(node.id)
+            if any(anc in failed_node_ids for anc in ancestors):
+                # Abort this node due to upstream failure
+                await websocket.send_text(
+                    NodeStatusEvent(node_id=node.id, status="cancelled", run_id=run_id).model_dump_json()
+                )
+                continue
+
+            # Resolve inputs and compute deterministic port bindings
+            inputs: Dict[str, Any] = {}
+            bindings: List[tuple[str, str, str]] = []
+
+            for edge in graph.edges:
+                if edge.target == node.id and edge.source in node_outputs:
+                    source_output = node_outputs[edge.source]
+                    if edge.source_handle in source_output:
+                        val = source_output[edge.source_handle]
+                        inputs[edge.target_handle] = val
+                        bindings.append((edge.target_handle, compute_content_hash(val), edge.source_handle))
+
+            # Compute port-aware semantic hash
+            if bindings:
+                node_hash = compute_semantic_node_hash(node.type, node.params, bindings)
+            else:
+                node_hash = compute_node_hash(node.type, node.params, [])
+
+            # Check cache (memory or SQLite)
+            cached_output = await cache_store.get_async(node_hash)
+            if cached_output is not None:
+                await websocket.send_text(NodeStatusEvent(node_id=node.id, status="cached", run_id=run_id).model_dump_json())
+                await websocket.send_text(
+                    NodeOutputEvent(node_id=node.id, output=cached_output, run_id=run_id).model_dump_json()
+                )
+                node_outputs[node.id] = cached_output
+                continue
+
+            # Dispatch to runner
+            runner = NODE_RUNNERS.get(node.type)
+            if runner is None:
+                failed_node_ids.add(node.id)
+                err_msg = f"No runner for node type: {node.type}"
+                await websocket.send_text(NodeErrorEvent(node_id=node.id, message=err_msg, run_id=run_id).model_dump_json())
+                await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error", run_id=run_id).model_dump_json())
+                continue
+
+            output: Dict[str, Any] = {}
+            node_has_error = False
+
+            try:
+                if node.type == "input.text":
+                    async for event in run_input_text_node(node.id, node.params):
+                        if cancel_event.is_set():
+                            break
+                        event.run_id = run_id
+                        await websocket.send_text(event.model_dump_json())
+                        if isinstance(event, NodeOutputEvent):
+                            output = event.output
+                else:
+                    async for event in runner(node.id, inputs, node.params):
+                        if cancel_event.is_set():
+                            break
+                        event.run_id = run_id
+                        await websocket.send_text(event.model_dump_json())
+                        if isinstance(event, NodeErrorEvent):
+                            node_has_error = True
+                        elif isinstance(event, NodeOutputEvent):
+                            output = event.output
+            except WebSocketDisconnect:
+                logger.info("WebSocket disconnected during execution of node %s (run_id: %s)", node.id, run_id)
+                cancel_event.set()
+                break
+            except Exception as e:
+                node_has_error = True
+                try:
+                    await websocket.send_text(NodeErrorEvent(node_id=node.id, message=str(e), run_id=run_id).model_dump_json())
+                    await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error", run_id=run_id).model_dump_json())
+                except (WebSocketDisconnect, RuntimeError):
+                    cancel_event.set()
+                    break
+
+            if node_has_error:
+                failed_node_ids.add(node.id)
+                # Notify cancellation for all unexecuted descendants
+                descendants = resolver.get_descendants(node.id)
+                for desc_id in descendants:
+                    await websocket.send_text(
+                        NodeStatusEvent(node_id=desc_id, status="cancelled", run_id=run_id).model_dump_json()
+                    )
+                # Conclude run as failed
+                elapsed_ms = (time.monotonic() - start_time) * 1000
+                await websocket.send_text(
+                    GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="failed").model_dump_json()
+                )
+                break
+
+            # Cache successful output
+            if output:
+                await cache_store.set_async(node_hash, output)
+                node_outputs[node.id] = output
+
+        else:
+            # Loop completed without break
+            elapsed_ms = (time.monotonic() - start_time) * 1000
+            await websocket.send_text(
+                GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="completed").model_dump_json()
+            )
+
+    except WebSocketDisconnect:
+        logger.info("Client cleanly disconnected from workflow run %s", run_id)
+        cancel_event.set()
+    finally:
+        active_cancellations.pop(run_id, None)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
