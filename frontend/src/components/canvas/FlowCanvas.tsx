@@ -18,6 +18,7 @@ import { CanvasAgentPrompt } from '../agent/CanvasAgentPrompt';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { NodeDefinition } from '../../types/workflow';
+import { ImageCardData } from '../../types/creative';
 
 const nodeTypes: NodeTypes = {
   workflowNode: WorkflowNode,
@@ -89,14 +90,18 @@ function FlowCanvasInner() {
     const selectedNode = nodes.find((n) => n.id === selectedNodeId);
     if (!selectedNode || selectedNode.type !== 'imageCard') return [];
 
-    const currentAssetId = selectedNode.data?.assetId;
-    const parentAssetId = selectedNode.data?.provenance?.source_asset_id;
+    const cardData = selectedNode.data as unknown as ImageCardData;
+    const currentAssetId = cardData?.assetId;
+    const parentAssetId = cardData?.provenance?.source_asset_id;
 
     const dynamicEdges: Edge[] = [];
 
     // Connect to parent node if on canvas
     if (parentAssetId) {
-      const parentNode = nodes.find((n) => n.data?.assetId === parentAssetId);
+      const parentNode = nodes.find((n) => {
+        const d = n.data as unknown as ImageCardData;
+        return d?.assetId === parentAssetId;
+      });
       if (parentNode) {
         dynamicEdges.push({
           id: `lineage_${parentNode.id}_${selectedNode.id}`,
@@ -110,9 +115,11 @@ function FlowCanvasInner() {
 
     // Connect to child nodes if on canvas
     if (currentAssetId) {
-      const childrenNodes = nodes.filter(
-        (n) => n.id !== selectedNode.id && n.data?.provenance?.source_asset_id === currentAssetId
-      );
+      const childrenNodes = nodes.filter((n) => {
+        if (n.id === selectedNode.id) return false;
+        const d = n.data as unknown as ImageCardData;
+        return d?.provenance?.source_asset_id === currentAssetId;
+      });
       childrenNodes.forEach((childNode) => {
         dynamicEdges.push({
           id: `lineage_${selectedNode.id}_${childNode.id}`,
