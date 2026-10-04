@@ -54,7 +54,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   future: [],
 
   pushSnapshot: () => {
-    const currentNodes = JSON.parse(JSON.stringify(get().nodes));
+    const currentNodes = structuredClone(get().nodes);
     set((state) => ({
       past: [...state.past.slice(-24), currentNodes],
       future: [],
@@ -69,7 +69,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       nodes: previous,
       past: newPast,
-      future: [JSON.parse(JSON.stringify(nodes)), ...future],
+      future: [structuredClone(nodes), ...future],
     });
   },
 
@@ -80,7 +80,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const newFuture = future.slice(1);
     set({
       nodes: next,
-      past: [...past, JSON.parse(JSON.stringify(nodes))],
+      past: [...past, structuredClone(nodes)],
       future: newFuture,
     });
   },
@@ -103,7 +103,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     const clonedId = `${target.type || 'node'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const clonedNode: Node<any> = {
-      ...JSON.parse(JSON.stringify(target)),
+      ...structuredClone(target),
       id: clonedId,
       position: {
         x: target.position.x + 40,
