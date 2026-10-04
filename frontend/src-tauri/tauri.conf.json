@@ -25,7 +25,7 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' tauri: http://localhost:* http://127.0.0.1:*; img-src 'self' tauri: asset: data: blob: http://localhost:* http://127.0.0.1:*; connect-src 'self' tauri: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {
