@@ -11,8 +11,13 @@ pub struct AppState {
 }
 
 #[tauri::command]
-fn close_app(window: tauri::Window) {
-    let _ = window.close();
+fn close_app(app_handle: tauri::AppHandle, window: tauri::Window) {
+    let state = app_handle.state::<AppState>();
+    if let Ok(mut guard) = state.backend_child.lock() {
+        backend::shutdown_backend(state.port, guard.take());
+    }
+    let _ = window.destroy();
+    app_handle.exit(0);
 }
 
 #[tauri::command]

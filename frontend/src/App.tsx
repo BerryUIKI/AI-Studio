@@ -158,16 +158,23 @@ export default function App() {
 
   const closeAppWindow = async () => {
     try {
-      if (isTauri()) {
+      const isDesktop = isTauri() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window));
+      if (isDesktop) {
         const { invoke } = await import('@tauri-apps/api/core');
         try {
           await invoke('close_app');
           return;
-        } catch {
-          // Fallback to appWindow.close()
+        } catch (e) {
+          console.warn('invoke close_app failed, falling back to window destroy:', e);
         }
         const appWindow = getCurrentWindow();
-        await appWindow.close();
+        try {
+          await appWindow.destroy();
+          return;
+        } catch {
+          await appWindow.close();
+          return;
+        }
       } else {
         window.close();
       }

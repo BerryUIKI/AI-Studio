@@ -136,16 +136,23 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       return;
     }
     try {
-      if (isTauri()) {
+      const isDesktopEnv = isTauri() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window));
+      if (isDesktopEnv) {
         const { invoke } = await import('@tauri-apps/api/core');
         try {
           await invoke('close_app');
           return;
-        } catch {
-          // Fallback to appWindow.close()
+        } catch (err) {
+          console.warn('invoke close_app failed:', err);
         }
         const appWindow = getCurrentWindow();
-        await appWindow.close();
+        try {
+          await appWindow.destroy();
+          return;
+        } catch {
+          await appWindow.close();
+          return;
+        }
       } else {
         window.close();
       }
