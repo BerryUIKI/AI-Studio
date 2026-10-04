@@ -1,4 +1,8 @@
+import { CustomNodeData } from './workflow';
+
 export type CreativeActionType = 'txt2img' | 'img2img' | 'inpaint' | 'upscale' | 'txt2video' | 'img2video';
+
+export type CanvasNodeData = CustomNodeData | ImageCardData | WorkspaceFrameData;
 
 export interface GenerationProvenance {
   action: CreativeActionType;
@@ -58,7 +62,7 @@ export interface CreativeActionResult {
   error_message?: string;
 }
 
-export interface ImageCardData {
+export interface ImageCardData extends Record<string, unknown> {
   assetId?: string;
   imageUrl: string;
   videoUrl?: string;
@@ -72,7 +76,7 @@ export interface ImageCardData {
   generationProgress?: number;
 }
 
-export interface WorkspaceFrameData {
+export interface WorkspaceFrameData extends Record<string, unknown> {
   label: string;
   description?: string;
   width: number;

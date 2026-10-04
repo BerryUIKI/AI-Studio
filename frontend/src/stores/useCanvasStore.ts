@@ -9,24 +9,28 @@ import {
   applyEdgeChanges,
   applyNodeChanges,
 } from '@xyflow/react';
-import { CustomNodeData, ExecutionStatus, NodeDefinition } from '../types/workflow';
+import { CustomNodeData, ExecutionStatus, NodeDefinition, NodeOutputValue, NodeParamValue } from '../types/workflow';
+import { CanvasNodeData, ImageCardData } from '../types/creative';
+
+const isImageCardNode = (n: Node<CanvasNodeData>): n is Node<ImageCardData> => n.type === 'imageCard';
+const isWorkflowNode = (n: Node<CanvasNodeData>): n is Node<CustomNodeData> => n.type === 'workflowNode' || !n.type;
 
 interface CanvasState {
-  nodes: Node<any>[];
+  nodes: Node<CanvasNodeData>[];
   edges: Edge[];
   selectedNodeId: string | null;
   isExecuting: boolean;
   currentRunId: string | null;
-  past: Node<any>[][];
-  future: Node<any>[][];
+  past: Node<CanvasNodeData>[][];
+  future: Node<CanvasNodeData>[][];
 
-  onNodesChange: (changes: NodeChange<Node<any>>[]) => void;
+  onNodesChange: (changes: NodeChange<Node<CanvasNodeData>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (definition: NodeDefinition, position?: { x: number; y: number }) => void;
-  updateNodeParam: (nodeId: string, paramName: string, value: any) => void;
+  updateNodeParam: (nodeId: string, paramName: string, value: NodeParamValue) => void;
   setNodeStatus: (nodeId: string, status: ExecutionStatus) => void;
-  setNodeOutput: (nodeId: string, output: Record<string, any>) => void;
+  setNodeOutput: (nodeId: string, output: Record<string, NodeOutputValue>) => void;
   setSelectedNodeId: (nodeId: string | null) => void;
   clearCanvas: () => void;
   runWorkflow: (targetNodeId?: string) => Promise<void>;
@@ -124,30 +128,28 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     get().pushSnapshot();
 
     // Map by assetId and source_asset_id
-    const assetIdToNode = new Map<string, Node<any>>();
+    const assetIdToNode = new Map<string, Node<ImageCardData>>();
     const parentToChildren = new Map<string, string[]>();
 
-    nodes.forEach((n) => {
-      if (n.type === 'imageCard' && n.data?.assetId) {
+    nodes.filter(isImageCardNode).forEach((n) => {
+      if (n.data?.assetId) {
         assetIdToNode.set(n.data.assetId, n);
       }
     });
 
-    nodes.forEach((n) => {
-      if (n.type === 'imageCard') {
-        const parentAssetId = n.data?.provenance?.source_asset_id;
-        if (parentAssetId && assetIdToNode.has(parentAssetId)) {
-          const list = parentToChildren.get(parentAssetId) || [];
-          list.push(n.id);
-          parentToChildren.set(parentAssetId, list);
-        }
+    nodes.filter(isImageCardNode).forEach((n) => {
+      const parentAssetId = n.data?.provenance?.source_asset_id;
+      if (parentAssetId && assetIdToNode.has(parentAssetId)) {
+        const list = parentToChildren.get(parentAssetId) || [];
+        list.push(n.id);
+        parentToChildren.set(parentAssetId, list);
       }
     });
 
     // Find root by tracing upwards
-    let current = targetNode;
+    let current: Node<CanvasNodeData> | undefined = targetNode;
     const visited = new Set<string>();
-    while (current && current.data?.provenance?.source_asset_id && !visited.has(current.id)) {
+    while (current && isImageCardNode(current) && current.data?.provenance?.source_asset_id && !visited.has(current.id)) {
       visited.add(current.id);
       const parentNode = assetIdToNode.get(current.data.provenance.source_asset_id);
       if (parentNode) {
@@ -288,7 +290,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   updateNodeParam: (nodeId, paramName, value) => {
     set({
       nodes: get().nodes.map((node) => {
-        if (node.id !== nodeId) return node;
+        if (node.id !== nodeId || !isWorkflowNode(node)) return node;
         return {
           ...node,
           data: {
@@ -383,7 +385,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       run_id: runId,
       target_node_id: targetNodeId || null,
       graph: {
-        nodes: nodes.map((n) => ({
+        nodes: nodes.filter(isWorkflowNode).map((n) => ({
           id: n.id,
           type: n.data.definition.type,
           params: n.data.params,

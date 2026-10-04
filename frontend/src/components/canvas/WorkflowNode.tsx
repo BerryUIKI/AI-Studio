@@ -107,19 +107,19 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 {param.type === 'textarea' ? (
                   <textarea
                     rows={2}
-                    value={params[param.name] ?? ''}
+                    value={params[param.name] !== undefined ? String(params[param.name]) : ''}
                     onChange={(e) => updateNodeParam(id, param.name, e.target.value)}
                     placeholder={param.description}
                     className="w-full text-xs bg-slate-950/80 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500 resize-none"
                   />
                 ) : param.type === 'select' ? (
                   <select
-                    value={params[param.name] ?? param.default}
+                    value={params[param.name] !== undefined ? String(params[param.name]) : String(param.default ?? '')}
                     onChange={(e) => updateNodeParam(id, param.name, e.target.value)}
                     className="w-full text-xs bg-slate-950/80 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                   >
                     {param.options?.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
+                      <option key={String(opt.value)} value={String(opt.value)}>
                         {opt.label}
                       </option>
                     ))}
@@ -127,7 +127,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 ) : (
                   <input
                     type={param.type === 'number' ? 'number' : 'text'}
-                    value={params[param.name] ?? ''}
+                    value={params[param.name] !== undefined ? String(params[param.name]) : ''}
                     onChange={(e) =>
                       updateNodeParam(
                         id,
@@ -167,7 +167,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
         </div>
 
         {/* Output Previews (Images, Text) */}
-        {output?.image && (
+        {output?.image && typeof output.image === 'string' && (
           <div className="mt-2 pt-2 border-t border-slate-800/60">
             <img
               src={output.image}
@@ -176,10 +176,10 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
             />
           </div>
         )}
-        {output?.result && (
+        {output?.result !== undefined && (
           <div className="mt-2 pt-2 border-t border-slate-800/60">
             <div className="text-[11px] text-slate-300 bg-slate-950/70 p-2 rounded border border-slate-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
-              {output.result}
+              {String(output.result)}
             </div>
           </div>
         )}

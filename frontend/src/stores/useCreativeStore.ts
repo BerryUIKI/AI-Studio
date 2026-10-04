@@ -153,7 +153,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
           id: placeholderId,
           type: 'imageCard',
           position: { x: posX, y: posY },
-          data: placeholderCard as any,
+          data: placeholderCard,
         },
       ],
       selectedNodeId: placeholderId,
@@ -232,7 +232,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
           if (node.id === placeholderId) {
             return {
               ...node,
-              data: updatedCardData as any,
+              data: updatedCardData,
             };
           }
           return node;
@@ -242,7 +242,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
 
       set({ isGenerating: false });
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearInterval(stageTimer);
       // Remove failed placeholder card from canvas
       useCanvasStore.setState((state) => ({
@@ -250,7 +250,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       }));
       set({
         isGenerating: false,
-        error: err.message || 'Generation failed',
+        error: err instanceof Error ? err.message : 'Generation failed',
         generationStage: 'Failed',
         generationProgress: 0,
       });
@@ -293,15 +293,16 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         id: cardId,
         type: 'imageCard',
         position: pos,
-        data: cardData as any,
+        data: cardData,
       };
 
       useCanvasStore.setState({
         nodes: [...existingNodes, newCardNode],
         selectedNodeId: cardId,
       });
-    } catch (err: any) {
-      set({ error: err.message || 'Image upload failed' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Image upload failed';
+      set({ error: message });
     }
   },
 }));
