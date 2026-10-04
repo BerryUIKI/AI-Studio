@@ -37,6 +37,9 @@ WEBUI_GIT_REPO = "https://github.com/AUTOMATIC1111/stable-diffusion-webui.git"
 class IsolatedEngineInstaller:
     """Manages staged installation of local engines inside hermetic environments."""
 
+    # Class-level set of currently active installation tasks (engine_type.value)
+    _active_installs: set[str] = set()
+
     def __init__(self, engine_dir: Optional[Path] = None) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
 
@@ -55,14 +58,17 @@ class IsolatedEngineInstaller:
                 data = json.loads(manifest_path.read_text(encoding="utf-8"))
                 manifest = EngineInstallManifest.model_validate(data)
                 # Check for uncompleted previous run (interruption detection)
+                # Only mark as INTERRUPTED if there is NO active in-memory install worker running!
                 if manifest.phase in (
+                    InstallPhase.CHECKING,
                     InstallPhase.CREATING_VENV,
                     InstallPhase.DOWNLOADING,
                     InstallPhase.INSTALLING_DEPS,
                 ):
-                    manifest.phase = InstallPhase.INTERRUPTED
-                    manifest.error_message = "Installation was interrupted before completion."
-                    self.write_manifest(manifest)
+                    if engine_type.value not in self._active_installs:
+                        manifest.phase = InstallPhase.INTERRUPTED
+                        manifest.error_message = "Installation was interrupted before completion."
+                        self.write_manifest(manifest)
                 return manifest
             except Exception as e:
                 logger.warning(f"Error reading manifest for {engine_type}: {e}")
@@ -90,6 +96,34 @@ class IsolatedEngineInstaller:
         if sys.platform == "win32":
             return runtime_dir / "Scripts" / "pip.exe"
         return runtime_dir / "bin" / "pip"
+
+    def _get_expected_entrypoints(self, engine_type: EngineType, engine_target: Path) -> list[Path]:
+        """Return expected entrypoint script paths for the engine."""
+        if engine_type == EngineType.COMFYUI:
+            return [engine_target / "main.py"]
+        elif engine_type == EngineType.WEBUI:
+            return [engine_target / "launch.py", engine_target / "webui.py"]
+        return []
+
+    def validate_installation(self, engine_type: EngineType, engine_target: Path, runtime_target: Path) -> None:
+        """
+        Validate that the engine installation is complete and healthy:
+        1. Virtual environment Python binary exists
+        2. Expected entrypoint script exists
+        3. Engine requirements.txt exists
+        """
+        python_bin = self._get_python_bin(runtime_target)
+        if not python_bin.is_file():
+            raise RuntimeError(f"Hermetic Python binary missing at {python_bin}")
+
+        entrypoints = self._get_expected_entrypoints(engine_type, engine_target)
+        if not any(ep.is_file() for ep in entrypoints):
+            expected_names = " or ".join(ep.name for ep in entrypoints) or "entrypoint"
+            raise RuntimeError(f"Engine entrypoint ({expected_names}) missing in {engine_target}")
+
+        req_file = engine_target / "requirements.txt"
+        if not req_file.is_file():
+            raise RuntimeError(f"Engine requirements.txt missing in {engine_target}")
 
     async def create_isolated_venv(
         self, runtime_dir: Path, on_log: Optional[Callable[[str], None]] = None
@@ -120,68 +154,94 @@ class IsolatedEngineInstaller:
     ) -> EngineInstallManifest:
         """
         Run complete isolated installation:
-        1. Check environment & disk space
-        2. Create isolated sandboxed venv
-        3. Clone / stage repository code
+        1. Acquire per-engine install lock
+        2. Check environment & create isolated sandboxed venv
+        3. Clone / stage repository code into staging or target
         4. Install isolated dependencies via sandboxed pip
+        5. Validate entrypoint and health before marking completed
         """
-        manifest = self.read_manifest(engine_type)
-        now_str = datetime.now(timezone.utc).isoformat()
-        manifest.created_at = now_str
-        manifest.phase = InstallPhase.CHECKING
-        self.write_manifest(manifest)
-        if on_progress:
-            on_progress(manifest)
+        engine_key = engine_type.value
+        install_lock = task_registry.get_install_lock(engine_key)
 
-        engine_target = Path(manifest.engine_dir)
-        runtime_target = Path(manifest.runtime_dir)
-
-        try:
-            # Phase 1: Virtualenv Creation
-            manifest.phase = InstallPhase.CREATING_VENV
-            manifest.last_log_line = "Initializing sandboxed virtual environment..."
+        if install_lock.locked():
+            manifest = self.read_manifest(engine_type)
+            manifest.phase = InstallPhase.FAILED
+            manifest.error_message = f"An installation lease is already held for {engine_type.value}."
             self.write_manifest(manifest)
-            if on_progress:
-                on_progress(manifest)
+            return manifest
 
-            venv_ok = await self.create_isolated_venv(runtime_target)
-            if not venv_ok:
-                raise RuntimeError(f"Failed to create virtual environment at {runtime_target}")
+        async with install_lock:
+            self._active_installs.add(engine_key)
+            try:
+                manifest = self.read_manifest(engine_type)
+                now_str = datetime.now(timezone.utc).isoformat()
+                manifest.created_at = now_str
+                manifest.phase = InstallPhase.CHECKING
+                self.write_manifest(manifest)
+                if on_progress:
+                    on_progress(manifest)
 
-            python_bin = self._get_python_bin(runtime_target)
-            manifest.python_bin = str(python_bin)
+                engine_target = Path(manifest.engine_dir)
+                runtime_target = Path(manifest.runtime_dir)
 
-            # Phase 2: Stage / Download code
-            manifest.phase = InstallPhase.DOWNLOADING
-            manifest.last_log_line = f"Staging {engine_type.value} repository..."
-            self.write_manifest(manifest)
-            if on_progress:
-                on_progress(manifest)
+                # Phase 1: Virtualenv Creation
+                manifest.phase = InstallPhase.CREATING_VENV
+                manifest.last_log_line = "Initializing sandboxed virtual environment..."
+                self.write_manifest(manifest)
+                if on_progress:
+                    on_progress(manifest)
 
-            repo_url = COMFYUI_GIT_REPO if engine_type == EngineType.COMFYUI else WEBUI_GIT_REPO
-            if not engine_target.exists():
-                clone_cmd = ["git", "clone", "--depth", "1", repo_url, str(engine_target)]
-                proc = await asyncio.create_subprocess_exec(
-                    *clone_cmd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                stdout, stderr = await proc.communicate()
-                if proc.returncode != 0:
-                    err_msg = stderr.decode(errors="replace").strip()
-                    raise RuntimeError(f"Git clone failed: {err_msg}")
+                venv_ok = await self.create_isolated_venv(runtime_target)
+                if not venv_ok:
+                    raise RuntimeError(f"Failed to create virtual environment at {runtime_target}")
 
-            # Phase 3: Install isolated dependencies
-            manifest.phase = InstallPhase.INSTALLING_DEPS
-            manifest.last_log_line = "Installing engine requirements into isolated environment..."
-            self.write_manifest(manifest)
-            if on_progress:
-                on_progress(manifest)
+                python_bin = self._get_python_bin(runtime_target)
+                manifest.python_bin = str(python_bin)
 
-            req_file = engine_target / "requirements.txt"
-            pip_bin = self._get_pip_bin(runtime_target)
+                # Phase 2: Stage / Download code
+                manifest.phase = InstallPhase.DOWNLOADING
+                manifest.last_log_line = f"Staging {engine_type.value} repository..."
+                self.write_manifest(manifest)
+                if on_progress:
+                    on_progress(manifest)
 
-            if req_file.is_file() and pip_bin.is_file():
+                repo_url = COMFYUI_GIT_REPO if engine_type == EngineType.COMFYUI else WEBUI_GIT_REPO
+                entrypoints = self._get_expected_entrypoints(engine_type, engine_target)
+
+                # If destination directory exists but has no valid entrypoint or git repo, clean it up before cloning
+                if engine_target.exists():
+                    has_entrypoint = any(ep.is_file() for ep in entrypoints)
+                    has_git = (engine_target / ".git").is_dir()
+                    if not has_entrypoint or not has_git:
+                        shutil.rmtree(engine_target, ignore_errors=True)
+
+                if not engine_target.exists():
+                    clone_cmd = ["git", "clone", "--depth", "1", repo_url, str(engine_target)]
+                    proc = await asyncio.create_subprocess_exec(
+                        *clone_cmd,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout, stderr = await proc.communicate()
+                    if proc.returncode != 0:
+                        err_msg = stderr.decode(errors="replace").strip()
+                        raise RuntimeError(f"Git clone failed: {err_msg}")
+
+                # Phase 3: Install isolated dependencies
+                manifest.phase = InstallPhase.INSTALLING_DEPS
+                manifest.last_log_line = "Installing engine requirements into isolated environment..."
+                self.write_manifest(manifest)
+                if on_progress:
+                    on_progress(manifest)
+
+                req_file = engine_target / "requirements.txt"
+                pip_bin = self._get_pip_bin(runtime_target)
+
+                if not req_file.is_file():
+                    raise RuntimeError(f"requirements.txt missing in {engine_target}")
+                if not pip_bin.is_file():
+                    raise RuntimeError(f"Hermetic pip binary missing in {runtime_target}")
+
                 # Strict: execute ONLY pip inside runtime_target!
                 install_cmd = [str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file)]
                 proc = await asyncio.create_subprocess_exec(
@@ -195,22 +255,27 @@ class IsolatedEngineInstaller:
                     err_msg = stderr.decode(errors="replace").strip()
                     raise RuntimeError(f"Pip install failed: {err_msg[:300]}")
 
-            # Completed!
-            manifest.phase = InstallPhase.COMPLETED
-            manifest.completed_at = datetime.now(timezone.utc).isoformat()
-            manifest.last_log_line = f"{engine_type.value} installed successfully."
-            manifest.error_message = None
-            self.write_manifest(manifest)
-            if on_progress:
-                on_progress(manifest)
+                # Phase 4: Validation
+                self.validate_installation(engine_type, engine_target, runtime_target)
 
-        except Exception as e:
-            manifest.phase = InstallPhase.FAILED
-            manifest.error_message = str(e)
-            manifest.last_log_line = f"Installation error: {e}"
-            self.write_manifest(manifest)
-            if on_progress:
-                on_progress(manifest)
+                # Completed!
+                manifest.phase = InstallPhase.COMPLETED
+                manifest.completed_at = datetime.now(timezone.utc).isoformat()
+                manifest.last_log_line = f"{engine_type.value} installed successfully."
+                manifest.error_message = None
+                self.write_manifest(manifest)
+                if on_progress:
+                    on_progress(manifest)
+
+            except Exception as e:
+                manifest.phase = InstallPhase.FAILED
+                manifest.error_message = str(e)
+                manifest.last_log_line = f"Installation error: {e}"
+                self.write_manifest(manifest)
+                if on_progress:
+                    on_progress(manifest)
+            finally:
+                self._active_installs.discard(engine_key)
 
         return manifest
 

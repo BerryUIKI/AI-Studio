@@ -22,6 +22,7 @@ class TaskLifecycleRegistry:
         self._tasks: Dict[str, Dict[str, Any]] = {}
         self._cancellations: Dict[str, asyncio.Event] = {}
         self._update_locks: Dict[str, asyncio.Lock] = {}
+        self._install_locks: Dict[str, asyncio.Lock] = {}
 
     def register_task(
         self,
@@ -83,5 +84,14 @@ class TaskLifecycleRegistry:
             self._update_locks[engine_key] = asyncio.Lock()
         return self._update_locks[engine_key]
 
+    def get_install_lock(self, engine_key: str) -> asyncio.Lock:
+        """Retrieve or create an exclusive async lease lock for an engine installation."""
+        if not hasattr(self, "_install_locks"):
+            self._install_locks: Dict[str, asyncio.Lock] = {}
+        if engine_key not in self._install_locks:
+            self._install_locks[engine_key] = asyncio.Lock()
+        return self._install_locks[engine_key]
+
 
 task_registry = TaskLifecycleRegistry()
+

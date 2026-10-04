@@ -20,6 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.core.task_registry import task_registry
 from app.runtime.engine_manager import EngineManager
 from app.runtime.hardware import check_hardware_readiness, detect_gpus, get_storage_readiness
 from app.runtime.installer import IsolatedEngineInstaller
@@ -90,7 +91,7 @@ def test_installer_manifest_and_interruption():
         assert manifest.phase == InstallPhase.IDLE
         assert manifest.engine_type == EngineType.COMFYUI
 
-        # 2. Simulate an interrupted install state
+        # 2. Simulate an interrupted install state (no active in-memory task)
         manifest.phase = InstallPhase.DOWNLOADING
         installer_inst.write_manifest(manifest)
 
@@ -98,6 +99,59 @@ def test_installer_manifest_and_interruption():
         reloaded = installer_inst.read_manifest(EngineType.COMFYUI)
         assert reloaded.phase == InstallPhase.INTERRUPTED
         assert "interrupted" in (reloaded.error_message or "").lower()
+
+        # 4. Live polling while an install is actively running must NOT mark as interrupted
+        installer_inst._active_installs.add(EngineType.COMFYUI.value)
+        try:
+            manifest.phase = InstallPhase.DOWNLOADING
+            manifest.error_message = None
+            installer_inst.write_manifest(manifest)
+            live_manifest = installer_inst.read_manifest(EngineType.COMFYUI)
+            assert live_manifest.phase == InstallPhase.DOWNLOADING
+            assert live_manifest.error_message is None
+        finally:
+            installer_inst._active_installs.discard(EngineType.COMFYUI.value)
+
+
+@pytest.mark.asyncio
+async def test_installer_empty_dir_missing_entrypoint_rejection(tmp_path):
+    """Verify that an empty engine directory or missing entrypoint is rejected and does not report COMPLETED."""
+    installer_inst = IsolatedEngineInstaller(engine_dir=tmp_path)
+    engine_target = tmp_path / "comfyui"
+    engine_target.mkdir(parents=True, exist_ok=True)
+    runtime_target = tmp_path / "runtime"
+
+    # Mock venv creation as succeeding and creating python binary
+    python_bin = installer_inst._get_python_bin(runtime_target)
+    python_bin.parent.mkdir(parents=True, exist_ok=True)
+    python_bin.write_text("# mock python", encoding="utf-8")
+    pip_bin = installer_inst._get_pip_bin(runtime_target)
+    pip_bin.write_text("# mock pip", encoding="utf-8")
+
+    with patch.object(installer_inst, "create_isolated_venv", return_value=True):
+        # Empty directory with no main.py and no .git should trigger cleanup & clone attempt,
+        # but mock git clone to do nothing, simulating missing entrypoint failure
+        with patch("asyncio.create_subprocess_exec") as mock_exec:
+            proc_mock = AsyncMock()
+            proc_mock.returncode = 0
+            proc_mock.communicate.return_value = (b"", b"")
+            mock_exec.return_value = proc_mock
+
+            manifest = await installer_inst.install_engine(EngineType.COMFYUI)
+            assert manifest.phase == InstallPhase.FAILED
+            assert "requirements.txt missing" in (manifest.error_message or "") or "entrypoint" in (manifest.error_message or "")
+
+
+@pytest.mark.asyncio
+async def test_installer_concurrent_lease_lock_protection(tmp_path):
+    """Verify that concurrent install calls for the same engine are rejected by lease lock."""
+    installer_inst = IsolatedEngineInstaller(engine_dir=tmp_path)
+    lock = task_registry.get_install_lock(EngineType.COMFYUI.value)
+
+    async with lock:
+        manifest = await installer_inst.install_engine(EngineType.COMFYUI)
+        assert manifest.phase == InstallPhase.FAILED
+        assert "lease is already held" in (manifest.error_message or "")
 
 
 @pytest.mark.asyncio
