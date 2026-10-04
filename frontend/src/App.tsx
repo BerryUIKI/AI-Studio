@@ -153,11 +153,23 @@ export default function App() {
   const closeAppWindow = async () => {
     try {
       if (isTauri()) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        try {
+          await invoke('close_app');
+          return;
+        } catch {
+          // Fallback to appWindow.close()
+        }
         const appWindow = getCurrentWindow();
         await appWindow.close();
+      } else {
+        window.close();
       }
     } catch (err) {
       console.error('Failed to close app window:', err);
+      try {
+        window.close();
+      } catch {}
     }
   };
 

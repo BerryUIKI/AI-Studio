@@ -57,6 +57,36 @@ def test_agent_compound_workflow_plan():
     assert proposal["estimated_calls"] == 2
 
 
+def test_agent_chinese_intent_parsing():
+    """Agent parses Chinese natural language prompt into structured proposal."""
+    resp = client.post(
+        "/api/v1/agent/chat",
+        json={"message": "帮我画一张赛博朋克城市夜景，横版，30步"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    proposal = data["proposal"]
+    assert proposal is not None
+    assert proposal["intent"] == "txt2img"
+    assert proposal["parameters"]["aspect_ratio"] == "16:9"
+    assert proposal["parameters"]["steps"] == 30
+    assert "赛博朋克城市夜景" in proposal["parameters"]["prompt"]
+
+
+def test_agent_chinese_compound_workflow():
+    """Agent detects Chinese chained generation and upscaling."""
+    resp = client.post(
+        "/api/v1/agent/chat",
+        json={"message": "生成日出雪山风景，然后放大2倍"},
+    )
+    assert resp.status_code == 200
+    proposal = resp.json()["proposal"]
+    assert proposal is not None
+    assert len(proposal["chain_steps"]) == 2
+    assert proposal["chain_steps"][0]["action"] == "txt2img"
+    assert proposal["chain_steps"][1]["action"] == "upscale"
+
+
 def test_agent_video_intent_parsing():
     """Agent detects video generation request and formulates video proposal."""
     # Text-to-video
