@@ -5,6 +5,7 @@ action plan formulation, and human-in-the-loop proposal execution. Bounded heuri
 does not claim unconstrained natural-language understanding or arbitrary workflow synthesis.
 """
 
+import json
 import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -528,9 +529,14 @@ class AgentService:
             for tc in tool_calls:
                 fn_name = tc.get("function", {}).get("name")
                 fn_args_raw = tc.get("function", {}).get("arguments", "{}")
-                try:
-                    fn_args = json.loads(fn_args_raw)
-                except Exception:
+                if isinstance(fn_args_raw, dict):
+                    fn_args = fn_args_raw
+                elif isinstance(fn_args_raw, str):
+                    try:
+                        fn_args = json.loads(fn_args_raw)
+                    except Exception:
+                        fn_args = {}
+                else:
                     fn_args = {}
 
                 if fn_name == "propose_creative_plan":
