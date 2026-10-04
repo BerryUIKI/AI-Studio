@@ -16,6 +16,7 @@ import httpx
 from app.schemas.cloud import (
     CloudProviderId,
     CloudProviderInfo,
+    LLMConfig,
     TestKeyResult,
 )
 from app.storage.db import get_default_data_dir
