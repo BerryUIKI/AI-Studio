@@ -1,7 +1,7 @@
 """
-OpenAI-Compatible LLM Client with Function Calling & Local Ollama Support.
+OpenAI-Compatible LLM Client with Function Calling & Embedded llama.cpp Support.
 
-Enables Berry AI Studio to interface with local Ollama instances (e.g. qwen2.5:7b, deepseek-r1:8b)
+Enables Berry AI Studio to interface with embedded llama-server instances (e.g. qwen2.5-7b, deepseek-r1-7b)
 as well as cloud providers (SiliconFlow, DeepSeek, OpenAI) using standard chat completions & tool calling.
 Follows zero-pollution async design with graceful fallback.
 """
@@ -133,7 +133,7 @@ Your goals:
 
 
 class LLMClient:
-    """Async client communicating with OpenAI-compatible LLM endpoints (Ollama, SiliconFlow, DeepSeek, OpenAI)."""
+    """Async client communicating with OpenAI-compatible LLM endpoints (llama-server, SiliconFlow, DeepSeek, OpenAI)."""
 
     def __init__(self, config: Optional[LLMConfig] = None) -> None:
         self.config = config or LLMConfig()

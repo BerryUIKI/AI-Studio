@@ -10,12 +10,11 @@ class CloudProviderId(str, Enum):
     FAL = "fal"
     SILICONFLOW = "siliconflow"
     DEEPSEEK = "deepseek"
-    OLLAMA = "ollama"
     LLAMA_SERVER = "llama_server"
 
 
 class LLMConfig(BaseModel):
-    provider: str = "llama_server"  # llama_server, ollama, siliconflow, deepseek, openai, custom
+    provider: str = "llama_server"  # llama_server, siliconflow, deepseek, openai, custom
     model: str = "qwen2.5-7b-instruct-q4_k_m.gguf"
     base_url: str = "http://127.0.0.1:8080/v1"
     api_key: Optional[str] = None
