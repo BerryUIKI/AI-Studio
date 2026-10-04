@@ -188,3 +188,84 @@ def test_semantic_node_hash_preserves_non_secret_keys():
         input_bindings=[],
     )
     assert hash1 == hash3
+
+
+@pytest.mark.asyncio
+async def test_cache_invalidates_missing_output_assets(tmp_path):
+    """Verify that a cache hit requires output assets to exist, invalidating broken entries if missing (fixes #111)."""
+    from app.storage.db import DatabaseManager
+    from app.storage.asset_store import AssetStore
+
+    db_path = tmp_path / "test_cache.db"
+    db_mgr = DatabaseManager(db_path=db_path)
+    asset_mgr = AssetStore(manager=db_mgr, base_dir=tmp_path)
+    test_cache = CacheStore(manager=db_mgr, asset_store=asset_mgr)
+
+    # 1. Save dummy asset
+    asset = await asset_mgr.save_bytes(b"image_content_12345", "test.png", media_type="image")
+    asset_file = asset_mgr.get_absolute_path(asset)
+    assert asset_file.is_file()
+
+    dummy_hash = "hash_with_asset_output_123"
+    output_payload = {
+        "asset_id": asset.id,
+        "image_url": f"/api/v1/assets/{asset.id}/content",
+        "width": 512,
+        "height": 512,
+    }
+
+    # Store in cache
+    await test_cache.set_async(dummy_hash, output_payload)
+
+    # Cache hit while file exists
+    cached = await test_cache.get_async(dummy_hash)
+    assert cached is not None
+    assert cached["asset_id"] == asset.id
+
+    # 2. Delete physical asset file
+    asset_file.unlink()
+    assert not asset_file.exists()
+
+    # 3. Next get_async should detect missing output, invalidate cache, and return None
+    cached_after_delete = await test_cache.get_async(dummy_hash)
+    assert cached_after_delete is None
+
+    # Check that cache is now cleared from SQLite as well
+    conn = await db_mgr.get_connection()
+    async with conn.execute("SELECT output_json FROM cache_entries WHERE node_hash = ?", (dummy_hash,)) as cur:
+        row = await cur.fetchone()
+        assert row is None
+
+
+@pytest.mark.asyncio
+async def test_cache_startup_reconciliation_purges_orphans(tmp_path):
+    """Verify that startup reconciliation scans and purges orphan cache entries whose assets are gone."""
+    from app.storage.db import DatabaseManager
+    from app.storage.asset_store import AssetStore
+
+    db_path = tmp_path / "test_reconcile.db"
+    db_mgr = DatabaseManager(db_path=db_path)
+    asset_mgr = AssetStore(manager=db_mgr, base_dir=tmp_path)
+    test_cache = CacheStore(manager=db_mgr, asset_store=asset_mgr)
+
+    # 1. Create two assets and cache entries
+    asset1 = await asset_mgr.save_bytes(b"content1", "asset1.png", media_type="image")
+    asset2 = await asset_mgr.save_bytes(b"content2", "asset2.png", media_type="image")
+
+    await test_cache.set_async("hash1", {"asset_id": asset1.id, "image_url": f"/api/v1/assets/{asset1.id}/content"})
+    await test_cache.set_async("hash2", {"asset_id": asset2.id, "image_url": f"/api/v1/assets/{asset2.id}/content"})
+
+    # 2. Delete file for asset2
+    asset_mgr.get_absolute_path(asset2).unlink()
+
+    # Clear memory cache so reconciliation tests SQLite scan
+    test_cache.clear()
+
+    # 3. Run reconciliation
+    purged = await test_cache.reconcile_orphan_references_async()
+    assert purged == 1
+
+    # hash1 remains, hash2 is gone
+    assert await test_cache.get_async("hash1") is not None
+    assert await test_cache.get_async("hash2") is None
+
