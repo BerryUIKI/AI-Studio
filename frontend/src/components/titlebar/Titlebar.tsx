@@ -137,11 +137,23 @@ export const Titlebar: React.FC<TitlebarProps> = ({
     }
     try {
       if (isTauri()) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        try {
+          await invoke('close_app');
+          return;
+        } catch {
+          // Fallback to appWindow.close()
+        }
         const appWindow = getCurrentWindow();
         await appWindow.close();
+      } else {
+        window.close();
       }
     } catch (e) {
       console.error('Failed to close window:', e);
+      try {
+        window.close();
+      } catch {}
     }
   };
 

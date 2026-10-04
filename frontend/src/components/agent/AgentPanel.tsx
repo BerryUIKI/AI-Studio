@@ -416,9 +416,28 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
                   {/* Human-in-the-Loop Action Gate */}
                   <div className="pt-1 flex flex-col gap-1.5">
                     {msg.proposal.workflow_graph && !msg.proposal.workflow_graph.is_valid && (
-                      <div className="flex items-center gap-1.5 text-[10px] text-amber-400 bg-amber-950/30 border border-amber-800/40 rounded px-2 py-1">
-                        <AlertTriangle className="h-3 w-3 shrink-0" />
-                        <span>Workflow has missing dependencies or validation issues.</span>
+                      <div className="flex flex-col gap-1 text-[11px] text-amber-400 bg-amber-950/30 border border-amber-800/40 rounded p-2">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                          <span>Local ComfyUI is not ready or models are missing</span>
+                        </div>
+                        <span className="text-[10px] text-amber-300/80">
+                          You can switch this proposal to run via Cloud API (Fal.ai / SiliconFlow) without installing local engines.
+                        </span>
+                        <div className="flex gap-1.5 mt-1">
+                          <button
+                            onClick={() => handleSendMessage(`Use Fal.ai to generate: ${msg.proposal!.parameters.prompt || msg.proposal!.title}`)}
+                            className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-2 py-0.5 text-[10px] font-medium text-white transition-colors"
+                          >
+                            Switch to Fal.ai
+                          </button>
+                          <button
+                            onClick={() => handleSendMessage(`Use SiliconFlow to generate: ${msg.proposal!.parameters.prompt || msg.proposal!.title}`)}
+                            className="rounded bg-indigo-600/80 hover:bg-indigo-600 px-2 py-0.5 text-[10px] font-medium text-white transition-colors"
+                          >
+                            Switch to SiliconFlow
+                          </button>
+                        </div>
                       </div>
                     )}
                     <button

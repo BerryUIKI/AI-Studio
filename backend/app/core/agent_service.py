@@ -41,9 +41,9 @@ class AgentService:
 
     def _extract_aspect_ratio(self, text: str) -> str:
         lower = text.lower()
-        if "16:9" in lower or "landscape" in lower or "widescreen" in lower or "wide" in lower:
+        if "16:9" in lower or "landscape" in lower or "widescreen" in lower or "wide" in lower or "横版" in text or "横屏" in text or "宽屏" in text:
             return "16:9"
-        if "9:16" in lower or "portrait" in lower or "vertical" in lower:
+        if "9:16" in lower or "portrait" in lower or "vertical" in lower or "竖版" in text or "竖屏" in text:
             return "9:16"
         if "4:3" in lower:
             return "4:3"
@@ -52,36 +52,42 @@ class AgentService:
         return "1:1"
 
     def _extract_steps(self, text: str) -> int:
-        match = re.search(r"(\d+)\s*steps?", text, re.IGNORECASE)
+        match = re.search(r"(\d+)\s*(?:steps?|步)", text, re.IGNORECASE)
         if match:
             return min(max(int(match.group(1)), 1), 60)
         lower = text.lower()
-        if "high quality" in lower or "ultra detail" in lower or "photorealistic" in lower:
+        if "high quality" in lower or "ultra detail" in lower or "photorealistic" in lower or "高清" in text or "精细" in text or "写实" in text:
             return 30
-        if "draft" in lower or "fast" in lower or "quick" in lower:
+        if "draft" in lower or "fast" in lower or "quick" in lower or "草图" in text or "快速" in text:
             return 15
         return 20
 
     def _extract_seed(self, text: str) -> int:
-        match = re.search(r"seed\s*[:=]?\s*(\d+)", text, re.IGNORECASE)
+        match = re.search(r"(?:seed|种子)\s*[:=]?\s*(\d+)", text, re.IGNORECASE)
         if match:
             return int(match.group(1))
         return -1
 
     def _extract_clean_prompt(self, text: str) -> str:
-        # Strip common conversational commands
+        # Strip common English & Chinese conversational commands
         cleaned = re.sub(
             r"^(please\s+)?(can\s+you\s+)?(create|generate|make|render|draw|animate)\s+(an?\s+)?(image|picture|video|animation)?(\s+of)?\s*",
             "",
             text,
             flags=re.IGNORECASE,
         ).strip()
-        # Remove trailing chain instructions like "then upscale 2x"
+        cleaned = re.sub(
+            r"^(请|帮我|为我)?(生成|绘制|画一张|画一个|创建|制作|渲染)?(图片|图像|画作|照片|视频|动图)?\s*[:：]?\s*",
+            "",
+            cleaned,
+        ).strip()
+        # Remove trailing chain instructions like "then upscale 2x" or "然后放大2倍"
         cleaned = re.sub(r"(,\s*)?(and\s+)?then\s+upscale.*$", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"(，\s*)?(然后|接着)?(放大|超分辨率|超分).*$", "", cleaned).strip()
         return cleaned if cleaned else text
 
     def _detect_engine(self, text: str, preferred: Optional[str] = None) -> tuple[str, str]:
-        """Returns (engine_id, cost_disclaimer)."""
+        """Returns (engine_id, cost_disclaimer). Intelligently recommends Cloud if local engine is unconfigured."""
         lower = text.lower()
         if preferred:
             if preferred in ("fal_ai", "fal"):
@@ -94,12 +100,43 @@ class AgentService:
 
         if "fal" in lower:
             return "fal_ai", "Cloud BYOK: Uses your configured Fal.ai API key"
-        if "silicon" in lower:
+        if "silicon" in lower or "硅基" in text or "siliconflow" in lower:
             return "siliconflow", "Cloud BYOK: Uses your configured SiliconFlow API key"
         if "webui" in lower:
             return "managed_webui", "Local SD WebUI: Free local execution on your hardware"
 
+        # Check if user has active cloud credentials (BYOK)
+        has_fal = False
+        has_silicon = False
+        if self.credential_manager:
+            try:
+                from app.schemas.cloud import CloudProviderId
+                has_fal = bool(self.credential_manager.get_key(CloudProviderId.FAL))
+                has_silicon = bool(self.credential_manager.get_key(CloudProviderId.SILICONFLOW))
+            except Exception:
+                pass
+
+        # If user explicitly requests cloud
+        if "cloud" in lower or "云端" in text or "api" in lower:
+            if has_silicon:
+                return "siliconflow", "Cloud BYOK: Uses your configured SiliconFlow API key"
+            return "fal_ai", "Cloud BYOK: Uses your configured Fal.ai API key"
+
+        # Default to managed ComfyUI for privacy & free local generation, or fall back to configured cloud key
+        if not self._is_comfyui_ready() and (has_fal or has_silicon):
+            if has_fal:
+                return "fal_ai", "Cloud BYOK (Auto-routed: Local ComfyUI is not running)"
+            return "siliconflow", "Cloud BYOK (Auto-routed: Local ComfyUI is not running)"
+
         return "managed_comfyui", "Local ComfyUI: Free local execution, 100% private"
+
+    def _is_comfyui_ready(self) -> bool:
+        """Helper to check if managed ComfyUI is currently installed and running."""
+        try:
+            from app.runtime.supervisor import supervisor
+            return supervisor.is_running()
+        except Exception:
+            return False
 
     def _resolve_model(self, engine_id: str, action: CreativeActionType) -> str:
         """Finds suitable default or catalog-indexed model for the engine and action."""
@@ -175,10 +212,13 @@ class AgentService:
             return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
 
         # Detect intent
-        is_video = any(w in msg_lower for w in ["video", "animate", "animation", "motion", "clip"])
-        is_upscale = any(w in msg_lower for w in ["upscale", "super resolution", "enlarge", "2x", "4x"])
-        is_inpaint = any(w in msg_lower for w in ["inpaint", "mask", "replace object", "fill in"])
-        has_compound_upscale = is_upscale and any(w in msg_lower for w in ["then", "and", "after", "create", "generate"])
+        is_video = any(w in msg_lower for w in ["video", "animate", "animation", "motion", "clip"]) or any(w in req.message for w in ["视频", "动画", "动图", "动态"])
+        is_upscale = any(w in msg_lower for w in ["upscale", "super resolution", "enlarge", "2x", "4x"]) or any(w in req.message for w in ["放大", "超分", "超分辨率", "高清化", "提升画质"])
+        is_inpaint = any(w in msg_lower for w in ["inpaint", "mask", "replace object", "fill in"]) or any(w in req.message for w in ["局部重绘", "重绘", "消除", "替换", "涂抹"])
+        has_compound_upscale = is_upscale and (
+            any(w in msg_lower for w in ["then", "and", "after", "create", "generate"]) or
+            any(w in req.message for w in ["然后", "接着", "并", "再", "生成", "绘制", "画"])
+        )
 
         target_engine, cost_disclaimer = self._detect_engine(req.message, req.preferred_engine)
         aspect_ratio = self._extract_aspect_ratio(req.message)
