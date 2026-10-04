@@ -52,11 +52,19 @@ class GenerationProvenance(BaseModel):
     source_asset_id: Optional[str] = None
     mask_asset_id: Optional[str] = None
     execution_time_ms: Optional[float] = None
+    provider_id: Optional[str] = None
     # Video-specific provenance
     fps: Optional[int] = None
     num_frames: Optional[int] = None
     duration_seconds: Optional[float] = None
     motion_bucket_id: Optional[int] = None
+
+
+class CreativeExecutionPlan(BaseModel):
+    engine: str  # "comfyui", "webui", or "cloud"
+    provider_id: str  # "comfyui", "webui", "fal_ai", "siliconflow", "openai"
+    target_model: str
+    action: CreativeActionType
 
 
 class CreativeActionResult(BaseModel):

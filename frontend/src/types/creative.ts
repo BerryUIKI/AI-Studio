@@ -18,6 +18,7 @@ export interface GenerationProvenance {
   source_asset_id?: string;
   mask_asset_id?: string;
   execution_time_ms?: number;
+  provider_id?: string;
   fps?: number;
   num_frames?: number;
   duration_seconds?: number;
