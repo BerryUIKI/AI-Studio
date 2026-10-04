@@ -101,6 +101,18 @@ An installation manifest records engine version, environment, paths and completi
 
 Platform adapters contain Windows-specific process flags and paths. Model directories may be shared only when engine configuration and compatibility permit. Preserve legacy engine locations and environment variables unless an explicit migration is implemented.
 
+### Embedded LLM Runtime Architecture (`llama-server`)
+- **Engine Selection**: Berry AI Studio embeds `llama-server` from the [llama.cpp](https://github.com/ggml-org/llama.cpp) ecosystem rather than requiring an external Ollama daemon. This eliminates system service installations, system tray overhead, and environment variable mutations.
+- **Process Supervision**:
+  - Binary path: `runtime/llama_server/llama-server.exe`.
+  - Supervisor: `LlamaSupervisor` (located in `backend/app/runtime/llama_server/llama_supervisor.py`) owns process spawning, port discovery, health probing (`/health`), and graceful shutdown on application exit (`lifespan` handler).
+  - Loopback Binding: Binds strictly to `127.0.0.1:8080` (or next free port) exposing standard OpenAI-compatible `/v1/chat/completions` and `/v1/models` endpoints.
+- **Universal GGUF Model Sharing**:
+  - Model Directory: `engine/models/llm/*.gguf` (mirrored or symlinked into ComfyUI's model directory).
+  - Zero Redundancy: The exact same `.gguf` weight files are shared directly between the local LLM prompt expander/agent and the infinite canvas ComfyUI GGUF execution nodes. Users never duplicate 4GB–16GB model weights between different engines.
+- **Robust Model Acquisition**:
+  - Multi-mirror download orchestration: Automatic failover across ModelScope, HF Mirror, and Hugging Face with timeout protection and streaming progress indicators.
+
 Future non-NVIDIA discrete GPU support attaches through capability/runtime adapters. Do not add unrequested inference backends now.
 
 ## Validation and Outstanding Decisions

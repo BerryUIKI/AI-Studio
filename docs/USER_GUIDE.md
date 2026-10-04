@@ -41,6 +41,17 @@ Berry AI Studio supports two modes of creation:
   - Open the **"Environment"** manager from the top header to inspect or start Berry's sandboxed local runtimes.
   - All local packages live strictly inside isolated directories (`%LOCALAPPDATA%\AI-Workflow\engine\`) with zero pollution of your system Python.
 
+### Mode C: Embedded Local LLM (`llama.cpp` / `llama-server`)
+- **Who it is for**: Users wanting private, local offline LLM prompt expansion, agent orchestration, and creative assistance without cloud API costs or installing external Ollama daemons.
+- **How to initialize**:
+  1. Open **Settings -> Models & Engines** (or complete the initial **Setup Wizard**).
+  2. Click **"Install llama.cpp"** to download the lightweight embedded engine (`runtime/llama_server/llama-server.exe`).
+  3. Select and download a curated GGUF model (e.g., `Qwen2.5-7B-Instruct` or `Qwen2.5-1.5B-Instruct`).
+  4. Select **`llama_server`** as the active LLM provider in Settings.
+- **Universal Canvas GGUF Sharing**:
+  - All GGUF models are stored under `engine/models/llm/`.
+  - These weights are universally accessible by both the embedded LLM assistant and canvas ComfyUI GGUF nodes without copying files or consuming double the storage.
+
 ---
 
 ## 3. The Creative Canvas Workflow

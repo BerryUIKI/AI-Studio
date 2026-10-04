@@ -120,7 +120,16 @@ if (Test-Path "$SourceVenv\Scripts\python.exe") {
     Write-Warning "backend/.venv not found; runtime/python was not bundled. Package will rely on host Python if not provided."
 }
 
-# Prepare embedded Ollama runtime in runtime/ollama if provided
+# Prepare embedded llama-server runtime in runtime/llama_server if provided
+$SourceLlamaServer = "$RepoRoot\runtime\llama_server"
+if (Test-Path "$SourceLlamaServer\llama-server.exe") {
+    Write-Host "  -> Bundling embedded llama-server binary into runtime/llama_server..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path "$TargetDir\runtime\llama_server" -Force | Out-Null
+    Copy-Item -Recurse "$SourceLlamaServer\*" -Destination "$TargetDir\runtime\llama_server\" -Force
+    Write-Host "  -> runtime/llama_server/llama-server.exe staged successfully" -ForegroundColor Green
+}
+
+# Prepare embedded Ollama runtime in runtime/ollama if provided (legacy)
 $SourceOllama = "$RepoRoot\runtime\ollama"
 if (Test-Path "$SourceOllama\ollama.exe") {
     Write-Host "  -> Bundling embedded Ollama binary into runtime/ollama..." -ForegroundColor Yellow
