@@ -11,12 +11,13 @@ class CloudProviderId(str, Enum):
     SILICONFLOW = "siliconflow"
     DEEPSEEK = "deepseek"
     OLLAMA = "ollama"
+    LLAMA_SERVER = "llama_server"
 
 
 class LLMConfig(BaseModel):
-    provider: str = "ollama"  # ollama, siliconflow, deepseek, openai, custom
-    model: str = "qwen2.5:7b"
-    base_url: str = "http://127.0.0.1:11434/v1"
+    provider: str = "llama_server"  # llama_server, ollama, siliconflow, deepseek, openai, custom
+    model: str = "qwen2.5-7b-instruct-q4_k_m.gguf"
+    base_url: str = "http://127.0.0.1:8080/v1"
     api_key: Optional[str] = None
     temperature: float = 0.7
     enabled: bool = True

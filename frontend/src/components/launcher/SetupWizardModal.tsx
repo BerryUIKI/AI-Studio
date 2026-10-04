@@ -56,6 +56,24 @@ interface HardwareInfo {
   recommended_llm_models: string[];
 }
 
+interface LlamaModelInfo {
+  name: string;
+  path: string;
+  size_bytes: number;
+  modified_at?: string;
+  status: string;
+}
+
+interface LlamaServerStatus {
+  installed: boolean;
+  running: boolean;
+  pid?: number;
+  port: number;
+  endpoint: string;
+  active_model?: string;
+  models: LlamaModelInfo[];
+}
+
 interface OllamaStatus {
   installed: boolean;
   running: boolean;
@@ -77,6 +95,7 @@ interface SetupWizardModalProps {
 
 interface PresetModelDef {
   name: string;
+  hubModelId?: string;
   labelZh: string;
   labelEn: string;
   size: string;
@@ -87,39 +106,33 @@ interface PresetModelDef {
 
 const PRESET_MODELS: PresetModelDef[] = [
   {
-    name: 'qwen2.5:14b',
-    labelZh: 'Qwen 2.5 (14B) - 高阶旗舰',
-    labelEn: 'Qwen 2.5 (14B) - Flagship',
-    size: '9.0 GB',
-    vramReqMb: 12288,
-    descZh: '14B 强大中文与多语言旗舰，深度理解复杂画作创作意图与复杂节点工作流',
-    descEn: 'High-capability 14B model for nuanced prompt generation & workflow control.',
-  },
-  {
     name: 'qwen2.5:7b',
-    labelZh: 'Qwen 2.5 (7B) - 均衡首选',
-    labelEn: 'Qwen 2.5 (7B) - Balanced',
+    hubModelId: 'qwen2.5-7b-instruct-q4_k_m',
+    labelZh: 'Qwen 2.5 (7B) - 旗舰首选 [GGUF]',
+    labelEn: 'Qwen 2.5 (7B) - Balanced [GGUF]',
     size: '4.7 GB',
     vramReqMb: 6144,
-    descZh: '阿里千问最新高智商模型，完美支持多语言创意扩写与工作流编排',
-    descEn: 'Optimal balance of speed and intelligence for creative workflows.',
+    descZh: '阿里千问最新高智商模型，完美支持多语言创意扩写与工作流编排，与画布100%通用。',
+    descEn: 'Optimal balance of speed and intelligence for creative workflows, shared with canvas.',
   },
   {
-    name: 'deepseek-r1:14b',
-    labelZh: 'DeepSeek R1 (14B) - 强推理旗舰',
-    labelEn: 'DeepSeek R1 (14B) - Deep Reasoning',
-    size: '9.0 GB',
-    vramReqMb: 12288,
-    descZh: '深度强化学习强力推理模型，严谨构图审美与逻辑细节规划',
-    descEn: 'Advanced reasoning model with deep chain-of-thought planning.',
+    name: 'qwen2.5:1.5b',
+    hubModelId: 'qwen2.5-1.5b-instruct-q4_k_m',
+    labelZh: 'Qwen 2.5 (1.5B) - 轻量秒开 [GGUF]',
+    labelEn: 'Qwen 2.5 (1.5B) - Ultra Fast [GGUF]',
+    size: '1.0 GB',
+    vramReqMb: 2048,
+    descZh: '极低显存占用，秒级极速响应，适合轻薄本或低显存设备进行基础扩写与辅助控制。',
+    descEn: 'Ultra-lightweight model with minimal memory requirements.',
   },
   {
     name: 'deepseek-r1:8b',
-    labelZh: 'DeepSeek R1 (8B) - 深度推理',
-    labelEn: 'DeepSeek R1 (8B) - Reasoning',
-    size: '4.9 GB',
+    hubModelId: 'deepseek-r1-distill-qwen-7b-q4_k_m',
+    labelZh: 'DeepSeek R1 (7B) - 深度推理 [GGUF]',
+    labelEn: 'DeepSeek R1 (7B) - Deep Reasoning [GGUF]',
+    size: '4.7 GB',
     vramReqMb: 6144,
-    descZh: '深度强化学习推理模型，长思考链路，擅长复杂提示词逻辑设计',
+    descZh: '深度强化学习强力推理模型，长思考链路，擅长复杂提示词逻辑设计与工作流诊断。',
     descEn: 'DeepSeek R1 reasoning architecture for complex creative prompt composition.',
   },
   {
@@ -128,7 +141,7 @@ const PRESET_MODELS: PresetModelDef[] = [
     labelEn: 'Llama 3.2 (3B) - Lightweight',
     size: '2.0 GB',
     vramReqMb: 3072,
-    descZh: 'Meta 超轻量高效模型，启动迅捷，可在低显存或CPU流畅运行',
+    descZh: 'Meta 超轻量高效模型，启动迅捷，可在低显存或CPU流畅运行。',
     descEn: 'Ultra-lightweight Meta model, ultra-fast and CPU/low-VRAM friendly.',
   },
 ];
@@ -147,6 +160,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
   const [loadingHardware, setLoadingHardware] = useState(false);
   const [hardwareError, setHardwareError] = useState<string | null>(null);
 
+  const [llamaStatus, setLlamaStatus] = useState<LlamaServerStatus | null>(null);
+  const [loadingLlama, setLoadingLlama] = useState(false);
+  const [installingLlama, setInstallingLlama] = useState(false);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [loadingOllama, setLoadingOllama] = useState(false);
   const [installingOllama, setInstallingOllama] = useState(false);
@@ -187,6 +203,18 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
     }
 
     try {
+      const llamaRes = await fetch('/api/v1/llama-server/status');
+      if (llamaRes.ok) {
+        const llamaData: LlamaServerStatus = await llamaRes.json();
+        setLlamaStatus(llamaData);
+      }
+    } catch (e) {
+      console.warn('Failed to fetch llama-server status:', e);
+    } finally {
+      setLoadingLlama(false);
+    }
+
+    try {
       const olRes = await fetch('/api/v1/ollama/status');
       if (olRes.ok) {
         const olData: OllamaStatus = await olRes.json();
@@ -206,6 +234,42 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleStartLlama = async () => {
+    setLoadingLlama(true);
+    setStartError(null);
+    try {
+      const res = await fetch('/api/v1/llama-server/start', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!data.success) {
+        setStartError(data.message || (isZh ? '启动 llama-server 失败' : 'Failed to start llama-server'));
+      }
+      await fetchDiagnostics();
+    } catch (e: any) {
+      setStartError(e?.message || (isZh ? '启动失败' : 'Start failed'));
+    } finally {
+      setLoadingLlama(false);
+    }
+  };
+
+  const handleInstallLlama = async () => {
+    setInstallingLlama(true);
+    setInstallMessage(isZh ? '正在初始化内置 llama.cpp 引擎...' : 'Initializing embedded llama.cpp runtime...');
+    try {
+      const res = await fetch('/api/v1/llama-server/install', { method: 'POST' });
+      const data = await res.json();
+      if (data.installed) {
+        setInstallMessage(isZh ? '内置 llama-server 引擎已成功就绪。' : 'Embedded llama-server runtime is ready.');
+      } else {
+        setInstallMessage(data.message || (isZh ? '已完成检查' : 'Check completed'));
+      }
+      setTimeout(() => fetchDiagnostics(), 1500);
+    } catch (e: any) {
+      setInstallMessage(e?.message || (isZh ? '初始化请求失败' : 'Failed to initialize'));
+    } finally {
+      setInstallingLlama(false);
+    }
+  };
 
   const handleStartOllama = async () => {
     setLoadingOllama(true);
@@ -254,12 +318,95 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
     setIsPulling(true);
     setPullError(null);
 
-    // Guard: check if Ollama is installed
+    const preset = PRESET_MODELS.find((m) => m.name === modelName);
+
+    // If preset has hubModelId, use the robust multi-mirror GGUF downloader
+    if (preset?.hubModelId) {
+      setPullProgress({ status: isZh ? '正在解析模型多镜像下载源...' : 'Resolving model mirrors...', percent: 0 });
+      try {
+        // Auto-install llama-server binary if not present
+        if (!llamaStatus?.installed) {
+          setPullProgress({ status: isZh ? '正在部署嵌入式 llama.cpp 运行时...' : 'Deploying llama.cpp runtime...', percent: 5 });
+          await fetch('/api/v1/llama-server/install', { method: 'POST' }).catch(() => {});
+        }
+
+        const startRes = await fetch('/api/v1/models/hub/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_id: preset.hubModelId, target_engine: 'llama_server' }),
+        });
+
+        if (!startRes.ok) {
+          const errData = await startRes.json().catch(() => ({}));
+          throw new Error(errData.detail || `HTTP ${startRes.status}`);
+        }
+
+        const taskInfo = await startRes.json();
+        const taskId = taskInfo.task_id;
+
+        // Poll task progress
+        let completed = false;
+        while (!completed) {
+          await new Promise((r) => setTimeout(r, 800));
+          const pollRes = await fetch('/api/v1/models/hub/tasks');
+          if (!pollRes.ok) continue;
+          const tasks = await pollRes.json();
+          const currentTask = Array.isArray(tasks) ? tasks.find((t: any) => t.task_id === taskId) : null;
+          if (!currentTask) continue;
+
+          if (currentTask.status === 'downloading' || currentTask.status === 'pending') {
+            const speedMb = currentTask.speed_bps ? (currentTask.speed_bps / (1024 * 1024)).toFixed(1) : '0';
+            const statusMsg = isZh
+              ? `下载中 (${speedMb} MB/s) • 存储于 engine/models/llm/`
+              : `Downloading (${speedMb} MB/s) to engine/models/llm/`;
+            setPullProgress({
+              status: statusMsg,
+              percent: Math.min(99, Math.round(currentTask.progress_pct || 0)),
+            });
+          } else if (currentTask.status === 'completed') {
+            completed = true;
+            setPullProgress({ status: isZh ? '模型校验完成，正在启动引擎...' : 'Model verified, starting engine...', percent: 100 });
+          } else if (currentTask.status === 'failed') {
+            throw new Error(currentTask.error_message || 'Download failed');
+          }
+        }
+
+        // Auto-start llama-server with the new model
+        await fetch('/api/v1/llama-server/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_name: preset.hubModelId }),
+        }).catch(() => {});
+
+        // Configure default LLM provider to llama_server
+        await fetch('/api/v1/cloud/llm/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: 'llama_server',
+            model: preset.name,
+            base_url: 'http://127.0.0.1:8080/v1',
+            enabled: true,
+          }),
+        }).catch(() => {});
+
+        setIsPulling(false);
+        await fetchDiagnostics();
+        setActiveStep(3);
+        return;
+      } catch (err: any) {
+        setPullError(err?.message || (isZh ? 'GGUF 模型下载失败' : 'Model download failed'));
+        setIsPulling(false);
+        return;
+      }
+    }
+
+    // Fallback: Ollama model pull stream
     if (ollamaStatus && !ollamaStatus.installed) {
       setPullError(
         isZh
-          ? '未检测到 Ollama 运行环境。请先完成 Ollama 安装（可点击上方“一键安装”或前往官网下载）。'
-          : 'Ollama is not installed. Please install Ollama from https://ollama.com first.'
+          ? '未检测到 Ollama 运行环境。请先完成安装。'
+          : 'Ollama is not installed. Please install Ollama first.'
       );
       setIsPulling(false);
       return;
@@ -297,17 +444,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           try {
             const data = JSON.parse(line);
             if (data.error) {
-              let errMsg = data.error;
-              if (errMsg.includes('502') || errMsg.includes('actively refused') || errMsg.includes('ConnectError')) {
-                errMsg = isZh
-                  ? '无法连接到 Ollama 服务（服务未就绪或本地代理冲突）。后台正尝试拉起服务，请稍后重试。'
-                  : 'Cannot connect to Ollama service. Please make sure Ollama is running.';
-              } else if (errMsg.includes('not installed')) {
-                errMsg = isZh
-                  ? '未检测到 Ollama 运行环境，请先安装 Ollama 引擎。'
-                  : 'Ollama is not installed. Please install Ollama first.';
-              }
-              setPullError(errMsg);
+              setPullError(data.error);
               setIsPulling(false);
               return;
             }
@@ -317,7 +454,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
             setPullProgress({ status, percent: pct });
           } catch {
-            // ignore chunk JSON parse
+            // ignore
           }
         }
       }
@@ -326,13 +463,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       await fetchDiagnostics();
       setActiveStep(3);
     } catch (err: any) {
-      let msg = err?.message || 'Download failed';
-      if (msg.includes('502') || msg.includes('Failed to fetch')) {
-        msg = isZh
-          ? '拉取模型失败：无法连接到本地 Ollama 服务或代理劫持回环。请检查 Ollama 是否安装并启动。'
-          : 'Failed to pull model: cannot connect to local Ollama service. Please ensure Ollama is installed and active.';
-      }
-      setPullError(msg);
+      setPullError(err?.message || 'Download failed');
       setIsPulling(false);
     }
   };
@@ -623,6 +754,65 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 )}
               </div>
 
+              {/* Embedded llama.cpp Server Status Card (Primary Recommended) */}
+              <div className="p-4 rounded-xl bg-slate-800/40 border border-white/[0.06] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-9 h-9 rounded-lg bg-indigo-950/80 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-white flex items-center gap-2">
+                        <span>{isZh ? '内置 llama.cpp 嵌入引擎 (免安装 • 零污染)' : 'Embedded llama.cpp Server (Zero Host Pollution)'}</span>
+                        {llamaStatus?.running ? (
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        ) : !llamaStatus?.installed ? (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+                            {isZh ? '待初始化' : 'Not Initialized'}
+                          </span>
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-slate-400" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {llamaStatus?.running
+                          ? (isZh ? `已就绪并监听端口 ${llamaStatus.port} (模型与画布100%共享通用)` : `Active on port ${llamaStatus.port} (Shared GGUF)`)
+                          : !llamaStatus?.installed
+                          ? (isZh ? '独立可执行二进制未就绪，可点击右侧自动初始化' : 'Binary ready for automatic setup')
+                          : (isZh ? '已完成初始化，将在部署或使用模型时自动拉起' : 'Ready to start on demand')}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    {!llamaStatus?.installed ? (
+                      <button
+                        onClick={handleInstallLlama}
+                        disabled={installingLlama}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>{installingLlama ? (isZh ? '初始化中...' : 'Installing...') : (isZh ? '一键安装引擎' : 'Init Engine')}</span>
+                      </button>
+                    ) : !llamaStatus?.running ? (
+                      <button
+                        onClick={handleStartLlama}
+                        disabled={loadingLlama}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
+                      >
+                        <Play className="w-3.5 h-3.5" />
+                        <span>{loadingLlama ? (isZh ? '启动中...' : 'Starting...') : (isZh ? '启动服务' : 'Start Service')}</span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>{isZh ? '已在线运行' : 'Running'}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Ollama Service Status Card */}
               <div className="p-4 rounded-xl bg-slate-800/40 border border-white/[0.06] space-y-3">
                 <div className="flex items-center justify-between">
@@ -754,8 +944,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
               <div className="space-y-2.5">
                 {PRESET_MODELS.map((model) => {
                   const isSelected = selectedModel === model.name;
-                  const isAlreadyInstalled = ollamaStatus?.models?.some(
-                    (m) => m.name === model.name || m.name.startsWith(model.name.split(':')[0])
+                  const isAlreadyInstalled = (
+                    llamaStatus?.models?.some((m) => m.name.toLowerCase().includes(model.name.split(':')[0].toLowerCase()) || (model.hubModelId && m.name.includes(model.hubModelId))) ||
+                    ollamaStatus?.models?.some((m) => m.name === model.name || m.name.startsWith(model.name.split(':')[0]))
                   );
 
                   // Dynamic match check: does hardware support full GPU or RAM?

@@ -196,6 +196,96 @@ CURATED_MODELS: List[HubModelRecord] = [
             ),
         ],
     ),
+    HubModelRecord(
+        id="qwen2.5-1.5b-instruct-q4_k_m",
+        name="Qwen 2.5 1.5B Instruct (GGUF Q4_K_M)",
+        architecture="qwen2.5",
+        category="llm",
+        version="2.5-1.5b",
+        size_bytes=986000000,
+        parameter_count="1.5B",
+        quantization="Q4_K_M",
+        author="Qwen Team",
+        description="Ultra-lightweight conversational and prompt reasoning model. Low memory footprint, ideal for instant assistant inference.",
+        preview_image_url="https://raw.githubusercontent.com/BerryUIKI/AI-Studio/main/frontend/public/assets/hub/qwen_llm.webp",
+        tags=["llm", "assistant", "gguf", "lightweight", "fast"],
+        min_vram_mb=2048,
+        optimal_vram_mb=4096,
+        sources=[
+            ModelSource(
+                name="ModelScope",
+                url="https://www.modelscope.cn/models/qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/master/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            ),
+            ModelSource(
+                name="HuggingFace (China Mirror)",
+                url="https://hf-mirror.com/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            ),
+            ModelSource(
+                name="HuggingFace (Direct)",
+                url="https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            ),
+        ],
+    ),
+    HubModelRecord(
+        id="qwen2.5-7b-instruct-q4_k_m",
+        name="Qwen 2.5 7B Instruct (GGUF Q4_K_M)",
+        architecture="qwen2.5",
+        category="llm",
+        version="2.5-7b",
+        size_bytes=4680000000,
+        parameter_count="7B",
+        quantization="Q4_K_M",
+        author="Qwen Team",
+        description="Flagship creative assistant model. Superior understanding in prompt expansion, visual planning, and ComfyUI workflow design.",
+        preview_image_url="https://raw.githubusercontent.com/BerryUIKI/AI-Studio/main/frontend/public/assets/hub/qwen_llm.webp",
+        tags=["llm", "assistant", "gguf", "creative", "recommended"],
+        min_vram_mb=4096,
+        optimal_vram_mb=8192,
+        sources=[
+            ModelSource(
+                name="ModelScope",
+                url="https://www.modelscope.cn/models/qwen/Qwen2.5-7B-Instruct-GGUF/resolve/master/qwen2.5-7b-instruct-q4_k_m.gguf",
+            ),
+            ModelSource(
+                name="HuggingFace (China Mirror)",
+                url="https://hf-mirror.com/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
+            ),
+            ModelSource(
+                name="HuggingFace (Direct)",
+                url="https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/resolve/main/qwen2.5-7b-instruct-q4_k_m.gguf",
+            ),
+        ],
+    ),
+    HubModelRecord(
+        id="deepseek-r1-distill-qwen-7b-q4_k_m",
+        name="DeepSeek R1 Distill Qwen 7B (GGUF Q4_K_M)",
+        architecture="deepseek-r1",
+        category="llm",
+        version="r1-7b",
+        size_bytes=4680000000,
+        parameter_count="7B",
+        quantization="Q4_K_M",
+        author="DeepSeek AI",
+        description="Deep reasoning distillation model with extended chain-of-thought logic for complex tasks and debugging.",
+        preview_image_url="https://raw.githubusercontent.com/BerryUIKI/AI-Studio/main/frontend/public/assets/hub/deepseek_llm.webp",
+        tags=["llm", "reasoning", "gguf", "deepseek"],
+        min_vram_mb=4096,
+        optimal_vram_mb=8192,
+        sources=[
+            ModelSource(
+                name="ModelScope",
+                url="https://www.modelscope.cn/models/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/master/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+            ),
+            ModelSource(
+                name="HuggingFace (China Mirror)",
+                url="https://hf-mirror.com/bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+            ),
+            ModelSource(
+                name="HuggingFace (Direct)",
+                url="https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-7B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf",
+            ),
+        ],
+    ),
 ]
 
 

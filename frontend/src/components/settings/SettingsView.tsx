@@ -42,9 +42,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // LLM Config state
   const [llmConfig, setLlmConfig] = useState({
-    provider: 'ollama',
-    model: 'qwen2.5:7b',
-    base_url: 'http://127.0.0.1:11434/v1',
+    provider: 'llama_server',
+    model: 'qwen2.5-7b-instruct-q4_k_m.gguf',
+    base_url: 'http://127.0.0.1:8080/v1',
     api_key: '',
     temperature: 0.7,
     enabled: true,
@@ -269,9 +269,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                   {[
-                    { id: 'ollama', label: 'Local Ollama (推荐本地)', desc: '100% 本地运行 · 零 API 费用' },
+                    { id: 'llama_server', label: 'llama.cpp (内置嵌入)', desc: '免安装 · 零污染 · 画布通用' },
+                    { id: 'ollama', label: 'Local Ollama', desc: '100% 本地运行 · 零 API 费用' },
                     { id: 'siliconflow', label: '硅基流动 (SiliconFlow)', desc: 'Qwen2.5 / DeepSeek 极速 API' },
                     { id: 'deepseek', label: 'DeepSeek 官方', desc: 'DeepSeek-V3 / R1 推理' },
                     { id: 'openai', label: 'OpenAI / Custom', desc: 'GPT-4o 或自定义端点' },
@@ -282,7 +283,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       onClick={() => {
                         let newUrl = llmConfig.base_url;
                         let newModel = llmConfig.model;
-                        if (p.id === 'ollama') {
+                        if (p.id === 'llama_server') {
+                          newUrl = 'http://127.0.0.1:8080/v1';
+                          newModel = 'qwen2.5-7b-instruct-q4_k_m.gguf';
+                        } else if (p.id === 'ollama') {
                           newUrl = 'http://127.0.0.1:11434/v1';
                           newModel = 'qwen2.5:7b';
                         } else if (p.id === 'siliconflow') {
@@ -349,7 +353,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="password"
                       value={llmConfig.api_key || ''}
                       onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
-                      placeholder={llmConfig.provider === 'ollama' ? '本地运行无需 API Key' : 'sk-...'}
+                      placeholder={llmConfig.provider === 'llama_server' || llmConfig.provider === 'ollama' ? '本地运行无需 API Key' : 'sk-...'}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>

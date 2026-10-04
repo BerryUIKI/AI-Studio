@@ -114,6 +114,17 @@ class CredentialManager:
                 website_url="https://fal.ai/dashboard/keys",
             ),
             CloudProviderInfo(
+                id=CloudProviderId.LLAMA_SERVER,
+                name="llama.cpp (Embedded)",
+                description="Local embedded high-performance LLM runtime with zero host pollution.",
+                is_configured=True,
+                redacted_key="(local)",
+                supported_models=["qwen2.5-7b-instruct-q4_k_m.gguf", "deepseek-r1-distill-qwen-7b-q4_k_m.gguf", "qwen2.5-1.5b-instruct-q4_k_m.gguf"],
+                capabilities=["chat", "agent", "workflow"],
+                upload_disclosure="100% private offline inference on local CPU/GPU.",
+                website_url="https://github.com/ggml-org/llama.cpp",
+            ),
+            CloudProviderInfo(
                 id=CloudProviderId.SILICONFLOW,
                 name="SiliconFlow",
                 description="Affordable high-throughput SDXL and FLUX inference.",
@@ -135,11 +146,11 @@ class CredentialManager:
                 return LLMConfig.model_validate(stored)
             except Exception:
                 pass
-        # Default to local Ollama (Priority Local First)
+        # Default to embedded llama.cpp server (Priority Local First)
         return LLMConfig(
-            provider="ollama",
-            model="qwen2.5:7b",
-            base_url="http://127.0.0.1:11434/v1",
+            provider="llama_server",
+            model="qwen2.5-7b-instruct-q4_k_m.gguf",
+            base_url="http://127.0.0.1:8080/v1",
             api_key="",
             temperature=0.7,
             enabled=True,
@@ -168,7 +179,7 @@ class CredentialManager:
                     model_list = [m.get("id") for m in data.get("data", [])] if isinstance(data, dict) else []
                     model_summary = f" Found models: {', '.join(model_list[:3])}" if model_list else ""
                     return TestKeyResult(
-                        provider_id=CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI,
+                        provider_id=CloudProviderId.LLAMA_SERVER if cfg.provider == "llama_server" else (CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI),
                         valid=True,
                         message=f"Connected successfully to {cfg.provider} ({cfg.model}).{model_summary}",
                         status_code=200,
@@ -188,9 +199,9 @@ class CredentialManager:
                         status_code=resp.status_code,
                     )
             except Exception as e:
-                err_hint = " Make sure local Ollama is running (`ollama serve`)." if "11434" in base_url or cfg.provider == "ollama" else ""
+                err_hint = " Make sure local llama-server is running." if "8080" in base_url or cfg.provider == "llama_server" else (" Make sure local Ollama is running (`ollama serve`)." if "11434" in base_url or cfg.provider == "ollama" else "")
                 return TestKeyResult(
-                    provider_id=CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI,
+                    provider_id=CloudProviderId.LLAMA_SERVER if cfg.provider == "llama_server" else (CloudProviderId.OLLAMA if cfg.provider == "ollama" else CloudProviderId.OPENAI),
                     valid=False,
                     message=f"Could not connect to {base_url}:{err_hint} ({e})",
                 )
@@ -223,6 +234,14 @@ class CredentialManager:
                     )
                     valid = resp.status_code == 200
                     msg = "DeepSeek API key verified successfully." if valid else f"Invalid key (HTTP {resp.status_code})"
+                    return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
+
+                elif provider_id == CloudProviderId.LLAMA_SERVER:
+                    resp = await client.get("http://127.0.0.1:8080/health")
+                    if resp.status_code != 200:
+                        resp = await client.get("http://127.0.0.1:8080/v1/models")
+                    valid = resp.status_code == 200
+                    msg = "Embedded llama-server verified successfully." if valid else f"llama-server HTTP {resp.status_code}"
                     return TestKeyResult(provider_id=provider_id, valid=valid, message=msg, status_code=resp.status_code)
 
                 elif provider_id == CloudProviderId.OLLAMA:
