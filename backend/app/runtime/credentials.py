@@ -6,10 +6,12 @@ Ensures secrets are stored locally, never exposed in workflow files or logs,
 and strictly redacted in all diagnostic and status APIs.
 """
 
+import base64
 import json
 import logging
 import os
 from pathlib import Path
+import sys
 from typing import Dict, List, Optional
 import httpx
 
@@ -22,6 +24,68 @@ from app.schemas.cloud import (
 from app.storage.db import get_default_data_dir
 
 logger = logging.getLogger(__name__)
+
+
+def _is_windows() -> bool:
+    return sys.platform == "win32"
+
+
+def _protect_dpapi(data: bytes) -> bytes:
+    import ctypes
+    import ctypes.wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [
+            ("cbData", ctypes.wintypes.DWORD),
+            ("pbData", ctypes.POINTER(ctypes.c_byte)),
+        ]
+
+    blob_in = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data), ctypes.POINTER(ctypes.c_byte)))
+    blob_out = DATA_BLOB()
+    # 0x1 = CRYPTPROTECT_UI_FORBIDDEN
+    if not ctypes.windll.crypt32.CryptProtectData(
+        ctypes.byref(blob_in),
+        "BerryCredential",
+        None,
+        None,
+        None,
+        0x1,
+        ctypes.byref(blob_out),
+    ):
+        raise OSError("CryptProtectData failed to encrypt credential payload")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+
+
+def _unprotect_dpapi(data: bytes) -> bytes:
+    import ctypes
+    import ctypes.wintypes
+
+    class DATA_BLOB(ctypes.Structure):
+        _fields_ = [
+            ("cbData", ctypes.wintypes.DWORD),
+            ("pbData", ctypes.POINTER(ctypes.c_byte)),
+        ]
+
+    blob_in = DATA_BLOB(len(data), ctypes.cast(ctypes.create_string_buffer(data), ctypes.POINTER(ctypes.c_byte)))
+    blob_out = DATA_BLOB()
+    # 0x1 = CRYPTPROTECT_UI_FORBIDDEN
+    if not ctypes.windll.crypt32.CryptUnprotectData(
+        ctypes.byref(blob_in),
+        None,
+        None,
+        None,
+        None,
+        0x1,
+        ctypes.byref(blob_out),
+    ):
+        raise OSError("CryptUnprotectData failed to decrypt credential payload")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
 
 
 def redact_key(key: str) -> str:
@@ -47,18 +111,42 @@ class CredentialManager:
     def _load(self) -> None:
         if self.creds_file.is_file():
             try:
-                data = json.loads(self.creds_file.read_text(encoding="utf-8"))
+                content = self.creds_file.read_text(encoding="utf-8")
+                data = json.loads(content)
                 if isinstance(data, dict):
-                    self._memory_creds = data
+                    if data.get("encrypted") and data.get("format") == "dpapi" and "data" in data:
+                        raw_bytes = base64.b64decode(data["data"])
+                        decrypted = _unprotect_dpapi(raw_bytes).decode("utf-8")
+                        unpacked = json.loads(decrypted)
+                        if isinstance(unpacked, dict):
+                            self._memory_creds = unpacked
+                    else:
+                        self._memory_creds = data
             except Exception as e:
                 logger.warning(f"Error loading credentials from {self.creds_file}: {e}")
 
     def _save(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
+        raw_text = json.dumps(self._memory_creds, indent=2)
         try:
-            self.creds_file.write_text(json.dumps(self._memory_creds, indent=2), encoding="utf-8")
+            if _is_windows():
+                encrypted_blob = _protect_dpapi(raw_text.encode("utf-8"))
+                envelope = {
+                    "encrypted": True,
+                    "format": "dpapi",
+                    "data": base64.b64encode(encrypted_blob).decode("ascii"),
+                }
+                self.creds_file.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
+            else:
+                self.creds_file.write_text(raw_text, encoding="utf-8")
+                if hasattr(os, "chmod") and os.name != "nt":
+                    try:
+                        os.chmod(self.creds_file, 0o600)
+                    except Exception:
+                        pass
         except Exception as e:
             logger.error(f"Error saving credentials: {e}")
+            raise OSError(f"Failed to persist credentials: {e}") from e
 
     def get_key(self, provider_id: CloudProviderId) -> Optional[str]:
         """Resolve API key from stored BYOK credentials or environment variable."""
@@ -164,6 +252,27 @@ class CredentialManager:
     async def test_llm_connection(self, config: Optional[LLMConfig] = None) -> TestKeyResult:
         """Test connection to LLM provider endpoint (llama-server / OpenAI / SiliconFlow / DeepSeek)."""
         cfg = config or self.get_llm_config()
+        if cfg.api_key and ("..." in cfg.api_key or cfg.api_key == "****"):
+            stored = self.get_llm_config()
+            cfg = LLMConfig(
+                provider=cfg.provider,
+                model=cfg.model,
+                base_url=cfg.base_url,
+                api_key=stored.api_key,
+                temperature=cfg.temperature,
+                enabled=cfg.enabled,
+            )
+        elif not cfg.api_key and config is not None:
+            stored = self.get_llm_config()
+            if stored.provider == cfg.provider and stored.api_key:
+                cfg = LLMConfig(
+                    provider=cfg.provider,
+                    model=cfg.model,
+                    base_url=cfg.base_url,
+                    api_key=stored.api_key,
+                    temperature=cfg.temperature,
+                    enabled=cfg.enabled,
+                )
         base_url = cfg.base_url.rstrip("/")
         # Target OpenAI-compatible /models endpoint
         models_url = f"{base_url}/models" if not base_url.endswith("/models") else base_url

@@ -50,7 +50,7 @@ from app.runtime.llama_server.llama_supervisor import (
 from app.runtime.engine_manager import engine_manager
 from app.runtime.hardware import check_hardware_readiness, get_gpu_stats
 from app.runtime.installer import installer, mirror_manager
-from app.runtime.credentials import credentials_manager
+from app.runtime.credentials import credentials_manager, redact_key
 from app.storage.model_store import model_store
 from app.schemas.creative import CreativeActionRequest, CreativeActionResult
 from app.schemas.cloud import (
@@ -855,7 +855,11 @@ async def list_cloud_providers() -> List[CloudProviderInfo]:
 @app.post("/api/v1/cloud/credentials", response_model=CloudProviderInfo)
 async def set_cloud_credential(req: SetCredentialRequest) -> CloudProviderInfo:
     """Store or update a BYOK cloud API key locally without exposure."""
-    credentials_manager.set_key(req.provider_id, req.api_key)
+    try:
+        credentials_manager.set_key(req.provider_id, req.api_key)
+    except Exception as e:
+        logger.error(f"Failed to persist credential: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to persist credentials: {e}")
     providers = credentials_manager.list_providers()
     target = next((p for p in providers if p.id == req.provider_id), None)
     if not target:
@@ -872,7 +876,11 @@ async def test_cloud_credential(req: TestKeyRequest) -> TestKeyResult:
 @app.delete("/api/v1/cloud/credentials/{provider_id}")
 async def delete_cloud_credential(provider_id: CloudProviderId) -> dict[str, bool]:
     """Delete a stored BYOK API key."""
-    credentials_manager.delete_key(provider_id)
+    try:
+        credentials_manager.delete_key(provider_id)
+    except Exception as e:
+        logger.error(f"Failed to delete credential: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update stored credentials: {e}")
     return {"success": True}
 
 
@@ -883,22 +891,48 @@ async def delete_cloud_credential(provider_id: CloudProviderId) -> dict[str, boo
 @app.get("/api/v1/agent/llm/config", response_model=LLMConfig)
 async def get_agent_llm_config() -> LLMConfig:
     """Get active LLM provider configuration for the Agent base (llama-server / SiliconFlow / OpenAI)."""
-    return credentials_manager.get_llm_config()
+    cfg = credentials_manager.get_llm_config()
+    redacted_api_key = redact_key(cfg.api_key) if cfg.api_key else ""
+    return LLMConfig(
+        provider=cfg.provider,
+        model=cfg.model,
+        base_url=cfg.base_url,
+        api_key=redacted_api_key,
+        temperature=cfg.temperature,
+        enabled=cfg.enabled,
+    )
 
 
 @app.post("/api/v1/agent/llm/config", response_model=LLMConfig)
 async def set_agent_llm_config(req: SetLLMConfigRequest) -> LLMConfig:
     """Save or update LLM provider configuration."""
+    existing = credentials_manager.get_llm_config()
+    effective_api_key = req.api_key
+    if not effective_api_key or "..." in effective_api_key or effective_api_key == "****":
+        effective_api_key = existing.api_key
+
     cfg = LLMConfig(
         provider=req.provider,
         model=req.model,
         base_url=req.base_url,
-        api_key=req.api_key,
+        api_key=effective_api_key,
         temperature=req.temperature,
         enabled=req.enabled,
     )
-    credentials_manager.set_llm_config(cfg)
-    return cfg
+    try:
+        credentials_manager.set_llm_config(cfg)
+    except Exception as e:
+        logger.error(f"Failed to persist LLM config: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to persist LLM configuration: {e}")
+
+    return LLMConfig(
+        provider=cfg.provider,
+        model=cfg.model,
+        base_url=cfg.base_url,
+        api_key=redact_key(cfg.api_key) if cfg.api_key else "",
+        temperature=cfg.temperature,
+        enabled=cfg.enabled,
+    )
 
 
 @app.post("/api/v1/agent/llm/test", response_model=TestKeyResult)
