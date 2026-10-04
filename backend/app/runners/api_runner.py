@@ -9,6 +9,7 @@ Reads credentials from environment variables or from node-level params.
 Never hardcodes secrets.
 """
 
+import asyncio
 import os
 import time
 from typing import Any, AsyncGenerator, Dict, Optional
@@ -361,7 +362,7 @@ async def _call_siliconflow_video(
     api_key: str,
     image_b64: Optional[str] = None,
 ) -> str | None:
-    """Call SiliconFlow video generation endpoints (CogVideoX)."""
+    """Call SiliconFlow video generation endpoints (CogVideoX) with async status polling."""
     if not api_key:
         raise APIRunnerError("SILICONFLOW_API_KEY not set for SiliconFlow video")
 
@@ -379,12 +380,67 @@ async def _call_siliconflow_video(
         response = await client.post(endpoint, headers=headers, json=payload)
         response.raise_for_status()
         data = response.json()
-        # In SiliconFlow async video, url is returned in uri or results
-        if "uri" in data:
+
+        # Check if direct video URL is already present in response
+        if "uri" in data and isinstance(data["uri"], str) and (data["uri"].startswith("http") or data["uri"].startswith("blob")):
             return data["uri"]
-        if "data" in data and isinstance(data["data"], dict):
+        if "data" in data and isinstance(data["data"], dict) and data["data"].get("url"):
             return data["data"].get("url")
-        return data.get("url")
+        if data.get("url") and isinstance(data["url"], str) and data["url"].startswith("http"):
+            return data["url"]
+
+        # If asynchronous job was submitted, poll job status
+        job_id = (
+            data.get("requestId")
+            or data.get("jobId")
+            or data.get("id")
+            or (data.get("data", {}).get("id") if isinstance(data.get("data"), dict) else None)
+        )
+        if not job_id:
+            # Fallback to whatever URL/URI field is provided if not a recognized job ID
+            return data.get("uri") or data.get("url")
+
+        poll_endpoint = "https://api.siliconflow.cn/v1/video/status"
+        start_poll = time.time()
+        poll_timeout = 180.0
+
+        while time.time() - start_poll < poll_timeout:
+            await asyncio.sleep(2.0)
+            status_resp = await client.post(
+                poll_endpoint,
+                headers=headers,
+                json={"requestId": job_id},
+            )
+            if status_resp.status_code in (400, 404):
+                status_resp = await client.get(
+                    f"{poll_endpoint}?requestId={job_id}",
+                    headers=headers,
+                )
+
+            if not status_resp.is_success:
+                continue
+
+            status_data = status_resp.json()
+            status = str(
+                status_data.get("status")
+                or (status_data.get("data", {}).get("status") if isinstance(status_data.get("data"), dict) else "")
+            ).lower()
+
+            if status in ("succeed", "succeeded", "success", "completed"):
+                results = status_data.get("results") or status_data.get("data", {})
+                if isinstance(results, dict):
+                    videos = results.get("videos")
+                    if isinstance(videos, list) and len(videos) > 0 and isinstance(videos[0], dict):
+                        return videos[0].get("url")
+                    return results.get("url") or results.get("video_url")
+                elif isinstance(results, list) and len(results) > 0 and isinstance(results[0], dict):
+                    return results[0].get("url")
+                return status_data.get("url")
+            elif status in ("failed", "error"):
+                reason = status_data.get("reason") or status_data.get("message") or "Video generation task failed"
+                raise APIRunnerError(f"SiliconFlow video generation failed: {reason}")
+
+        raise APIRunnerError("SiliconFlow video generation timed out after 180 seconds")
 
 
 
