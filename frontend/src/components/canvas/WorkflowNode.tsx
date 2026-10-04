@@ -128,13 +128,19 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                   <input
                     type={param.type === 'number' ? 'number' : 'text'}
                     value={params[param.name] !== undefined ? String(params[param.name]) : ''}
-                    onChange={(e) =>
-                      updateNodeParam(
-                        id,
-                        param.name,
-                        param.type === 'number' ? parseFloat(e.target.value) : e.target.value,
-                      )
-                    }
+                    onChange={(e) => {
+                      if (param.type === 'number') {
+                        const val = e.target.value.trim();
+                        if (val === '') {
+                          updateNodeParam(id, param.name, (param.default as number) ?? 0);
+                        } else {
+                          const parsed = parseFloat(val);
+                          updateNodeParam(id, param.name, isNaN(parsed) ? ((param.default as number) ?? 0) : parsed);
+                        }
+                      } else {
+                        updateNodeParam(id, param.name, e.target.value);
+                      }
+                    }}
                     className="w-full text-xs bg-slate-950/80 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
                 )}
