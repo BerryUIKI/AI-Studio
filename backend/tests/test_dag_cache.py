@@ -162,3 +162,29 @@ async def test_cache_sqlite_error_logging(caplog):
         # Test clear_all_async error logging
         await failing_cache.clear_all_async()
         assert "Cache DB clear operation failed: SQLite connection lock failed" in caplog.text
+
+
+def test_semantic_node_hash_preserves_non_secret_keys():
+    """Verify parameters containing 'key' like chroma_key or animation_key are NOT stripped from hash."""
+    from app.core.cache import compute_semantic_node_hash
+
+    hash1 = compute_semantic_node_hash(
+        node_type="image.chroma",
+        params={"chroma_key": "#00FF00", "tolerance": 0.2, "api_key": "secret123"},
+        input_bindings=[],
+    )
+    hash2 = compute_semantic_node_hash(
+        node_type="image.chroma",
+        params={"chroma_key": "#0000FF", "tolerance": 0.2, "api_key": "secret123"},
+        input_bindings=[],
+    )
+    # Different chroma_key must produce different hashes (not stripped!)
+    assert hash1 != hash2
+
+    # Changing transient api_key should produce identical hashes (stripped)
+    hash3 = compute_semantic_node_hash(
+        node_type="image.chroma",
+        params={"chroma_key": "#00FF00", "tolerance": 0.2, "api_key": "different_secret"},
+        input_bindings=[],
+    )
+    assert hash1 == hash3
