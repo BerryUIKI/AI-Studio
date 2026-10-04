@@ -10,6 +10,9 @@ class ModelSource(BaseModel):
     url: str
 
 
+DownloadSource = ModelSource
+
+
 class HubModelRecord(BaseModel):
     id: str
     name: str

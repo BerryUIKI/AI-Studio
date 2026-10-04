@@ -28,7 +28,7 @@ def test_target_path_resolution():
     assert webui_path.name == "flux1-schnell-fp8.safetensors"
 
     # LoRA category path
-    lora_model = HubCatalog.get_model("lora-detail-tweaker")
+    lora_model = HubCatalog.get_model("sdxl-lora-detail-tweaker")
     assert lora_model is not None
     comfy_lora_path = downloader._resolve_target_path(lora_model, target_engine="comfyui")
     assert "loras" in str(comfy_lora_path)
@@ -54,7 +54,7 @@ def test_mirror_source_selection():
 
 def test_download_worker_info_progress():
     """Verify DownloadWorker calculation of progress percentage and task info."""
-    model = HubCatalog.get_model("upscaler-4x-ultrasharp")
+    model = HubCatalog.get_model("esrgan-4x-ultrasharp")
     assert model is not None
 
     worker = DownloadWorker(
@@ -86,7 +86,7 @@ def test_download_worker_info_progress():
 def test_downloader_task_lifecycle_controls():
     """Verify task pause, resume, and cancellation tracking in ModelDownloader."""
     downloader = ModelDownloader()
-    model = HubCatalog.get_model("upscaler-4x-ultrasharp")
+    model = HubCatalog.get_model("esrgan-4x-ultrasharp")
     assert model is not None
 
     worker = DownloadWorker(
