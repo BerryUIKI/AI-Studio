@@ -126,15 +126,30 @@ def setup_logging() -> None:
     )
 
 
+def setup_no_proxy() -> None:
+    """Ensure local loopback addresses bypass any HTTP/HTTPS proxies (such as Clash)."""
+    current_no_proxy = os.environ.get("NO_PROXY", os.environ.get("no_proxy", ""))
+    needed = ["localhost", "127.0.0.1", "::1", "0.0.0.0"]
+    existing = [p.strip() for p in current_no_proxy.split(",") if p.strip()]
+    for n in needed:
+        if n not in existing:
+            existing.append(n)
+    merged = ",".join(existing)
+    os.environ["NO_PROXY"] = merged
+    os.environ["no_proxy"] = merged
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
+    setup_no_proxy()
     logger.info("Berry AI Studio API starting up...")
     yield
     logger.info("Berry AI Studio API shutting down...")
 
 
 setup_logging()
+setup_no_proxy()
 logger = logging.getLogger("berry_ai_studio")
 
 app = FastAPI(
@@ -890,6 +905,12 @@ async def start_ollama_runtime() -> Dict[str, Any]:
 async def stop_ollama_runtime() -> Dict[str, Any]:
     """Stop embedded Ollama process."""
     return ollama_supervisor.stop()
+
+
+@app.post("/api/v1/ollama/install")
+async def install_ollama_runtime() -> Dict[str, Any]:
+    """Trigger background installation or get installation instructions for Ollama."""
+    return ollama_supervisor.install()
 
 
 class OllamaPullModelRequest(BaseModel):

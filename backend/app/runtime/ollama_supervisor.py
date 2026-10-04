@@ -119,9 +119,9 @@ class OllamaSupervisor:
         return self.get_pid() is not None
 
     async def check_health(self) -> bool:
-        """Ping local Ollama HTTP endpoint."""
+        """Ping local Ollama HTTP endpoint bypassing any system proxies."""
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with httpx.AsyncClient(timeout=2.0, trust_env=False) as client:
                 res = await client.get(f"http://127.0.0.1:{self.port}/api/tags")
                 return res.status_code == 200
         except Exception:
@@ -139,7 +139,7 @@ class OllamaSupervisor:
         if healthy:
             running = True
             try:
-                async with httpx.AsyncClient(timeout=3.0) as client:
+                async with httpx.AsyncClient(timeout=3.0, trust_env=False) as client:
                     tags_res = await client.get(f"http://127.0.0.1:{self.port}/api/tags")
                     if tags_res.status_code == 200:
                         data = tags_res.json()
@@ -233,16 +233,94 @@ class OllamaSupervisor:
 
         return {"success": True, "message": f"Ollama process {pid} stopped"}
 
+    def install(self) -> Dict[str, Any]:
+        """Attempt to install Ollama runtime on the host system."""
+        if self.is_installed():
+            return {
+                "success": True,
+                "message": "Ollama is already installed",
+                "installed": True,
+            }
+
+        if sys.platform == "win32":
+            winget_cmd = shutil.which("winget")
+            if winget_cmd:
+                try:
+                    subprocess.Popen(
+                        [winget_cmd, "install", "Ollama.Ollama", "--accept-source-agreements", "--accept-package-agreements", "--silent"],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
+                    return {
+                        "success": True,
+                        "message": "Installing Ollama in background via winget. Please wait 1-2 minutes.",
+                        "installing": True,
+                        "method": "winget",
+                    }
+                except Exception as e:
+                    logger.warning(f"winget installation failed: {e}")
+
+            return {
+                "success": False,
+                "message": "Please install Ollama from https://ollama.com",
+                "installing": False,
+                "download_url": "https://ollama.com/download/windows",
+            }
+        else:
+            return {
+                "success": False,
+                "message": "Please install Ollama via: curl -fsSL https://ollama.com/install.sh | sh",
+                "installing": False,
+                "download_url": "https://ollama.com",
+            }
+
     async def pull_model_stream(self, model_name: str) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream model pulling progress from Ollama /api/pull."""
+        """Stream model pulling progress from Ollama /api/pull, ensuring Ollama is active and bypassing proxies."""
+        if not self.is_installed():
+            yield {
+                "status": "error",
+                "error": "Ollama is not installed. Please install Ollama from https://ollama.com first.",
+                "code": "NOT_INSTALLED",
+            }
+            return
+
+        # Ensure Ollama daemon is running, auto-start if needed
+        if not (await self.check_health()):
+            logger.info("Ollama is not running. Auto-starting Ollama service...")
+            start_res = self.start()
+            if not start_res.get("success") and not self.is_running():
+                yield {
+                    "status": "error",
+                    "error": f"Failed to start local Ollama engine: {start_res.get('message', 'Unknown error')}",
+                    "code": "START_FAILED",
+                }
+                return
+
+            # Wait up to 6 seconds for Ollama HTTP endpoint to become healthy
+            ready = False
+            for _ in range(12):
+                await asyncio.sleep(0.5)
+                if await self.check_health():
+                    ready = True
+                    break
+
+            if not ready:
+                yield {
+                    "status": "error",
+                    "error": f"Ollama service started but is not responding on port {self.port}.",
+                    "code": "PORT_UNRESPONSIVE",
+                }
+                return
+
         url = f"http://127.0.0.1:{self.port}/api/pull"
         self._pulling_tasks[model_name] = {"status": "pulling", "total": 0, "completed": 0}
 
         try:
-            async with httpx.AsyncClient(timeout=None) as client:
+            async with httpx.AsyncClient(timeout=None, trust_env=False) as client:
                 async with client.stream("POST", url, json={"name": model_name, "stream": True}) as response:
                     if response.status_code != 200:
-                        yield {"status": "error", "error": f"Failed to pull model ({response.status_code})"}
+                        yield {"status": "error", "error": f"Ollama returned HTTP error ({response.status_code})"}
                         return
 
                     async for line in response.aiter_lines():

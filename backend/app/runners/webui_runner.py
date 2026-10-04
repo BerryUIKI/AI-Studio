@@ -24,7 +24,8 @@ class WebUIRunner:
 
     async def execute_action(self, req: CreativeActionRequest) -> Dict[str, Any]:
         """Execute creative action via SD WebUI REST API."""
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        is_local = "127.0.0.1" in self.endpoint_url or "localhost" in self.endpoint_url
+        async with httpx.AsyncClient(timeout=120.0, trust_env=not is_local) as client:
             if req.action == CreativeActionType.TXT2IMG:
                 return await self._run_txt2img(client, req)
             elif req.action == CreativeActionType.IMG2IMG:
@@ -39,7 +40,8 @@ class WebUIRunner:
     async def interrupt(self) -> bool:
         """Interrupt active execution on SD WebUI via POST /sdapi/v1/interrupt."""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            is_local = "127.0.0.1" in self.endpoint_url or "localhost" in self.endpoint_url
+            async with httpx.AsyncClient(timeout=5.0, trust_env=not is_local) as client:
                 resp = await client.post(f"{self.endpoint_url}/sdapi/v1/interrupt")
                 return resp.status_code == 200
         except Exception as err:
