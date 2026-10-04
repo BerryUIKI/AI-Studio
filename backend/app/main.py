@@ -1,13 +1,14 @@
 """FastAPI application entrypoint for Berry AI Studio."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import logging
 import time
 import uuid
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -114,12 +115,33 @@ NODE_RUNNERS["image.comfy.txt2img"] = run_comfy_txt2img_node
 # Import builtin nodes to trigger auto-registration
 import app.nodes.builtin  # noqa: F401
 
-logger = logging.getLogger(__name__)
+def setup_logging() -> None:
+    """Configure centralized logging format and level."""
+    log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    setup_logging()
+    logger.info("Berry AI Studio API starting up...")
+    yield
+    logger.info("Berry AI Studio API shutting down...")
+
+
+setup_logging()
+logger = logging.getLogger("berry_ai_studio")
 
 app = FastAPI(
     title="Berry AI Studio Engine API",
     description="Lightweight, API-first creative engine with persistent projects and deterministic caching",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Enable CORS for local web canvas
