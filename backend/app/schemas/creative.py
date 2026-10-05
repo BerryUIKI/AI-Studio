@@ -43,6 +43,8 @@ class GenerationProvenance(BaseModel):
     prompt: str
     negative_prompt: Optional[str] = None
     model: str
+    model_revision: Optional[str] = None
+    model_hash: Optional[str] = None
     engine_id: str
     seed: int
     steps: int

@@ -9,6 +9,8 @@ export interface GenerationProvenance {
   prompt: string;
   negative_prompt?: string;
   model: string;
+  model_revision?: string;
+  model_hash?: string;
   engine_id: string;
   seed: number;
   steps: number;
