@@ -73,7 +73,16 @@ async def test_webui_runner_txt2img_and_upscale():
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
     # 1. Test txt2img
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = [
+        {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
+    ]
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"images": [b64_dummy]}
@@ -121,7 +130,16 @@ async def test_creative_runner_caching_and_provenance():
     runner = CreativeRunner()
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = [
+        {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
+    ]
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"images": [b64_dummy]}
@@ -183,7 +201,16 @@ def test_api_creative_execute_endpoint():
     """Verify FastAPI /api/v1/creative/execute endpoint."""
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = [
+        {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
+    ]
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"images": [b64_dummy]}

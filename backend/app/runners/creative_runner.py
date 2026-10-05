@@ -377,11 +377,16 @@ class CreativeRunner:
 
             elapsed_ms = round((time.monotonic() - start_time) * 1000, 2)
 
+            effective_model = action_data.get("effective_model") or plan.target_model
+            model_hash = action_data.get("model_hash") or action_data.get("model_revision")
+
             provenance = GenerationProvenance(
                 action=req.action,
                 prompt=req.prompt,
                 negative_prompt=req.negative_prompt,
-                model=plan.target_model,
+                model=effective_model,
+                model_revision=model_hash,
+                model_hash=model_hash,
                 engine_id=req.engine_id,
                 provider_id=plan.provider_id,
                 seed=req.seed,
