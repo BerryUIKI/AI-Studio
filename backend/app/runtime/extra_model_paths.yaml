@@ -1,0 +1,12 @@
+# ComfyUI Extra Model Paths Configuration
+# This file is generated and managed by Berry AI Studio to connect
+# downloaded models to the ComfyUI engine search paths.
+
+berry_shared:
+  base_path: {models_dir}
+
+  checkpoints: checkpoints/
+  vae: vae/
+  loras: loras/
+  upscale_models: upscale_models/
+  controlnet: controlnet/

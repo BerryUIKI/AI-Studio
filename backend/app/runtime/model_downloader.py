@@ -288,9 +288,11 @@ class ModelDownloader:
         if not filename.endswith((".safetensors", ".pth", ".bin", ".gguf")):
             filename = f"{filename}.safetensors"
 
-        # Determine engine root
+        # Determine engine root - use consistent engine_dir for all engines
+        engine_root = installer.engine_dir
+
         if target_engine in ("comfyui", "llama_server"):
-            engine_root = installer.engine_dir
+            # ComfyUI shared model paths (engine/models/)
             if model.category == "checkpoint":
                 sub = engine_root / "models" / "checkpoints"
             elif model.category == "lora":
@@ -306,22 +308,22 @@ class ModelDownloader:
             else:
                 sub = engine_root / "models" / "other"
         else:
-            # WebUI root
-            engine_root = Path.home() / ".ai-workflow" / "engine" / "webui"
+            # WebUI - use engine_dir/webui_models/ to match supervisor configuration
+            webui_models = engine_root / "models"
             if model.category == "checkpoint":
-                sub = engine_root / "models" / "Stable-diffusion"
+                sub = webui_models / "checkpoints"
             elif model.category == "lora":
-                sub = engine_root / "models" / "Lora"
+                sub = webui_models / "loras"
             elif model.category == "controlnet":
-                sub = engine_root / "models" / "ControlNet"
+                sub = webui_models / "controlnet"
             elif model.category == "upscaler":
-                sub = engine_root / "models" / "ESRGAN"
+                sub = webui_models / "upscale_models"
             elif model.category == "vae":
-                sub = engine_root / "models" / "VAE"
+                sub = webui_models / "vae"
             elif model.category == "llm":
-                sub = engine_root / "models" / "llm"
+                sub = webui_models / "llm"
             else:
-                sub = engine_root / "models" / "other"
+                sub = webui_models / "other"
 
         return sub / filename
 
