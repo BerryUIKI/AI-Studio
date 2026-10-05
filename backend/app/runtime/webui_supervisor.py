@@ -7,7 +7,9 @@ Guarantees zero system environment pollution, separate virtual environment from 
 and strictly disallows host Python fallback.
 """
 
+import logging
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -15,6 +17,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from app.runtime.supervisor import get_default_engine_dir
+
+logger = logging.getLogger(__name__)
 
 
 class WebUISupervisor:
@@ -177,6 +181,30 @@ class WebUISupervisor:
                 ),
             }
 
+        # Check Python version compatibility (WebUI expects Python 3.10.x)
+        try:
+            result = subprocess.run(
+                [str(python_bin), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                version_output = result.stdout.strip()
+                # Extract version like "Python 3.14.5" -> (3, 14, 5)
+                import re
+                match = re.search(r"Python (\d+)\.(\d+)\.(\d+)", version_output)
+                if match:
+                    major, minor, patch = map(int, match.groups())
+                    # WebUI officially supports Python 3.10.6
+                    if (major, minor) != (3, 10):
+                        logger.warning(
+                            f"WebUI expects Python 3.10.x but isolated runtime uses {major}.{minor}.{patch}. "
+                            "Compatibility issues may occur. Consider reinstalling with Python 3.10."
+                        )
+        except Exception as e:
+            logger.warning(f"Could not verify Python version in isolated runtime: {e}")
+
         if self.is_running():
             return {
                 "success": True,
@@ -198,9 +226,9 @@ class WebUISupervisor:
             "--port",
             str(self.port),
             "--listen",
+            "--server-name",
             "127.0.0.1",
             "--api",
-            "--nowebui",
             "--ckpt-dir",
             str(self.models_dir / "checkpoints"),
             "--lora-dir",
