@@ -52,6 +52,7 @@ describe('useCreativeStore', () => {
         prompt: 'test',
         model: 'sd15',
         engine_id: 'managed_comfyui',
+        connection_id: 'comfyui-managed',
         seed: 1234,
         steps: 20,
         cfg_scale: 7,

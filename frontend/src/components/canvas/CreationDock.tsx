@@ -27,8 +27,6 @@ export const CreationDock = () => {
     setDenoise,
     connectionId,
     setConnectionId,
-    engineId,
-    setEngineId,
     model,
     setModel,
     referenceImage,

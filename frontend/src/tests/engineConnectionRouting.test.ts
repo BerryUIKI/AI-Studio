@@ -97,7 +97,7 @@ describe('Engine Connection Routing Integration', () => {
           height: 512,
         }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useCreativeStore.getState();
       store.setConnectionId('comfyui-managed');
@@ -126,7 +126,7 @@ describe('Engine Connection Routing Integration', () => {
           height: 512,
         }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useCreativeStore.getState();
       store.setConnectionId('webui-managed');
@@ -151,7 +151,7 @@ describe('Engine Connection Routing Integration', () => {
           height: 512,
         }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useCreativeStore.getState();
       store.setConnectionId('comfyui-managed');
@@ -177,7 +177,7 @@ describe('Engine Connection Routing Integration', () => {
         ok: true,
         json: async () => ({ success: true, status: 'started', pid: 12345 }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useEngineStore.getState();
       await store.startEngine('comfyui-managed');
@@ -192,7 +192,7 @@ describe('Engine Connection Routing Integration', () => {
         ok: true,
         json: async () => ({ success: true, status: 'started', pid: 67890 }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useEngineStore.getState();
       await store.startEngine('webui-managed');
@@ -204,7 +204,7 @@ describe('Engine Connection Routing Integration', () => {
 
     it('should prevent starting external (non-managed) engines', async () => {
       const mockFetch = vi.fn();
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useEngineStore.getState();
 
@@ -233,7 +233,7 @@ describe('Engine Connection Routing Integration', () => {
 
     it('should route ComfyUI stop to correct endpoint', async () => {
       const mockFetch = vi.fn().mockResolvedValue({ ok: true });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useEngineStore.getState();
       await store.stopEngine('comfyui-managed');
@@ -245,7 +245,7 @@ describe('Engine Connection Routing Integration', () => {
 
     it('should route WebUI stop to webui-specific endpoint', async () => {
       const mockFetch = vi.fn().mockResolvedValue({ ok: true });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useEngineStore.getState();
       await store.stopEngine('webui-managed');
@@ -299,7 +299,7 @@ describe('Engine Connection Routing Integration', () => {
           ],
         }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       const store = useEngineStore.getState();
       await store.fetchInstances();
