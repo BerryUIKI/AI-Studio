@@ -372,9 +372,18 @@ class CreativeRunner:
         cancel_event = asyncio.Event()
         is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
 
-        # Resolve aspect ratio dimensions if default 512
-        if req.aspect_ratio in ASPECT_RATIO_DIMENSIONS:
-            req.width, req.height = ASPECT_RATIO_DIMENSIONS[req.aspect_ratio]
+        source_dependent_actions = (
+            CreativeActionType.UPSCALE,
+            CreativeActionType.IMG2IMG,
+            CreativeActionType.INPAINT,
+            CreativeActionType.IMG2VIDEO,
+        )
+
+        # Resolve aspect ratio dimensions for generation actions without a source image.
+        # Prevent generation aspect-ratio defaults from overwriting dimensions for source-dependent editing actions.
+        if req.action not in source_dependent_actions:
+            if req.aspect_ratio in ASPECT_RATIO_DIMENSIONS:
+                req.width, req.height = ASPECT_RATIO_DIMENSIONS[req.aspect_ratio]
 
         # Resolve randomized seed if -1
         actual_seed = req.seed if req.seed >= 0 else random.randint(1, 2147483647)
@@ -385,12 +394,34 @@ class CreativeRunner:
         mask_hash = ""
         input_file_path: Optional[Path] = None
         mask_file_path: Optional[Path] = None
+        source_width: Optional[int] = None
+        source_height: Optional[int] = None
 
         if req.input_image_id:
             rec = await asset_store.get_asset(req.input_image_id)
             if rec:
                 input_hash = rec.content_hash
                 input_file_path = asset_store.get_absolute_path(rec)
+                source_width = rec.width
+                source_height = rec.height
+
+        # Inspect disk file if source width/height were not in record
+        if input_file_path and input_file_path.is_file() and (not source_width or not source_height):
+            try:
+                from PIL import Image
+                with Image.open(input_file_path) as im:
+                    source_width, source_height = im.size
+            except Exception:
+                pass
+
+        if req.action == CreativeActionType.UPSCALE:
+            if source_width and source_height:
+                req.width = source_width
+                req.height = source_height
+        elif req.action in (CreativeActionType.IMG2IMG, CreativeActionType.INPAINT):
+            if source_width and source_height and (not req.width or not req.height or (req.width == 512 and req.height == 512)):
+                req.width = source_width
+                req.height = source_height
 
         if req.mask_image_id:
             m_rec = await asset_store.get_asset(req.mask_image_id)
@@ -509,6 +540,15 @@ class CreativeRunner:
                 out_h = action_data.get("height", req.height)
             else:
                 raise ValueError(f"Unknown engine in plan: {plan.engine}")
+
+            # Derive result dimensions from decoded output file if available
+            asset_record = await asset_store.get_asset(asset_id)
+            if asset_record:
+                rec_w = getattr(asset_record, "width", None)
+                rec_h = getattr(asset_record, "height", None)
+                if isinstance(rec_w, int) and isinstance(rec_h, int):
+                    out_w = rec_w
+                    out_h = rec_h
 
             if cancel_event.is_set():
                 return CreativeActionResult(
@@ -684,6 +724,9 @@ class CreativeRunner:
             prompt_graph = build_comfy_upscale_graph(
                 image_filename=uploaded_image_name,
                 upscaler_model=req.upscaler_name or "RealESRGAN_x4plus.pth",
+                upscale_factor=req.upscale_factor,
+                source_width=req.width,
+                source_height=req.height,
             )
         elif req.action == CreativeActionType.IMG2VIDEO:
             if not uploaded_image_name:
@@ -739,11 +782,14 @@ class CreativeRunner:
         else:
             asset = await asset_store.save_image_from_url(view_url, filename=filename or "comfy_output.png")
 
+        asset_w = getattr(asset, "width", None)
+        asset_h = getattr(asset, "height", None)
+        asset_id = getattr(asset, "id", None)
         return {
-            "asset_id": asset.id,
-            "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": req.width,
-            "height": req.height,
+            "asset_id": asset_id,
+            "image_url": f"/api/v1/assets/{asset_id}/content" if asset_id else "",
+            "width": asset_w if isinstance(asset_w, int) else req.width,
+            "height": asset_h if isinstance(asset_h, int) else req.height,
         }
 
     async def _run_cloud(
@@ -814,8 +860,8 @@ class CreativeRunner:
                     image_b64=image_b64,
                     upscale_factor=req.upscale_factor,
                 )
-                out_w = int(req.width * req.upscale_factor)
-                out_h = int(req.height * req.upscale_factor)
+                out_w = int(round(req.width * req.upscale_factor))
+                out_h = int(round(req.height * req.upscale_factor))
             else:
                 raise ValueError(f"Provider {plan.provider_id} does not support cloud upscaling.")
 
@@ -920,11 +966,14 @@ class CreativeRunner:
         else:
             asset = await asset_store.save_image_from_url(remote_url, filename="cloud_output.png")
 
+        asset_w = getattr(asset, "width", None)
+        asset_h = getattr(asset, "height", None)
+        asset_id = getattr(asset, "id", None)
         return {
-            "asset_id": asset.id,
-            "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": out_w,
-            "height": out_h,
+            "asset_id": asset_id,
+            "image_url": f"/api/v1/assets/{asset_id}/content" if asset_id else "",
+            "width": asset_w if isinstance(asset_w, int) else out_w,
+            "height": asset_h if isinstance(asset_h, int) else out_h,
         }
 
 

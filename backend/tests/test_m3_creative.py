@@ -79,13 +79,23 @@ async def test_webui_runner_txt2img_and_upscale():
         {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
     ]
 
+    from PIL import Image
+
+    def _make_png(w: int, h: int) -> str:
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h), color=(255, 255, 255)).save(buf, "PNG")
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    b64_512 = _make_png(512, 512)
+    b64_1024 = _make_png(1024, 1024)
+
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
         "httpx.AsyncClient.post", new_callable=AsyncMock
     ) as mock_post:
         mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"images": [b64_dummy]}
+        mock_resp.json.return_value = {"images": [b64_512]}
         mock_post.return_value = mock_resp
 
         req = CreativeActionRequest(
@@ -108,7 +118,7 @@ async def test_webui_runner_txt2img_and_upscale():
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"image": b64_dummy}
+        mock_resp.json.return_value = {"image": b64_1024}
         mock_post.return_value = mock_resp
 
         upscale_req = CreativeActionRequest(
