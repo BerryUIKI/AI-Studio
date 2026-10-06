@@ -22,7 +22,7 @@ from app.storage.asset_store import AssetRecord
     ("img2video", False), ("inpaint", True),
 ])
 async def test_upload_then_queue_and_cache_reuse(
-    tmp_path: Path, action: str, fail_mask: bool,
+    tmp_path: Path, action: str, fail_mask: bool, mock_engine_manager,
 ) -> None:
     originals: dict[Path, bytes] = {}
     records: dict[str, AssetRecord] = {}

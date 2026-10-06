@@ -125,7 +125,7 @@ async def test_webui_runner_txt2img_and_upscale():
 
 
 @pytest.mark.asyncio
-async def test_creative_runner_caching_and_provenance():
+async def test_creative_runner_caching_and_provenance(mock_engine_manager):
     """Verify CreativeRunner attaches provenance and deterministically caches results."""
     runner = CreativeRunner()
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
@@ -197,7 +197,7 @@ def test_creative_asset_upload_endpoint():
     assert len(content_resp.content) == len(DUMMY_PNG_BYTES)
 
 
-def test_api_creative_execute_endpoint():
+def test_api_creative_execute_endpoint(mock_engine_manager):
     """Verify FastAPI /api/v1/creative/execute endpoint."""
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 

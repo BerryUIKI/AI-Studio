@@ -46,7 +46,7 @@ def mock_engine_manager():
     }
 
     with patch("app.runners.creative_runner.engine_manager") as mock_mgr:
-        mock_mgr.get_connection = Mock(side_effect=lambda id: connections.get(id))
+        mock_mgr.get_engine = Mock(side_effect=lambda id: connections.get(id))
         mock_mgr.list_connections = Mock(return_value=connections)
         yield mock_mgr
 
