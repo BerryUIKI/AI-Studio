@@ -139,7 +139,32 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       const res = await fetch(`/api/v1/engines/${encodeURIComponent(instanceId)}/config`);
       if (res.ok) {
         const data = await res.json();
-        return { port: data.port, extra_args: data.extra_args || [] };
+        const fetchedPort = data.port;
+        const fetchedArgs = data.extra_args || [];
+        set((state) => ({
+          instances: state.instances.map((i) => {
+            if (i.id !== instanceId) return i;
+            let newEndpoint = i.endpoint;
+            if (newEndpoint) {
+              try {
+                const u = new URL(newEndpoint);
+                u.port = String(fetchedPort);
+                newEndpoint = u.toString().replace(/\/$/, '');
+              } catch {
+                newEndpoint = `http://127.0.0.1:${fetchedPort}`;
+              }
+            } else {
+              newEndpoint = `http://127.0.0.1:${fetchedPort}`;
+            }
+            return {
+              ...i,
+              port: fetchedPort,
+              extra_args: fetchedArgs,
+              endpoint: newEndpoint,
+            };
+          }),
+        }));
+        return { port: fetchedPort, extra_args: fetchedArgs };
       }
       return null;
     } catch {

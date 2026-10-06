@@ -107,4 +107,146 @@ describe('useEngineStore', () => {
     const updated = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
     expect(updated?.status).toBe('stopped');
   });
+
+  describe('fetchEngineConfig', () => {
+    it('fetches engine configuration and updates instance port and extra_args', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          instance_id: 'comfyui-managed',
+          engine_type: 'comfyui',
+          port: 8199,
+          extra_args: ['--lowvram', '--fast'],
+          is_running: false,
+          restart_required: false,
+        }),
+      });
+
+      const store = useEngineStore.getState();
+      const config = await store.fetchEngineConfig('comfyui-managed');
+
+      expect(config).not.toBeNull();
+      expect(config?.port).toBe(8199);
+      expect(config?.extra_args).toEqual(['--lowvram', '--fast']);
+
+      const updated = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
+      expect(updated?.port).toBe(8199);
+      expect(updated?.extra_args).toEqual(['--lowvram', '--fast']);
+      expect(updated?.endpoint).toBe('http://127.0.0.1:8199');
+    });
+
+    it('handles fetch error gracefully and returns null', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      });
+
+      const store = useEngineStore.getState();
+      const config = await store.fetchEngineConfig('unknown-engine');
+
+      expect(config).toBeNull();
+    });
+  });
+
+  describe('saveEngineConfig', () => {
+    it('saves engine configuration and updates instance state and endpoint', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          message: 'Engine configuration updated successfully.',
+          requires_restart: false,
+          config: {
+            instance_id: 'comfyui-managed',
+            engine_type: 'comfyui',
+            port: 8288,
+            extra_args: ['--medvram'],
+            is_running: false,
+            restart_required: false,
+          },
+        }),
+      });
+
+      const store = useEngineStore.getState();
+      const result = await store.saveEngineConfig('comfyui-managed', {
+        port: 8288,
+        extraArgs: ['--medvram'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.requires_restart).toBe(false);
+
+      const updated = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
+      expect(updated?.port).toBe(8288);
+      expect(updated?.extra_args).toEqual(['--medvram']);
+      expect(updated?.endpoint).toBe('http://127.0.0.1:8288');
+    });
+
+    it('returns requires_restart when saving configuration for a running engine', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          success: true,
+          message: 'Engine configuration saved. Engine restart is required for changes to take effect.',
+          requires_restart: true,
+          config: {
+            instance_id: 'comfyui-managed',
+            engine_type: 'comfyui',
+            port: 8388,
+            extra_args: ['--lowvram'],
+            is_running: true,
+            restart_required: true,
+          },
+        }),
+      });
+
+      const store = useEngineStore.getState();
+      const result = await store.saveEngineConfig('comfyui-managed', {
+        port: 8388,
+        extraArgs: ['--lowvram'],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.requires_restart).toBe(true);
+      expect(result.message).toContain('restart is required');
+    });
+
+    it('handles backend validation error (e.g. port conflict or invalid range) without updating instance', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({
+          detail: 'Port 7860 is already in use by engine webui-managed (port 7860)',
+        }),
+      });
+
+      const store = useEngineStore.getState();
+      const originalInstance = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
+      const originalPort = originalInstance?.port;
+
+      const result = await store.saveEngineConfig('comfyui-managed', {
+        port: 7860,
+        extraArgs: ['--lowvram'],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Port 7860 is already in use');
+
+      const afterAttempt = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
+      expect(afterAttempt?.port).toBe(originalPort);
+    });
+
+    it('handles network failure cleanly', async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network connection refused'));
+
+      const store = useEngineStore.getState();
+      const result = await store.saveEngineConfig('comfyui-managed', {
+        port: 9000,
+        extraArgs: [],
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Network connection refused');
+    });
+  });
 });
