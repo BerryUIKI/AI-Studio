@@ -60,6 +60,32 @@ def test_video_schemas():
 
 def test_video_cache_hashing():
     """Verify deterministic cache hashing incorporates video-specific parameters."""
+    from app.runners.creative_runner import compute_creative_cache_hash
+
+    req1 = CreativeActionRequest(
+        action=CreativeActionType.IMG2VIDEO,
+        prompt="Ocean waves gently breaking on sandy beach",
+        model="svd_xt.safetensors",
+        fps=16,
+        num_frames=25,
+        motion_bucket_id=127,
+        duration_seconds=2.5,
+    )
+    req2 = CreativeActionRequest(
+        action=CreativeActionType.IMG2VIDEO,
+        prompt="Ocean waves gently breaking on sandy beach",
+        model="svd_xt.safetensors",
+        fps=24,  # Different FPS
+        num_frames=25,
+        motion_bucket_id=127,
+        duration_seconds=2.5,
+    )
+
+    hash1 = compute_creative_cache_hash(req1, connection_id="comfyui-managed")
+    hash2 = compute_creative_cache_hash(req2, connection_id="comfyui-managed")
+
+    # Different fps must yield different cache keys
+    assert hash1 != hash2
     req1 = CreativeActionRequest(
         action=CreativeActionType.IMG2VIDEO,
         prompt="Ocean waves gently breaking on sandy beach",
@@ -79,21 +105,21 @@ def test_video_cache_hashing():
         duration_seconds=2.5,
     )
     # Identical requests produce identical hash
-    hash1 = compute_creative_cache_hash(req1, input_hash="sha256_input_abc")
-    hash2 = compute_creative_cache_hash(req2, input_hash="sha256_input_abc")
+    hash1 = compute_creative_cache_hash(req1, connection_id="comfyui-managed", input_hash="sha256_input_abc")
+    hash2 = compute_creative_cache_hash(req2, connection_id="comfyui-managed", input_hash="sha256_input_abc")
     assert hash1 == hash2
 
     # Changing fps changes hash
     req_diff_fps = req1.model_copy(update={"fps": 24})
-    assert compute_creative_cache_hash(req_diff_fps, input_hash="sha256_input_abc") != hash1
+    assert compute_creative_cache_hash(req_diff_fps, connection_id="comfyui-managed", input_hash="sha256_input_abc") != hash1
 
     # Changing motion bucket changes hash
     req_diff_motion = req1.model_copy(update={"motion_bucket_id": 200})
-    assert compute_creative_cache_hash(req_diff_motion, input_hash="sha256_input_abc") != hash1
+    assert compute_creative_cache_hash(req_diff_motion, connection_id="comfyui-managed", input_hash="sha256_input_abc") != hash1
 
     # Changing num_frames changes hash
     req_diff_frames = req1.model_copy(update={"num_frames": 16})
-    assert compute_creative_cache_hash(req_diff_frames, input_hash="sha256_input_abc") != hash1
+    assert compute_creative_cache_hash(req_diff_frames, connection_id="comfyui-managed", input_hash="sha256_input_abc") != hash1
 
 
 def test_comfy_img2video_macro_graph():

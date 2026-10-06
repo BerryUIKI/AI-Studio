@@ -103,7 +103,7 @@ def test_semantic_node_hash_provider_identity():
         engine_id="siliconflow",
         seed=42,
     )
-    assert compute_creative_cache_hash(req1) != compute_creative_cache_hash(req2)
+    assert compute_creative_cache_hash(req1, connection_id="comfyui-managed") != compute_creative_cache_hash(req2, connection_id="comfyui-managed")
 
 
 def test_workflow_plan_endpoint():
