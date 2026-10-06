@@ -14,7 +14,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from app.runtime.supervisor import get_default_engine_dir
 

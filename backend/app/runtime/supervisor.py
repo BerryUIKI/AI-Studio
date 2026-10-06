@@ -11,7 +11,7 @@ import signal
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 def get_default_engine_dir() -> Path:
