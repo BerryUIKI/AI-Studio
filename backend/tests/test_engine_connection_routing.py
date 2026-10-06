@@ -26,6 +26,7 @@ def mock_engine_manager():
             ownership=EngineOwnership.MANAGED,
             status=EngineStatus.RUNNING,
             url="http://127.0.0.1:8188",
+            endpoint_url="http://127.0.0.1:8188",  # Required field
             port=8188,
             pid=None,
         ),
@@ -36,6 +37,7 @@ def mock_engine_manager():
             ownership=EngineOwnership.EXTERNAL,
             status=EngineStatus.RUNNING,
             url="http://studio.local:9000/comfy",
+            endpoint_url="http://studio.local:9000/comfy",  # Required field
             port=9000,
             pid=None,
         ),
@@ -46,6 +48,7 @@ def mock_engine_manager():
             ownership=EngineOwnership.MANAGED,
             status=EngineStatus.RUNNING,
             url="http://127.0.0.1:7860",
+            endpoint_url="http://127.0.0.1:7860",  # Required field
             port=7860,
             pid=None,
         ),
