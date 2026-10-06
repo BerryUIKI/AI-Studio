@@ -79,31 +79,44 @@ async def test_upload_then_queue_and_cache_reuse(
         action=CreativeActionType(action), engine_id="comfyui", input_image_id="source",
         mask_image_id="mask" if action == "inpaint" else None, seed=42,
     )
-    with (
-        patch("app.runners.creative_runner.comfy_client", client),
-        patch("app.runners.creative_runner.asset_store") as store,
-        patch("app.runners.creative_runner.cache_store") as cache,
-    ):
-        store.get_asset = AsyncMock(side_effect=records.get)
-        store.get_absolute_path = Mock(side_effect=lambda rec: tmp_path / rec.filename)
-        store.save_image_from_url = AsyncMock(return_value=Mock(id="output"))
-        store.save_media_from_url = AsyncMock(return_value=Mock(id="output"))
-        cache.get_async = AsyncMock(side_effect=cached.get)
-        cache.set_async = AsyncMock(side_effect=save_cache)
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
-            client._client = transport
-            first = await CreativeRunner().execute(req)
-            if fail_mask:
-                assert not first.success
-                assert "Failed to transfer mask" in first.error_message
-                assert events == ["source", "mask"]
-                cache.set_async.assert_not_awaited()
-                client.poll_history_outputs.assert_not_awaited()
-            else:
-                assert first.success, first.error_message
-                second = await CreativeRunner().execute(req)
-                assert second.success and second.is_cached
-                assert second.asset_id == first.asset_id
-                assert events.count("source") == events.count("queue") == 1
-                client.poll_history_outputs.assert_awaited_once()
+
+    # Mock engine_manager for connection resolution (Issue #127)
+    with patch("app.runners.creative_runner.engine_manager") as mock_engine_mgr:
+        from app.schemas.engine import EngineType
+        mock_connection = Mock()
+        mock_connection.id = "comfyui-managed"
+        mock_connection.url = "http://test/comfy"
+        mock_connection.engine_type = EngineType.COMFYUI
+        mock_engine_mgr.get_connection = Mock(return_value=mock_connection)
+
+        # Mock ComfyUIClient class to return our pre-configured client
+        with patch("app.runners.creative_runner.ComfyUIClient") as MockComfyClient:
+            MockComfyClient.return_value = client
+
+            with (
+                patch("app.runners.creative_runner.asset_store") as store,
+                patch("app.runners.creative_runner.cache_store") as cache,
+            ):
+                store.get_asset = AsyncMock(side_effect=records.get)
+                store.get_absolute_path = Mock(side_effect=lambda rec: tmp_path / rec.filename)
+                store.save_image_from_url = AsyncMock(return_value=Mock(id="output"))
+                store.save_media_from_url = AsyncMock(return_value=Mock(id="output"))
+                cache.get_async = AsyncMock(side_effect=cached.get)
+                cache.set_async = AsyncMock(side_effect=save_cache)
+                async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+                    client._client = transport
+                    first = await CreativeRunner().execute(req)
+                    if fail_mask:
+                        assert not first.success
+                        assert "Failed to transfer mask" in first.error_message
+                        assert events == ["source", "mask"]
+                        cache.set_async.assert_not_awaited()
+                        client.poll_history_outputs.assert_not_awaited()
+                    else:
+                        assert first.success, first.error_message
+                        second = await CreativeRunner().execute(req)
+                        assert second.success and second.is_cached
+                        assert second.asset_id == first.asset_id
+                        assert events.count("source") == events.count("queue") == 1
+                        client.poll_history_outputs.assert_awaited_once()
     assert {path: path.read_bytes() for path in originals} == originals
