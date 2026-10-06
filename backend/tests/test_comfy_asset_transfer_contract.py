@@ -48,7 +48,8 @@ async def test_upload_then_queue_and_cache_reuse(
     async def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/upload/image":
             body = await request.aread()
-            name = "mask" if b'filename="mask.png"' in body else "source"
+            # Check for mask conversion: converted files have "_comfy" suffix
+            name = "mask" if b'filename="mask' in body else "source"
             events.append(name)
             if name == "mask" and fail_mask:
                 return httpx.Response(503)
