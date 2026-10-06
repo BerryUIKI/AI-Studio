@@ -348,29 +348,6 @@ async def test_upload_failure_prevents_workflow_submission(mock_engine_manager):
     finally:
         temp_path.unlink(missing_ok=True)
 
-            with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
-                mock_comfy = MockClient.return_value
-                # Upload fails
-                mock_comfy.upload_image = AsyncMock(side_effect=RuntimeError("Upload failed: Connection refused"))
-                mock_comfy.queue_prompt = AsyncMock()
-
-                with patch("app.runners.creative_runner.cache_store") as mock_cache:
-                    mock_cache.get_async = AsyncMock(return_value=None)
-
-                    result = await runner.execute(req)
-
-                    # Verify upload was attempted
-                    mock_comfy.upload_image.assert_called_once()
-
-                    # Verify workflow was NOT submitted
-                    mock_comfy.queue_prompt.assert_not_called()
-
-                    # Verify error result
-                    assert result.success is False
-                    assert "Failed to transfer source image to ComfyUI" in result.error_message
-    finally:
-        temp_path.unlink(missing_ok=True)
-
 
 @pytest.mark.asyncio
 async def test_uploaded_filename_used_in_workflow(mock_engine_manager):
