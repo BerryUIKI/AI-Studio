@@ -13,6 +13,7 @@ export interface EngineInstance {
   pid?: number | null;
   vram_used_mb?: number | null;
   capabilities: string[];
+  connection_id?: string;  // Stable backend connection ID (e.g., "comfyui-managed", "webui-managed")
 }
 
 export interface StartEngineResult {
@@ -59,6 +60,7 @@ export const defaultBuiltinInstances: EngineInstance[] = [
     status: 'stopped',
     endpoint: 'http://127.0.0.1:8188',
     capabilities: ['txt2img', 'img2img', 'workflows'],
+    connection_id: 'comfyui-managed',
   },
   {
     id: 'webui-managed',
@@ -71,6 +73,7 @@ export const defaultBuiltinInstances: EngineInstance[] = [
     status: 'stopped',
     endpoint: 'http://127.0.0.1:7860',
     capabilities: ['txt2img', 'img2img', 'inpaint'],
+    connection_id: 'webui-managed',
   },
   {
     id: 'builtin-agents',
@@ -118,7 +121,13 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     const inst = get().instances.find((i) => i.id === instanceId);
     if (!inst) return { success: false, message: 'Instance not found' };
 
+    // Only managed engines can be started via the app
+    if (!inst.is_managed) {
+      return { success: false, message: 'External engines cannot be started from the app. Start them manually.' };
+    }
+
     try {
+      // Route lifecycle controls by engine type
       const endpoint = inst.type === 'webui' ? '/api/v1/runtime/webui/start' : '/api/v1/runtime/start';
       const res = await fetch(endpoint, { method: 'POST' });
       if (res.ok) {
@@ -157,7 +166,13 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     const inst = get().instances.find((i) => i.id === instanceId);
     if (!inst) return false;
 
+    // Only managed engines can be stopped via the app
+    if (!inst.is_managed) {
+      return false;
+    }
+
     try {
+      // Route lifecycle controls by engine type
       const endpoint = inst.type === 'webui' ? '/api/v1/runtime/webui/stop' : '/api/v1/runtime/stop';
       const res = await fetch(endpoint, { method: 'POST' });
       if (res.ok) {

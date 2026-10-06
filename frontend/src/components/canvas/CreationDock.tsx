@@ -25,6 +25,8 @@ export const CreationDock = () => {
     setCfgScale,
     denoise,
     setDenoise,
+    connectionId,
+    setConnectionId,
     engineId,
     setEngineId,
     model,
@@ -195,12 +197,12 @@ export const CreationDock = () => {
           <div className="flex items-center gap-2">
             <span className="text-slate-400 text-[11px]">Engine:</span>
             <select
-              value={engineId}
-              onChange={(e) => setEngineId(e.target.value)}
+              value={connectionId}
+              onChange={(e) => setConnectionId(e.target.value)}
               className="bg-slate-800/90 border border-slate-700 rounded-md px-2 py-0.5 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"
             >
-              <option value="managed_comfyui">ComfyUI (Local)</option>
-              <option value="managed_webui">SD WebUI (Local)</option>
+              <option value="comfyui-managed">ComfyUI (Local)</option>
+              <option value="webui-managed">SD WebUI (Local)</option>
               <option value="cloud">Cloud API (Zero GPU)</option>
             </select>
 

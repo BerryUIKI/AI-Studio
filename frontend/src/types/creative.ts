@@ -11,7 +11,8 @@ export interface GenerationProvenance {
   model: string;
   model_revision?: string;
   model_hash?: string;
-  engine_id: string;
+  connection_id: string;  // Connection used for generation
+  engine_id: string;      // Legacy field, kept for backward compatibility
   seed: number;
   steps: number;
   cfg_scale: number;
@@ -32,7 +33,8 @@ export interface CreativeActionRequest {
   prompt: string;
   negative_prompt?: string;
   model?: string;
-  engine_id?: string;
+  connection_id?: string;  // Stable engine connection identifier (e.g., "comfyui-managed", "studio-comfy-a100")
+  engine_id?: string;      // Legacy fallback - deprecated in favor of connection_id
   aspect_ratio?: string;
   width?: number;
   height?: number;
