@@ -14,6 +14,8 @@ export interface EngineInstance {
   vram_used_mb?: number | null;
   capabilities: string[];
   connection_id?: string;  // Stable backend connection ID (e.g., "comfyui-managed", "webui-managed")
+  port?: number | null;
+  extra_args?: string[];
 }
 
 export interface StartEngineResult {
@@ -21,6 +23,12 @@ export interface StartEngineResult {
   code?: 'NOT_INSTALLED' | 'ENV_MISSING' | 'ALREADY_RUNNING' | string;
   message?: string;
   pid?: number | null;
+}
+
+export interface SaveEngineConfigResult {
+  success: boolean;
+  message?: string;
+  requires_restart?: boolean;
 }
 
 interface EngineState {
@@ -32,6 +40,11 @@ interface EngineState {
   setSearchQuery: (query: string) => void;
   setInstances: (instances: EngineInstance[]) => void;
   fetchInstances: () => Promise<void>;
+  fetchEngineConfig: (instanceId: string) => Promise<{ port: number; extra_args: string[] } | null>;
+  saveEngineConfig: (
+    instanceId: string,
+    config: { port: number; extraArgs: string[] }
+  ) => Promise<SaveEngineConfigResult>;
   startEngine: (instanceId: string) => Promise<StartEngineResult>;
   stopEngine: (instanceId: string) => Promise<boolean>;
 }
@@ -59,6 +72,8 @@ export const defaultBuiltinInstances: EngineInstance[] = [
     install_path: null,
     status: 'stopped',
     endpoint: 'http://127.0.0.1:8188',
+    port: 8188,
+    extra_args: [],
     capabilities: ['txt2img', 'img2img', 'workflows'],
     connection_id: 'comfyui-managed',
   },
@@ -72,6 +87,8 @@ export const defaultBuiltinInstances: EngineInstance[] = [
     install_path: null,
     status: 'stopped',
     endpoint: 'http://127.0.0.1:7860',
+    port: 7860,
+    extra_args: [],
     capabilities: ['txt2img', 'img2img', 'inpaint'],
     connection_id: 'webui-managed',
   },
@@ -114,6 +131,106 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     } catch {
       // Fallback preserves initial default instances when backend is offline or starting
       set({ isLoading: false });
+    }
+  },
+
+  fetchEngineConfig: async (instanceId: string) => {
+    try {
+      const res = await fetch(`/api/v1/engines/${encodeURIComponent(instanceId)}/config`);
+      if (res.ok) {
+        const data = await res.json();
+        const fetchedPort = data.port;
+        const fetchedArgs = data.extra_args || [];
+        set((state) => ({
+          instances: state.instances.map((i) => {
+            if (i.id !== instanceId) return i;
+            let newEndpoint = i.endpoint;
+            if (newEndpoint) {
+              try {
+                const u = new URL(newEndpoint);
+                u.port = String(fetchedPort);
+                newEndpoint = u.toString().replace(/\/$/, '');
+              } catch {
+                newEndpoint = `http://127.0.0.1:${fetchedPort}`;
+              }
+            } else {
+              newEndpoint = `http://127.0.0.1:${fetchedPort}`;
+            }
+            return {
+              ...i,
+              port: fetchedPort,
+              extra_args: fetchedArgs,
+              endpoint: newEndpoint,
+            };
+          }),
+        }));
+        return { port: fetchedPort, extra_args: fetchedArgs };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  saveEngineConfig: async (
+    instanceId: string,
+    config: { port: number; extraArgs: string[] }
+  ): Promise<SaveEngineConfigResult> => {
+    try {
+      const res = await fetch(`/api/v1/engines/${encodeURIComponent(instanceId)}/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          port: config.port,
+          extra_args: config.extraArgs,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          success: false,
+          message: data.detail || data.message || `Server error (HTTP ${res.status})`,
+        };
+      }
+
+      const savedPort = data.port ?? config.port;
+      const savedArgs = data.extra_args ?? config.extraArgs;
+
+      set((state) => ({
+        instances: state.instances.map((i) => {
+          if (i.id !== instanceId) return i;
+          let newEndpoint = i.endpoint;
+          if (newEndpoint) {
+            try {
+              const url = new URL(newEndpoint);
+              url.port = String(savedPort);
+              newEndpoint = url.toString().replace(/\/$/, '');
+            } catch {
+              newEndpoint = `http://127.0.0.1:${savedPort}`;
+            }
+          } else {
+            newEndpoint = `http://127.0.0.1:${savedPort}`;
+          }
+          return {
+            ...i,
+            port: savedPort,
+            extra_args: savedArgs,
+            endpoint: newEndpoint,
+          };
+        }),
+      }));
+
+      return {
+        success: true,
+        message: data.message || 'Configuration saved successfully.',
+        requires_restart: Boolean(data.requires_restart),
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: err.message || 'Network connection failed while saving configuration.',
+      };
     }
   },
 

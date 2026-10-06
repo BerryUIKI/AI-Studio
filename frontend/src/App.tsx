@@ -53,7 +53,7 @@ export default function App() {
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
   const [showSetupWizard, setShowSetupWizard] = useState<boolean>(false);
 
-  const { instances, fetchInstances } = useEngineStore();
+  const { instances, fetchInstances, saveEngineConfig } = useEngineStore();
   const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore();
   const { setActiveView } = useNavigationStore();
 
@@ -484,8 +484,15 @@ export default function App() {
       />
       <EngineConfigModal
         isOpen={!!selectedConfigInstance}
-        instance={selectedConfigInstance}
+        instance={
+          selectedConfigInstance
+            ? instances.find((i) => i.id === selectedConfigInstance.id) || selectedConfigInstance
+            : null
+        }
         onClose={() => setSelectedConfigInstance(null)}
+        onSave={async (instanceId, config) => {
+          return await saveEngineConfig(instanceId, config);
+        }}
       />
       <EngineLogViewer
         isOpen={!!selectedLogInstance}

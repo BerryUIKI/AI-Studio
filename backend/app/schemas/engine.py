@@ -125,6 +125,26 @@ class ShutdownResponse(BaseModel):
     managed_engines_stopped: List[str]
 
 
+class EngineConfig(BaseModel):
+    instance_id: str
+    port: int
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class EngineConfigUpdateRequest(BaseModel):
+    port: int
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class EngineConfigResponse(BaseModel):
+    success: bool = True
+    instance_id: str
+    port: int
+    extra_args: List[str] = Field(default_factory=list)
+    requires_restart: bool = False
+    message: str = "Configuration saved successfully."
+
+
 class EngineInstanceInfo(BaseModel):
     id: str
     type: str  # canvas, comfyui, webui, agents, custom
@@ -138,6 +158,9 @@ class EngineInstanceInfo(BaseModel):
     pid: Optional[int] = None
     vram_used_mb: Optional[int] = None
     capabilities: List[str] = Field(default_factory=list)
+    port: Optional[int] = None
+    extra_args: List[str] = Field(default_factory=list)
+    connection_id: Optional[str] = None
 
 
 class EngineInstancesResponse(BaseModel):
