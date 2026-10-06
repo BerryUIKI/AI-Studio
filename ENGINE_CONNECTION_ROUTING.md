@@ -1,4 +1,106 @@
-# Engine Connection Routing (Issue #127)
+# Engine Connection Routing (Issue #127) - Implementation Status
+
+## ✅ Completed Backend Implementation
+
+### Schemas Updated
+- ✅ Added `connection_id: Optional[str]` to `CreativeActionRequest`
+- ✅ Added `connection_id: str` to `GenerationProvenance`
+- ✅ Maintained backward compatibility with `engine_id`
+
+### ComfyUIClient Enhanced
+- ✅ Added `base_url` parameter to constructor
+- ✅ Uses configured URL instead of reconstructing from host:port
+- ✅ Supports custom protocols, paths, and non-localhost addresses
+
+### CreativeRunner Core Methods
+- ✅ `_resolve_connection()` - Resolves connection_id with engine_id fallback
+- ✅ `_create_client()` - Creates type-specific clients (ComfyUI/WebUI)
+- ✅ `compute_creative_cache_hash()` - Includes connection_id (version 0.3.0)
+- ✅ `cancel_task()` - Uses resolved connection for interrupts
+- ✅ `execute()` - Resolves connection before all operations
+
+### Test Coverage
+- ✅ Connection resolution with valid/invalid IDs
+- ✅ Legacy engine_id fallback mapping
+- ✅ Client creation for both engine types
+- ✅ Cache hash isolation by connection
+- ✅ Execute flow with connection resolution
+- ✅ Cancellation routing to correct connection
+
+## 🚧 In Progress - Frontend Integration
+
+### Required Frontend Changes
+
+1. **Pass connection_id in API calls** (`useCreativeStore.ts`):
+```typescript
+// Before
+await api.post('/api/v1/creative/execute', {
+  action: 'txt2img',
+  prompt: request.prompt,
+  engine_id: selectedEngine,
+});
+
+// After  
+await api.post('/api/v1/creative/execute', {
+  action: 'txt2img',
+  prompt: request.prompt,
+  connection_id: selectedConnectionId,  // Stable identifier
+  engine_id: selectedEngine,  // Legacy fallback
+});
+```
+
+2. **Use connection.url directly** (`EmbeddedEngineView.tsx`):
+```typescript
+// Before (Issue #127 - reconstructs from port)
+const url = `http://localhost:${connection.port}`;
+
+// After
+const url = connection.url;  // Use configured endpoint
+```
+
+3. **Check connection.ownership for lifecycle** (`App.tsx`, engine controls):
+```typescript
+// Before
+if (engine.type === 'comfyui') {
+  await startComfyUI();
+}
+
+// After
+const connection = getConnectionById(selectedConnectionId);
+if (connection.ownership === 'managed') {
+  await api.post(`/api/v1/engines/${connection.id}/start`);
+} else {
+  // External connections cannot be started
+}
+```
+
+## 📋 Remaining Tasks
+
+### Backend
+- [ ] Run full test suite to verify no regressions
+- [ ] Update API documentation with connection_id parameter
+
+### Frontend  
+- [ ] Update `useCreativeStore` to pass connection_id
+- [ ] Fix `EmbeddedEngineView` URL reconstruction
+- [ ] Update engine lifecycle dispatch
+- [ ] Add connection_id to all creative action calls
+
+### Integration Testing
+- [ ] Test with two distinguishable connections (different ports)
+- [ ] Verify operations hit correct endpoints
+- [ ] Test selection changes don't redirect running tasks
+- [ ] Verify managed vs external ownership enforcement
+
+### Documentation
+- [x] Core architecture documented
+- [ ] API changes documented
+- [ ] Migration guide for frontend
+- [ ] Update ARCHITECTURE.md with connection routing
+
+---
+
+# Original Specification (Reference)
 
 ## Overview
 
