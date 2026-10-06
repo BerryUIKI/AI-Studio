@@ -22,8 +22,10 @@ from app.storage.asset_store import AssetRecord
     ("img2video", False), ("inpaint", True),
 ])
 async def test_upload_then_queue_and_cache_reuse(
-    tmp_path: Path, action: str, fail_mask: bool, mock_engine_manager,
+    tmp_path: Path, action: str, fail_mask: bool,
 ) -> None:
+    """Verify upload ordering, engine references, failure handling, and cache reuse."""
+    from app.schemas.engine import EngineConnection, EngineType, EngineOwnership, EngineStatus
     originals: dict[Path, bytes] = {}
     records: dict[str, AssetRecord] = {}
     for name in ("source", "mask"):
@@ -81,13 +83,17 @@ async def test_upload_then_queue_and_cache_reuse(
     )
 
     # Mock engine_manager for connection resolution (Issue #127)
+    mock_connection = EngineConnection(
+        id="comfyui-managed",
+        name="ComfyUI (Managed)",
+        engine_type=EngineType.COMFYUI,
+        ownership=EngineOwnership.MANAGED,
+        status=EngineStatus.RUNNING,
+        endpoint_url="http://test/comfy",
+    )
+
     with patch("app.runners.creative_runner.engine_manager") as mock_engine_mgr:
-        from app.schemas.engine import EngineType
-        mock_connection = Mock()
-        mock_connection.id = "comfyui-managed"
-        mock_connection.url = "http://test/comfy"
-        mock_connection.engine_type = EngineType.COMFYUI
-        mock_engine_mgr.get_connection = Mock(return_value=mock_connection)
+        mock_engine_mgr.get_engine = Mock(return_value=mock_connection)
 
         # Mock ComfyUIClient class to return our pre-configured client
         with patch("app.runners.creative_runner.ComfyUIClient") as MockComfyClient:
