@@ -19,7 +19,8 @@ class CreativeActionRequest(BaseModel):
     prompt: str = ""
     negative_prompt: str = "low quality, blurry, deformed, bad anatomy"
     model: str = "v1-5-pruned-emaonly.safetensors"
-    engine_id: str = "managed_comfyui"  # managed_comfyui, managed_webui, or cloud
+    connection_id: Optional[str] = None  # Stable engine connection identifier (e.g., "comfyui-managed", "studio-comfy-a100")
+    engine_id: str = "managed_comfyui"  # Legacy fallback - deprecated in favor of connection_id
     aspect_ratio: str = "1:1"  # 1:1, 16:9, 9:16, 4:3
     width: int = 512
     height: int = 512
@@ -45,7 +46,8 @@ class GenerationProvenance(BaseModel):
     model: str
     model_revision: Optional[str] = None
     model_hash: Optional[str] = None
-    engine_id: str
+    connection_id: str  # Connection used for generation
+    engine_id: str  # Legacy field, kept for backward compatibility
     seed: int
     steps: int
     cfg_scale: float
