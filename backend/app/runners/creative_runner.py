@@ -38,6 +38,13 @@ from app.runners.macro_compiler import (
     build_comfy_txt2video_graph,
     build_comfy_upscale_graph,
 )
+from app.runners.mask_converter import (
+    normalize_mask_for_comfyui,
+    normalize_mask_for_openai,
+    normalize_mask_for_webui,
+    normalize_mask_for_fal_ai,
+    validate_mask_dimensions,
+)
 from app.runners.webui_runner import WebUIRunner
 from app.runtime.credentials import credentials_manager
 from app.schemas.cloud import CloudProviderId
@@ -175,7 +182,11 @@ def compute_creative_cache_hash(
     mask_hash: str = "",
     provider_id: Optional[str] = None,
 ) -> str:
-    """Compute deterministic semantic cache hash for a creative action (Invariant #5)."""
+    """Compute deterministic semantic cache hash for a creative action (Invariant #5).
+
+    Cache version updated for Issue #106: mask semantics normalization.
+    Old cache entries with version 0.1.0 will not match new 0.2.0 entries.
+    """
     effective_provider = provider_id or resolve_effective_provider(req)
     canonical_payload = {
         "action": req.action.value,
@@ -184,7 +195,7 @@ def compute_creative_cache_hash(
         "model": req.model,
         "engine_id": req.engine_id,
         "provider_id": effective_provider,
-        "runner_version": "0.1.0",
+        "runner_version": "0.2.0",  # Bumped from 0.1.0 for Issue #106 mask normalization
         "width": req.width,
         "height": req.height,
         "steps": req.steps,
@@ -456,6 +467,7 @@ class CreativeRunner:
         # Upload source image and mask to ComfyUI's input directory if needed
         uploaded_image_name: Optional[str] = None
         uploaded_mask_name: Optional[str] = None
+        converted_mask_path: Optional[Path] = None
 
         if input_file and input_file.is_file():
             try:
@@ -470,13 +482,28 @@ class CreativeRunner:
 
         if mask_file and mask_file.is_file():
             try:
-                mask_result = await comfy_client.upload_mask(str(mask_file), subfolder="berry_assets")
+                # Validate and convert mask for ComfyUI (Issue #106)
+                # ComfyUI LoadImage MASK output = 1 - alpha, requiring inversion
+                if input_file:
+                    from PIL import Image
+                    source_img = Image.open(input_file)
+                    validate_mask_dimensions(mask_file, source_img.width, source_img.height)
+
+                converted_mask_path = normalize_mask_for_comfyui(mask_file)
+                mask_result = await comfy_client.upload_mask(str(converted_mask_path), subfolder="berry_assets")
                 uploaded_mask_name = mask_result["name"]
                 if mask_result.get("subfolder"):
                     uploaded_mask_name = f"{mask_result['subfolder']}/{uploaded_mask_name}"
-                logger.debug(f"Uploaded mask to ComfyUI: {uploaded_mask_name}")
+                logger.debug(f"Uploaded converted mask to ComfyUI: {uploaded_mask_name}")
             except Exception as upload_err:
                 raise RuntimeError(f"Failed to transfer mask to ComfyUI: {upload_err}") from upload_err
+            finally:
+                # Clean up temporary converted mask
+                if converted_mask_path and converted_mask_path.exists():
+                    try:
+                        converted_mask_path.unlink()
+                    except Exception:
+                        pass
 
         # Build workflow graphs using uploaded filenames
         if req.action == CreativeActionType.TXT2IMG:
@@ -617,17 +644,22 @@ class CreativeRunner:
                 key = credentials_manager.get_key(CloudProviderId.OPENAI)
                 if not key:
                     raise RuntimeError("OpenAI API key missing. Configure it in Cloud Providers (BYOK).")
-                remote_url = await _call_openai_inpaint(req.prompt, image_bytes, mask_bytes, key)
+                # Convert mask for OpenAI (Issue #106): transparent = edit
+                converted_mask_bytes = normalize_mask_for_openai(mask_bytes)
+                remote_url = await _call_openai_inpaint(req.prompt, image_bytes, converted_mask_bytes, key)
             elif plan.provider_id == "fal_ai":
                 key = credentials_manager.get_key(CloudProviderId.FAL)
                 if not key:
                     raise RuntimeError("Fal.ai API key is required for cloud inpainting. Configure it in Cloud Settings (BYOK).")
+                # Convert mask for Fal.ai (Issue #106): opaque = edit (matches Berry, validate only)
+                converted_mask_bytes = normalize_mask_for_fal_ai(mask_bytes)
+                converted_mask_b64 = base64.b64encode(converted_mask_bytes).decode("utf-8")
                 remote_url = await _call_fal_ai_action(
                     action="inpaint",
                     prompt=req.prompt,
                     api_key=key,
                     image_b64=image_b64,
-                    mask_b64=mask_b64,
+                    mask_b64=converted_mask_b64,
                 )
             else:
                 raise ValueError(f"Provider {plan.provider_id} does not support cloud inpainting.")

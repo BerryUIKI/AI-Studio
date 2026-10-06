@@ -13,6 +13,7 @@ import httpx
 
 from app.schemas.creative import CreativeActionRequest, CreativeActionType
 from app.storage.asset_store import asset_store
+from app.runners.mask_converter import normalize_mask_for_webui, validate_mask_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -222,8 +223,20 @@ class WebUIRunner:
         if not img_rec or not mask_rec:
             raise ValueError("Input or mask asset missing on disk")
 
-        img_b64 = base64.b64encode(asset_store.get_absolute_path(img_rec).read_bytes()).decode("utf-8")
-        mask_b64 = base64.b64encode(asset_store.get_absolute_path(mask_rec).read_bytes()).decode("utf-8")
+        img_path = asset_store.get_absolute_path(img_rec)
+        mask_path = asset_store.get_absolute_path(mask_rec)
+
+        # Validate mask dimensions match source (Issue #106)
+        from PIL import Image
+        source_img = Image.open(img_path)
+        validate_mask_dimensions(mask_path, source_img.width, source_img.height)
+
+        # Convert mask for WebUI (Issue #106): grayscale white=edit, black=protect
+        mask_bytes = mask_path.read_bytes()
+        converted_mask_bytes = normalize_mask_for_webui(mask_bytes)
+
+        img_b64 = base64.b64encode(img_path.read_bytes()).decode("utf-8")
+        mask_b64 = base64.b64encode(converted_mask_bytes).decode("utf-8")
 
         payload = {
             "init_images": [img_b64],
