@@ -305,17 +305,17 @@ class CreativeRunner:
             ValueError: If engine type is unsupported
         """
         if connection.engine_type == EngineType.COMFYUI:
-            # Parse connection URL to extract host/port
-            parsed = urlparse(connection.url)
+            # Parse connection endpoint_url to extract host/port
+            parsed = urlparse(connection.endpoint_url)
             host = parsed.hostname or "127.0.0.1"
             port = parsed.port or 8188
 
             # Create client with full configured URL (not reconstructed)
-            return ComfyUIClient(host=host, port=port, base_url=connection.url)
+            return ComfyUIClient(host=host, port=port, base_url=connection.endpoint_url)
 
         elif connection.engine_type == EngineType.WEBUI:
             # WebUIRunner uses full endpoint URL
-            return WebUIRunner(endpoint_url=connection.url)
+            return WebUIRunner(endpoint_url=connection.endpoint_url)
 
         else:
             raise ValueError(
@@ -428,7 +428,7 @@ class CreativeRunner:
             if plan.engine in ("comfyui", "webui"):
                 connection = self._resolve_connection(req.connection_id, req.engine_id)
                 connection_id = connection.id
-                logger.info(f"[{task_id}] Resolved connection: {connection_id} ({connection.url})")
+                logger.info(f"[{task_id}] Resolved connection: {connection_id} ({connection.endpoint_url})")
             else:
                 # Cloud execution - use provider_id as connection_id
                 connection_id = plan.provider_id

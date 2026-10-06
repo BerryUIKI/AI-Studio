@@ -25,10 +25,7 @@ def mock_engine_manager():
             engine_type=EngineType.COMFYUI,
             ownership=EngineOwnership.MANAGED,
             status=EngineStatus.RUNNING,
-            url="http://127.0.0.1:8188",
-            endpoint_url="http://127.0.0.1:8188",  # Required field
-            port=8188,
-            pid=None,
+            endpoint_url="http://127.0.0.1:8188",
         ),
         "comfyui-studio-a100": EngineConnection(
             id="comfyui-studio-a100",
@@ -36,10 +33,7 @@ def mock_engine_manager():
             engine_type=EngineType.COMFYUI,
             ownership=EngineOwnership.EXTERNAL,
             status=EngineStatus.RUNNING,
-            url="http://studio.local:9000/comfy",
-            endpoint_url="http://studio.local:9000/comfy",  # Required field
-            port=9000,
-            pid=None,
+            endpoint_url="http://studio.local:9000/comfy",
         ),
         "webui-managed": EngineConnection(
             id="webui-managed",
@@ -47,10 +41,7 @@ def mock_engine_manager():
             engine_type=EngineType.WEBUI,
             ownership=EngineOwnership.MANAGED,
             status=EngineStatus.RUNNING,
-            url="http://127.0.0.1:7860",
-            endpoint_url="http://127.0.0.1:7860",  # Required field
-            port=7860,
-            pid=None,
+            endpoint_url="http://127.0.0.1:7860",
         ),
     }
 
@@ -67,7 +58,7 @@ def test_resolve_connection_with_valid_connection_id(mock_engine_manager):
     connection = runner._resolve_connection("comfyui-studio-a100", None)
 
     assert connection.id == "comfyui-studio-a100"
-    assert connection.url == "http://studio.local:9000/comfy"
+    assert connection.endpoint_url == "http://studio.local:9000/comfy"
     assert connection.ownership == EngineOwnership.EXTERNAL
 
 
