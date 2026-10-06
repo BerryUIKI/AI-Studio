@@ -452,7 +452,33 @@ class CreativeRunner:
         input_file: Optional[Path],
         mask_file: Optional[Path],
     ) -> Dict[str, Any]:
-        """Compile and submit ComfyUI macro graph."""
+        """Compile and submit ComfyUI macro graph, uploading required assets first."""
+        # Upload source image and mask to ComfyUI's input directory if needed
+        uploaded_image_name: Optional[str] = None
+        uploaded_mask_name: Optional[str] = None
+
+        if input_file and input_file.is_file():
+            try:
+                upload_result = await comfy_client.upload_image(str(input_file), subfolder="berry_assets")
+                uploaded_image_name = upload_result["name"]
+                # Include subfolder in the filename if ComfyUI expects it
+                if upload_result.get("subfolder"):
+                    uploaded_image_name = f"{upload_result['subfolder']}/{uploaded_image_name}"
+                logger.debug(f"Uploaded source image to ComfyUI: {uploaded_image_name}")
+            except Exception as upload_err:
+                raise RuntimeError(f"Failed to transfer source image to ComfyUI: {upload_err}") from upload_err
+
+        if mask_file and mask_file.is_file():
+            try:
+                mask_result = await comfy_client.upload_mask(str(mask_file), subfolder="berry_assets")
+                uploaded_mask_name = mask_result["name"]
+                if mask_result.get("subfolder"):
+                    uploaded_mask_name = f"{mask_result['subfolder']}/{uploaded_mask_name}"
+                logger.debug(f"Uploaded mask to ComfyUI: {uploaded_mask_name}")
+            except Exception as upload_err:
+                raise RuntimeError(f"Failed to transfer mask to ComfyUI: {upload_err}") from upload_err
+
+        # Build workflow graphs using uploaded filenames
         if req.action == CreativeActionType.TXT2IMG:
             prompt_graph = build_comfy_txt2img_graph(
                 prompt=req.prompt,
@@ -464,11 +490,11 @@ class CreativeRunner:
                 seed=req.seed,
             )
         elif req.action == CreativeActionType.IMG2IMG:
-            if not input_file:
-                raise ValueError("Source image required for img2img")
+            if not uploaded_image_name:
+                raise ValueError("Source image upload failed for img2img")
             prompt_graph = build_comfy_img2img_graph(
                 prompt=req.prompt,
-                image_filename=input_file.name,
+                image_filename=uploaded_image_name,
                 negative_prompt=req.negative_prompt,
                 checkpoint=req.model,
                 steps=req.steps,
@@ -477,12 +503,12 @@ class CreativeRunner:
                 seed=req.seed,
             )
         elif req.action == CreativeActionType.INPAINT:
-            if not input_file or not mask_file:
-                raise ValueError("Source image and mask required for inpaint")
+            if not uploaded_image_name or not uploaded_mask_name:
+                raise ValueError("Source image and mask upload required for inpaint")
             prompt_graph = build_comfy_inpaint_graph(
                 prompt=req.prompt,
-                image_filename=input_file.name,
-                mask_filename=mask_file.name,
+                image_filename=uploaded_image_name,
+                mask_filename=uploaded_mask_name,
                 negative_prompt=req.negative_prompt,
                 checkpoint=req.model,
                 steps=req.steps,
@@ -491,17 +517,17 @@ class CreativeRunner:
                 seed=req.seed,
             )
         elif req.action == CreativeActionType.UPSCALE:
-            if not input_file:
-                raise ValueError("Source image required for upscale")
+            if not uploaded_image_name:
+                raise ValueError("Source image upload failed for upscale")
             prompt_graph = build_comfy_upscale_graph(
-                image_filename=input_file.name,
+                image_filename=uploaded_image_name,
                 upscaler_model=req.upscaler_name or "RealESRGAN_x4plus.pth",
             )
         elif req.action == CreativeActionType.IMG2VIDEO:
-            if not input_file:
-                raise ValueError("Source image required for ComfyUI img2video")
+            if not uploaded_image_name:
+                raise ValueError("Source image upload failed for ComfyUI img2video")
             prompt_graph = build_comfy_img2video_graph(
-                image_filename=input_file.name,
+                image_filename=uploaded_image_name,
                 checkpoint=req.model if "svd" in req.model.lower() else "svd_xt.safetensors",
                 width=req.width,
                 height=req.height,
