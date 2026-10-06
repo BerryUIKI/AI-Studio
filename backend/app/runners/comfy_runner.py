@@ -205,6 +205,90 @@ class ComfyUIClient:
             logger.debug("ComfyUI interrupt failed or not reachable: %s", err)
             return False
 
+    async def upload_image(self, image_path: str, subfolder: str = "", overwrite: bool = False) -> Dict[str, Any]:
+        """
+        Upload an image to ComfyUI's input directory via POST /upload/image.
+
+        Returns the engine's filename and subfolder references for use in LoadImage nodes.
+        Raises RuntimeError if upload fails.
+        """
+        from pathlib import Path
+
+        file_path = Path(image_path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+        try:
+            client = self._get_client()
+
+            with open(file_path, "rb") as f:
+                files = {"image": (file_path.name, f, "image/png")}
+                data = {"subfolder": subfolder, "overwrite": str(overwrite).lower()}
+
+                resp = await client.post(f"{self.base_url}/upload/image", files=files, data=data)
+                resp.raise_for_status()
+
+                result = resp.json()
+                if "name" not in result:
+                    raise RuntimeError(f"ComfyUI upload returned unexpected response: {result}")
+
+                return {
+                    "name": result["name"],
+                    "subfolder": result.get("subfolder", subfolder),
+                    "type": result.get("type", "input"),
+                }
+        except httpx.HTTPStatusError as http_err:
+            raise RuntimeError(f"ComfyUI upload failed with status {http_err.response.status_code}: {http_err}") from http_err
+        except Exception as err:
+            raise RuntimeError(f"Failed to upload image to ComfyUI: {err}") from err
+
+    async def upload_mask(self, mask_path: str, subfolder: str = "", overwrite: bool = False) -> Dict[str, Any]:
+        """
+        Upload a mask image to ComfyUI's input directory via POST /upload/mask.
+
+        Returns the engine's filename and subfolder references for use in LoadImageMask nodes.
+        Falls back to /upload/image if /upload/mask is not available.
+        Raises RuntimeError if upload fails.
+        """
+        from pathlib import Path
+
+        file_path = Path(mask_path)
+        if not file_path.is_file():
+            raise FileNotFoundError(f"Mask file not found: {mask_path}")
+
+        try:
+            client = self._get_client()
+
+            with open(file_path, "rb") as f:
+                files = {"image": (file_path.name, f, "image/png")}
+                data = {"subfolder": subfolder, "overwrite": str(overwrite).lower()}
+
+                # Try /upload/mask first, fall back to /upload/image
+                try:
+                    resp = await client.post(f"{self.base_url}/upload/mask", files=files, data=data)
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as mask_err:
+                    if mask_err.response.status_code == 404:
+                        logger.debug("ComfyUI /upload/mask not available, falling back to /upload/image")
+                        resp = await client.post(f"{self.base_url}/upload/image", files=files, data=data)
+                        resp.raise_for_status()
+                    else:
+                        raise
+
+                result = resp.json()
+                if "name" not in result:
+                    raise RuntimeError(f"ComfyUI mask upload returned unexpected response: {result}")
+
+                return {
+                    "name": result["name"],
+                    "subfolder": result.get("subfolder", subfolder),
+                    "type": result.get("type", "input"),
+                }
+        except httpx.HTTPStatusError as http_err:
+            raise RuntimeError(f"ComfyUI mask upload failed with status {http_err.response.status_code}: {http_err}") from http_err
+        except Exception as err:
+            raise RuntimeError(f"Failed to upload mask to ComfyUI: {err}") from err
+
 
 # Global default ComfyUI client instance
 comfy_client = ComfyUIClient()
