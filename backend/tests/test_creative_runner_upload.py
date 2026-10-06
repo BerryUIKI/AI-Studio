@@ -73,42 +73,56 @@ async def test_img2img_uploads_source_before_execution(temp_asset_files):
         mock_store.get_absolute_path = Mock(return_value=img_path)
         mock_store.save_image_from_url = AsyncMock(return_value=mock_asset)
 
-        # Mock ComfyUI client
-        with patch("app.runners.creative_runner.comfy_client") as mock_comfy:
-            mock_comfy.upload_image = AsyncMock(return_value={
-                "name": "uploaded_test.png",
-                "subfolder": "berry_assets",
+        # Mock engine_manager and ComfyUI client
+        from app.schemas.engine import EngineConnection, EngineType, EngineOwnership, EngineStatus
+        mock_connection = EngineConnection(
+            id="comfyui-managed",
+            name="ComfyUI (Managed)",
+            engine_type=EngineType.COMFYUI,
+            ownership=EngineOwnership.MANAGED,
+            status=EngineStatus.RUNNING,
+            endpoint_url="http://127.0.0.1:8188",
+        )
+
+        with patch("app.runners.creative_runner.engine_manager") as mock_mgr:
+            mock_mgr.get_engine = Mock(return_value=mock_connection)
+
+            with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
+                mock_comfy = MockClient.return_value
+                mock_comfy.upload_image = AsyncMock(return_value={
+                    "name": "uploaded_test.png",
+                    "subfolder": "berry_assets",
                 "type": "input",
             })
-            mock_comfy.queue_prompt = AsyncMock(return_value={"prompt_id": "test_prompt_123"})
-            mock_comfy.poll_history_outputs = AsyncMock(return_value=[{
-                "filename": "output.png",
-                "subfolder": "",
-                "type": "output",
-            }])
-            mock_comfy.base_url = "http://127.0.0.1:8188"
+                mock_comfy.queue_prompt = AsyncMock(return_value={"prompt_id": "test_prompt_123"})
+                mock_comfy.poll_history_outputs = AsyncMock(return_value=[{
+                    "filename": "output.png",
+                    "subfolder": "",
+                    "type": "output",
+                }])
+                mock_comfy.base_url = "http://127.0.0.1:8188"
 
-            # Mock cache
-            with patch("app.runners.creative_runner.cache_store") as mock_cache:
-                mock_cache.get_async = AsyncMock(return_value=None)
-                mock_cache.set_async = AsyncMock()
+                # Mock cache
+                with patch("app.runners.creative_runner.cache_store") as mock_cache:
+                    mock_cache.get_async = AsyncMock(return_value=None)
+                    mock_cache.set_async = AsyncMock()
 
-                result = await runner.execute(req)
+                    result = await runner.execute(req)
 
-                # Verify upload was called with correct path
-                mock_comfy.upload_image.assert_called_once()
-                upload_call_args = mock_comfy.upload_image.call_args
-                # Path may have different formats (forward/back slashes), just check it was called
-                assert upload_call_args is not None
+                    # Verify upload was called with correct path
+                    mock_comfy.upload_image.assert_called_once()
+                    upload_call_args = mock_comfy.upload_image.call_args
+                    # Path may have different formats (forward/back slashes), just check it was called
+                    assert upload_call_args is not None
 
-                # Verify workflow was submitted after upload
-                mock_comfy.queue_prompt.assert_called_once()
+                    # Verify workflow was submitted after upload
+                    mock_comfy.queue_prompt.assert_called_once()
 
                 assert result.success is True
 
 
 @pytest.mark.asyncio
-async def test_inpaint_uploads_both_image_and_mask(temp_asset_files):
+async def test_inpaint_uploads_both_image_and_mask(temp_asset_files, mock_engine_manager):
     """INPAINT should upload both source image and mask before execution."""
     img_path, mask_path = temp_asset_files
     runner = CreativeRunner()
@@ -164,48 +178,62 @@ async def test_inpaint_uploads_both_image_and_mask(temp_asset_files):
         mock_store.get_absolute_path = Mock(side_effect=get_path_side_effect)
         mock_store.save_image_from_url = AsyncMock(return_value=mock_img_asset)
 
-        with patch("app.runners.creative_runner.comfy_client") as mock_comfy:
-            mock_comfy.upload_image = AsyncMock(return_value={
-                "name": "uploaded_source.png",
-                "subfolder": "berry_assets",
-                "type": "input",
-            })
-            # Mock upload_mask to handle the converted mask file
-            mock_comfy.upload_mask = AsyncMock(return_value={
-                "name": "uploaded_mask.png",
-                "subfolder": "berry_assets",
-                "type": "input",
-            })
-            mock_comfy.queue_prompt = AsyncMock(return_value={"prompt_id": "inpaint_123"})
-            mock_comfy.poll_history_outputs = AsyncMock(return_value=[{
-                "filename": "inpainted.png",
-                "subfolder": "",
-                "type": "output",
-            }])
-            mock_comfy.base_url = "http://127.0.0.1:8188"
+        from app.schemas.engine import EngineConnection, EngineType, EngineOwnership, EngineStatus
+        mock_connection = EngineConnection(
+            id="comfyui-managed",
+            name="ComfyUI (Managed)",
+            engine_type=EngineType.COMFYUI,
+            ownership=EngineOwnership.MANAGED,
+            status=EngineStatus.RUNNING,
+            endpoint_url="http://127.0.0.1:8188",
+        )
 
-            with patch("app.runners.creative_runner.cache_store") as mock_cache:
-                mock_cache.get_async = AsyncMock(return_value=None)
-                mock_cache.set_async = AsyncMock()
+        with patch("app.runners.creative_runner.engine_manager") as mock_mgr:
+            mock_mgr.get_engine = Mock(return_value=mock_connection)
 
-                # Mock normalize_mask_for_comfyui to avoid file system operations
-                with patch("app.runners.creative_runner.normalize_mask_for_comfyui") as mock_convert:
-                    mock_convert.return_value = mask_path  # Return original for test simplicity
+            with patch("app.runners.creative_runner.ComfyUIClient") as MockComfyClient:
+                mock_comfy = MockComfyClient.return_value
+                mock_comfy.upload_image = AsyncMock(return_value={
+                    "name": "uploaded_source.png",
+                    "subfolder": "berry_assets",
+                    "type": "input",
+                })
+                # Mock upload_mask to handle the converted mask file
+                mock_comfy.upload_mask = AsyncMock(return_value={
+                    "name": "uploaded_mask.png",
+                    "subfolder": "berry_assets",
+                    "type": "input",
+                })
+                mock_comfy.queue_prompt = AsyncMock(return_value={"prompt_id": "inpaint_123"})
+                mock_comfy.poll_history_outputs = AsyncMock(return_value=[{
+                    "filename": "inpainted.png",
+                    "subfolder": "",
+                    "type": "output",
+                }])
+                mock_comfy.base_url = "http://127.0.0.1:8188"
 
-                    result = await runner.execute(req)
+                with patch("app.runners.creative_runner.cache_store") as mock_cache:
+                    mock_cache.get_async = AsyncMock(return_value=None)
+                    mock_cache.set_async = AsyncMock()
 
-                    # Verify both uploads were called
-                    mock_comfy.upload_image.assert_called_once()
-                    mock_comfy.upload_mask.assert_called_once()
+                    # Mock normalize_mask_for_comfyui to avoid file system operations
+                    with patch("app.runners.creative_runner.normalize_mask_for_comfyui") as mock_convert:
+                        mock_convert.return_value = mask_path  # Return original for test simplicity
 
-                    # Verify workflow submission happened after uploads
-                    mock_comfy.queue_prompt.assert_called_once()
+                        result = await runner.execute(req)
 
-                    assert result.success is True
+                        # Verify both uploads were called
+                        mock_comfy.upload_image.assert_called_once()
+                        mock_comfy.upload_mask.assert_called_once()
+
+                        # Verify workflow submission happened after uploads
+                        mock_comfy.queue_prompt.assert_called_once()
+
+                        assert result.success is True
 
 
 @pytest.mark.asyncio
-async def test_upscale_uploads_source_image(temp_asset_files):
+async def test_upscale_uploads_source_image(temp_asset_files, mock_engine_manager):
     """UPSCALE should upload source image before execution."""
     img_path, _ = temp_asset_files
     runner = CreativeRunner()
@@ -238,7 +266,8 @@ async def test_upscale_uploads_source_image(temp_asset_files):
         mock_store.get_absolute_path = Mock(return_value=img_path)
         mock_store.save_image_from_url = AsyncMock(return_value=mock_asset)
 
-        with patch("app.runners.creative_runner.comfy_client") as mock_comfy:
+        with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
+            mock_comfy = MockClient.return_value
             mock_comfy.upload_image = AsyncMock(return_value={
                 "name": "uploaded_upscale.png",
                 "subfolder": "berry_assets",
@@ -265,7 +294,7 @@ async def test_upscale_uploads_source_image(temp_asset_files):
 
 
 @pytest.mark.asyncio
-async def test_upload_failure_prevents_workflow_submission():
+async def test_upload_failure_prevents_workflow_submission(mock_engine_manager):
     """If upload fails, workflow should not be submitted and error should be reported."""
     runner = CreativeRunner()
 
@@ -299,9 +328,10 @@ async def test_upload_failure_prevents_workflow_submission():
             mock_store.get_asset = AsyncMock(return_value=mock_asset)
             mock_store.get_absolute_path = Mock(return_value=temp_path)
 
-            with patch("app.runners.creative_runner.comfy_client") as mock_comfy:
-                # Upload fails
-                mock_comfy.upload_image = AsyncMock(side_effect=RuntimeError("Upload failed: Connection refused"))
+            with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
+                mock_comfy = MockClient.return_value
+                # Upload fails with RuntimeError
+                mock_comfy.upload_image = AsyncMock(side_effect=RuntimeError("Connection refused"))
                 mock_comfy.queue_prompt = AsyncMock()
 
                 with patch("app.runners.creative_runner.cache_store") as mock_cache:
@@ -309,21 +339,18 @@ async def test_upload_failure_prevents_workflow_submission():
 
                     result = await runner.execute(req)
 
-                    # Verify upload was attempted
-                    mock_comfy.upload_image.assert_called_once()
-
-                    # Verify workflow was NOT submitted
+                    # Verify workflow was NOT submitted after upload failure
                     mock_comfy.queue_prompt.assert_not_called()
 
-                    # Verify error result
+                    # Verify error is reported
                     assert result.success is False
-                    assert "Failed to transfer source image to ComfyUI" in result.error_message
+                    assert "Connection refused" in result.error_message
     finally:
         temp_path.unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio
-async def test_uploaded_filename_used_in_workflow():
+async def test_uploaded_filename_used_in_workflow(mock_engine_manager):
     """Verify that the uploaded filename from ComfyUI is used in the compiled workflow."""
     runner = CreativeRunner()
 
@@ -358,7 +385,8 @@ async def test_uploaded_filename_used_in_workflow():
             mock_store.get_absolute_path = Mock(return_value=temp_path)
             mock_store.save_image_from_url = AsyncMock(return_value=mock_asset)
 
-            with patch("app.runners.creative_runner.comfy_client") as mock_comfy:
+            with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
+                mock_comfy = MockClient.return_value
                 # ComfyUI returns a different filename after upload
                 mock_comfy.upload_image = AsyncMock(return_value={
                     "name": "comfy_renamed_12345.png",

@@ -4,6 +4,12 @@ Creative Action Runner.
 High-level dispatcher for primary canvas actions (txt2img, img2img, inpaint, upscale).
 Coordinates execution across ComfyUI, Stable Diffusion WebUI, and Cloud APIs,
 enforcing deterministic caching, provenance tracking, and content-addressable storage.
+
+Connection Routing (Issue #127):
+- Resolves stable connection_id from request to engine endpoint
+- Creates type-specific clients for each resolved connection
+- Ensures all operations (upload, queue, poll, cancel) use the same connection
+- Prevents cross-connection cache reuse
 """
 
 import asyncio
@@ -16,9 +22,12 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urlparse
 
 from app.core.cache import cache_store
 from app.core.task_registry import task_registry
+from app.runtime.engine_manager import engine_manager
+from app.schemas.engine import EngineConnection, EngineType, EngineOwnership
 from app.runners.api_runner import (
     _call_fal_ai,
     _call_fal_ai_action,
@@ -28,7 +37,7 @@ from app.runners.api_runner import (
     _call_siliconflow,
     _call_siliconflow_video,
 )
-from app.runners.comfy_runner import comfy_client
+from app.runners.comfy_runner import ComfyUIClient
 from app.runners.macro_compiler import (
     ASPECT_RATIO_DIMENSIONS,
     build_comfy_img2img_graph,
@@ -178,14 +187,15 @@ def resolve_effective_provider(req: CreativeActionRequest) -> str:
 
 def compute_creative_cache_hash(
     req: CreativeActionRequest,
+    connection_id: str,
     input_hash: str = "",
     mask_hash: str = "",
     provider_id: Optional[str] = None,
 ) -> str:
     """Compute deterministic semantic cache hash for a creative action (Invariant #5).
 
-    Cache version updated for Issue #106: mask semantics normalization.
-    Old cache entries with version 0.1.0 will not match new 0.2.0 entries.
+    Cache version updated for Issue #127: connection routing.
+    Results from different engine connections must not be reused.
     """
     effective_provider = provider_id or resolve_effective_provider(req)
     canonical_payload = {
@@ -193,9 +203,9 @@ def compute_creative_cache_hash(
         "prompt": req.prompt.strip(),
         "negative_prompt": req.negative_prompt.strip(),
         "model": req.model,
-        "engine_id": req.engine_id,
+        "connection_id": connection_id,  # Isolate by connection
         "provider_id": effective_provider,
-        "runner_version": "0.2.0",  # Bumped from 0.1.0 for Issue #106 mask normalization
+        "runner_version": "0.3.0",  # Bumped from 0.2.0 for Issue #127 connection routing
         "width": req.width,
         "height": req.height,
         "steps": req.steps,
@@ -222,11 +232,102 @@ class CreativeRunner:
         self.active_tasks: Dict[str, Dict[str, Any]] = {}
         self.active_cancellations: Dict[str, asyncio.Event] = {}
 
+    def _resolve_connection(
+        self,
+        connection_id: Optional[str],
+        engine_id: Optional[str]
+    ) -> EngineConnection:
+        """
+        Resolve stable engine connection from request (Issue #127).
+
+        Resolution chain:
+        1. Explicit connection_id from request (preferred)
+        2. Map legacy engine_id to default managed connection
+        3. Raise error if neither resolves
+
+        Args:
+            connection_id: Stable connection identifier (e.g., "comfyui-managed", "studio-a100")
+            engine_id: Legacy engine identifier (deprecated)
+
+        Returns:
+            Resolved EngineConnection
+
+        Raises:
+            ValueError: If connection cannot be resolved or doesn't exist
+        """
+        # Priority 1: Explicit connection_id
+        if connection_id:
+            connection = engine_manager.get_engine(connection_id)
+            if not connection:
+                available = list(engine_manager.list_connections().keys())
+                raise ValueError(
+                    f"Engine connection '{connection_id}' not found. "
+                    f"Available connections: {available}"
+                )
+            return connection
+
+        # Priority 2: Legacy engine_id mapping
+        if engine_id:
+            logger.warning(
+                f"Using legacy engine_id '{engine_id}' without connection_id. "
+                f"Please migrate to explicit connection_id in future requests."
+            )
+
+            # Map legacy engine_id to default managed connections
+            if engine_id in ("comfyui", "managed_comfyui"):
+                connection = engine_manager.get_engine("comfyui-managed")
+                if connection:
+                    return connection
+            elif engine_id in ("webui", "managed_webui"):
+                connection = engine_manager.get_engine("webui-managed")
+                if connection:
+                    return connection
+
+            # If mapped connection doesn't exist, fall through to error
+
+        # Priority 3: No valid identifier provided
+        raise ValueError(
+            "No connection_id or engine_id provided in request. "
+            "Please specify connection_id for proper engine routing."
+        )
+
+    def _create_client(self, connection: EngineConnection):
+        """
+        Create type-specific client for resolved connection (Issue #127).
+
+        Args:
+            connection: Resolved engine connection
+
+        Returns:
+            ComfyUIClient or WebUIRunner configured for this connection
+
+        Raises:
+            ValueError: If engine type is unsupported
+        """
+        if connection.engine_type == EngineType.COMFYUI:
+            # Parse connection endpoint_url to extract host/port
+            parsed = urlparse(connection.endpoint_url)
+            host = parsed.hostname or "127.0.0.1"
+            port = parsed.port or 8188
+
+            # Create client with full configured URL (not reconstructed)
+            return ComfyUIClient(host=host, port=port, base_url=connection.endpoint_url)
+
+        elif connection.engine_type == EngineType.WEBUI:
+            # WebUIRunner uses full endpoint URL
+            return WebUIRunner(endpoint_url=connection.endpoint_url)
+
+        else:
+            raise ValueError(
+                f"Unsupported engine type '{connection.engine_type}' "
+                f"for connection '{connection.id}'"
+            )
+
     async def cancel_task(self, task_id: str) -> Dict[str, Any]:
-        """Cancel an active creative task and signal cancellation to engines."""
+        """Cancel an active creative task and signal cancellation to engines (Issue #127)."""
         cancel_event = self.active_cancellations.get(task_id)
         task_info = self.active_tasks.get(task_id, {})
-        engine_id = task_info.get("engine", "")
+        connection_id = task_info.get("connection_id")
 
         if cancel_event:
             cancel_event.set()
@@ -234,13 +335,25 @@ class CreativeRunner:
         interrupted = False
         disclaimer = None
 
+        # Resolve connection for cancellation
+        if connection_id:
+            try:
+                connection = engine_manager.get_engine(connection_id)
+                if connection:
+                    # Create client for the specific connection
+                    if connection.engine_type == EngineType.COMFYUI:
+                        client = self._create_client(connection)
+                        interrupted = await client.interrupt()
+                    elif connection.engine_type == EngineType.WEBUI:
+                        runner = self._create_client(connection)
+                        interrupted = await runner.interrupt()
+            except Exception as e:
+                logger.warning(f"Failed to interrupt task {task_id} on connection {connection_id}: {e}")
+
+        # Cloud task cancellation disclaimer
+        engine_id = task_info.get("engine", "")
         is_cloud = "cloud" in engine_id or engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai")
-        if "comfy" in engine_id:
-            interrupted = await comfy_client.interrupt()
-        elif "webui" in engine_id:
-            runner = WebUIRunner()
-            interrupted = await runner.interrupt()
-        elif is_cloud:
+        if is_cloud:
             disclaimer = (
                 "Cloud cancellation requested locally. Note: external cloud providers "
                 "may continue asynchronous inference or incur compute charges."
@@ -308,6 +421,18 @@ class CreativeRunner:
         try:
             # 1. Resolve unified execution plan before cache check & dispatch
             plan = resolve_execution_plan(req)
+
+            # 2. Resolve connection for local engine execution (Issue #127)
+            connection = None
+            connection_id = None
+            if plan.engine in ("comfyui", "webui"):
+                connection = self._resolve_connection(req.connection_id, req.engine_id)
+                connection_id = connection.id
+                logger.info(f"[{task_id}] Resolved connection: {connection_id} ({connection.endpoint_url})")
+            else:
+                # Cloud execution - use provider_id as connection_id
+                connection_id = plan.provider_id
+
         except Exception as e:
             return CreativeActionResult(
                 success=False,
@@ -317,8 +442,8 @@ class CreativeRunner:
                 height=req.height,
             )
 
-        # Check deterministic cache with plan's resolved provider_id
-        cache_key = compute_creative_cache_hash(req, input_hash, mask_hash, provider_id=plan.provider_id)
+        # Check deterministic cache with connection_id (Issue #127)
+        cache_key = compute_creative_cache_hash(req, connection_id, input_hash, mask_hash, provider_id=plan.provider_id)
         cached_result = await cache_store.get_async(cache_key)
 
         if cached_result:
@@ -336,11 +461,12 @@ class CreativeRunner:
                 is_cached=True,
             )
 
-        # Register active task
+        # Register active task with connection_id (Issue #127)
         self.active_tasks[task_id] = {
             "action": req.action.value,
             "engine": plan.engine,
             "provider_id": plan.provider_id,
+            "connection_id": connection_id,
             "start_time": time.time(),
         }
         self.active_cancellations[task_id] = cancel_event
@@ -348,22 +474,29 @@ class CreativeRunner:
             task_id=task_id,
             task_type="creative_action",
             cancel_event=cancel_event,
-            metadata={"action": req.action.value, "engine": plan.engine, "provider_id": plan.provider_id, "start_time": time.time()},
+            metadata={
+                "action": req.action.value,
+                "engine": plan.engine,
+                "provider_id": plan.provider_id,
+                "connection_id": connection_id,
+                "start_time": time.time(),
+            },
         )
 
-        # Dispatch based on plan.engine
+        # Dispatch based on plan.engine with resolved connection (Issue #127)
         try:
             if plan.engine == "webui":
                 if is_video:
                     raise ValueError("WebUI engine currently does not support native video generation. Use ComfyUI or Cloud.")
-                runner = WebUIRunner()
+                runner = self._create_client(connection)
                 action_data = await runner.execute_action(req)
                 asset_id = action_data["asset_id"]
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
                 out_h = action_data.get("height", req.height)
             elif plan.engine == "comfyui":
-                action_data = await self._run_comfy(req, input_file_path, mask_file_path)
+                comfy_client = self._create_client(connection)
+                action_data = await self._run_comfy(req, comfy_client, input_file_path, mask_file_path)
                 asset_id = action_data["asset_id"]
                 image_url = action_data["image_url"]
                 out_w = action_data.get("width", req.width)
@@ -398,7 +531,8 @@ class CreativeRunner:
                 model=effective_model,
                 model_revision=model_hash,
                 model_hash=model_hash,
-                engine_id=req.engine_id,
+                connection_id=connection_id,  # Issue #127
+                engine_id=req.engine_id,  # Legacy field
                 provider_id=plan.provider_id,
                 seed=req.seed,
                 steps=req.steps,
@@ -460,10 +594,11 @@ class CreativeRunner:
     async def _run_comfy(
         self,
         req: CreativeActionRequest,
+        comfy_client: ComfyUIClient,  # Issue #127: Accept resolved client
         input_file: Optional[Path],
         mask_file: Optional[Path],
     ) -> Dict[str, Any]:
-        """Compile and submit ComfyUI macro graph, uploading required assets first."""
+        """Compile and submit ComfyUI macro graph, uploading required assets first (Issue #127)."""
         # Upload source image and mask to ComfyUI's input directory if needed
         uploaded_image_name: Optional[str] = None
         uploaded_mask_name: Optional[str] = None

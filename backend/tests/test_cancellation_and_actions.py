@@ -25,7 +25,7 @@ def client():
     return TestClient(app)
 
 
-def test_list_active_tasks_and_cancel_endpoints(client):
+def test_list_active_tasks_and_cancel_endpoints(client, mock_engine_manager):
     """R14: Test listing active tasks and canceling via REST endpoints."""
     # Register mock workflow run
     run_id = "test-workflow-run-123"
@@ -37,6 +37,7 @@ def test_list_active_tasks_and_cancel_endpoints(client):
     creative_runner.active_tasks[task_id] = {
         "action": "txt2img",
         "engine": "managed_comfyui",
+        "connection_id": "comfyui-managed",
         "start_time": 1000.0,
     }
     task_cancel_evt = asyncio.Event()
@@ -58,13 +59,14 @@ def test_list_active_tasks_and_cancel_endpoints(client):
         assert cancel_evt.is_set()
 
         # 3. Cancel creative action (ComfyUI interrupt)
-        with patch.object(comfy_client, "interrupt", new_callable=AsyncMock) as mock_interrupt:
-            mock_interrupt.return_value = True
+        with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
+            mock_comfy = MockClient.return_value
+            mock_comfy.interrupt = AsyncMock(return_value=True)
             resp_cancel_cr = client.post(f"/api/v1/tasks/{task_id}/cancel")
             assert resp_cancel_cr.status_code == 200
             assert task_cancel_evt.is_set()
             assert resp_cancel_cr.json()["engine_interrupted"] is True
-            mock_interrupt.assert_awaited_once()
+            mock_comfy.interrupt.assert_awaited_once()
 
     finally:
         active_cancellations.pop(run_id, None)

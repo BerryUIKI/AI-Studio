@@ -31,11 +31,12 @@ logger = logging.getLogger(__name__)
 class ComfyUIClient:
     """Client for communicating with ComfyUI REST API and WebSocket events."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8188, timeout: float = 5.0) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int = 8188, timeout: float = 5.0, base_url: Optional[str] = None) -> None:
         self.host = host
         self.port = port
         self.timeout = timeout
-        self.base_url = f"http://{self.host}:{self.port}"
+        # Use provided base_url if given, otherwise construct from host:port (Issue #127)
+        self.base_url = base_url if base_url else f"http://{self.host}:{self.port}"
         self.ws_url = f"ws://{self.host}:{self.port}/ws"
         self._client: Optional[httpx.AsyncClient] = None
 

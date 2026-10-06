@@ -119,8 +119,8 @@ async def test_cache_key_and_provenance_reflect_resolved_provider():
 
     # 1. Cache key uses resolved provider
     plan = resolve_execution_plan(req)
-    cache_key = compute_creative_cache_hash(req, provider_id=plan.provider_id)
-    assert cache_key == compute_creative_cache_hash(req)
+    cache_key = compute_creative_cache_hash(req, connection_id="comfyui-managed", provider_id=plan.provider_id)
+    assert cache_key == compute_creative_cache_hash(req, connection_id="comfyui-managed")
 
     # 2. Execution records provenance.provider_id
     with patch.object(credentials_manager, "get_key", return_value="fake-fal-key"), \

@@ -145,7 +145,7 @@ def test_scenario_4_failure_recovery_actionable_states():
 
 
 @pytest.mark.asyncio
-async def test_scenario_5_persistence_and_caching_across_restarts():
+async def test_scenario_5_persistence_and_caching_across_restarts(mock_engine_manager):
     """Scenario 5: Restart preserves cache and deterministic reuse."""
     runner = CreativeRunner()
     unique_prompt = f"tranquil forest {uuid.uuid4()}"
