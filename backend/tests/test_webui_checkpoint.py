@@ -14,17 +14,24 @@ import json
 import uuid
 import httpx
 import pytest
+from PIL import Image
+from io import BytesIO
 
 from app.runners.creative_runner import CreativeRunner
 from app.runners.webui_runner import WebUIRunner
 from app.schemas.creative import CreativeActionRequest, CreativeActionType
 from app.storage.asset_store import asset_store
 
-DUMMY_PNG_BYTES = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4"
-    b"\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+
+def create_dummy_png(width: int = 512, height: int = 512) -> bytes:
+    """Create a valid PNG for testing."""
+    img = Image.new("RGBA", (width, height), color=(255, 255, 255, 255))
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
+DUMMY_PNG_BYTES = create_dummy_png()
 B64_DUMMY = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
 AVAILABLE_MODELS = [
