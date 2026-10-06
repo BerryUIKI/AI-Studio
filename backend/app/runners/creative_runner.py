@@ -257,7 +257,7 @@ class CreativeRunner:
         """
         # Priority 1: Explicit connection_id
         if connection_id:
-            connection = engine_manager.get_connection(connection_id)
+            connection = engine_manager.get_engine(connection_id)
             if not connection:
                 available = list(engine_manager.list_connections().keys())
                 raise ValueError(
@@ -275,11 +275,11 @@ class CreativeRunner:
 
             # Map legacy engine_id to default managed connections
             if engine_id in ("comfyui", "managed_comfyui"):
-                connection = engine_manager.get_connection("comfyui-managed")
+                connection = engine_manager.get_engine("comfyui-managed")
                 if connection:
                     return connection
             elif engine_id in ("webui", "managed_webui"):
-                connection = engine_manager.get_connection("webui-managed")
+                connection = engine_manager.get_engine("webui-managed")
                 if connection:
                     return connection
 
@@ -338,7 +338,7 @@ class CreativeRunner:
         # Resolve connection for cancellation
         if connection_id:
             try:
-                connection = engine_manager.get_connection(connection_id)
+                connection = engine_manager.get_engine(connection_id)
                 if connection:
                     # Create client for the specific connection
                     if connection.engine_type == EngineType.COMFYUI:
