@@ -263,11 +263,44 @@ def build_comfy_inpaint_graph(
     return graph
 
 
+def get_upscaler_native_factor(model_name: str) -> float:
+    """Infer native scale factor of an upscaler model from its identifier."""
+    name_lower = model_name.lower()
+    if "2x" in name_lower:
+        return 2.0
+    if "8x" in name_lower:
+        return 8.0
+    if "1x" in name_lower:
+        return 1.0
+    # Standard RealESRGAN_x4plus, 4x-UltraSharp, etc. are 4x
+    return 4.0
+
+
 def build_comfy_upscale_graph(
     image_filename: str,
     upscaler_model: str = "RealESRGAN_x4plus.pth",
+    upscale_factor: float = 2.0,
+    source_width: Optional[int] = None,
+    source_height: Optional[int] = None,
+    target_width: Optional[int] = None,
+    target_height: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Compile an upscaling request into a ComfyUI prompt graph."""
+    """Compile an upscaling request into a ComfyUI prompt graph with explicit factor scaling."""
+    native_factor = get_upscaler_native_factor(upscaler_model)
+
+    target_w = target_width
+    target_h = target_height
+    if source_width and source_height:
+        if not target_w:
+            target_w = int(round(source_width * upscale_factor))
+        if not target_h:
+            target_h = int(round(source_height * upscale_factor))
+        native_w = int(round(source_width * native_factor))
+        native_h = int(round(source_height * native_factor))
+        needs_rescaling = (target_w != native_w) or (target_h != native_h) or (upscale_factor != native_factor)
+    else:
+        needs_rescaling = bool(upscale_factor != native_factor or target_w or target_h)
+
     graph: Dict[str, Any] = {}
 
     graph["1"] = {
@@ -288,10 +321,38 @@ def build_comfy_upscale_graph(
         },
     }
 
-    graph["4"] = {
-        "class_type": "SaveImage",
-        "inputs": {"filename_prefix": "Berry-Upscale", "images": ["3", 0]},
-    }
+    if needs_rescaling:
+        if target_w and target_h:
+            graph["4"] = {
+                "class_type": "ImageScale",
+                "inputs": {
+                    "image": ["3", 0],
+                    "upscale_method": "lanczos",
+                    "width": target_w,
+                    "height": target_h,
+                    "crop": "disabled",
+                },
+            }
+        else:
+            scale_by = round(upscale_factor / native_factor, 4)
+            graph["4"] = {
+                "class_type": "ImageScaleBy",
+                "inputs": {
+                    "image": ["3", 0],
+                    "upscale_method": "lanczos",
+                    "scale_by": scale_by,
+                },
+            }
+
+        graph["5"] = {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": "Berry-Upscale", "images": ["4", 0]},
+        }
+    else:
+        graph["4"] = {
+            "class_type": "SaveImage",
+            "inputs": {"filename_prefix": "Berry-Upscale", "images": ["3", 0]},
+        }
 
     return graph
 
