@@ -70,6 +70,9 @@ from app.schemas.cloud import (
     TestKeyResult,
 )
 from app.schemas.engine import (
+    EngineConfig,
+    EngineConfigResponse,
+    EngineConfigUpdateRequest,
     EngineConnection,
     EngineConnectRequest,
     EngineInstallManifest,
@@ -632,6 +635,51 @@ async def unbind_external_engine(instance_id: str) -> dict[str, Any]:
     if not success:
         raise HTTPException(status_code=404, detail=f"Engine instance '{instance_id}' not found")
     return {"success": True, "message": f"Engine instance '{instance_id}' unbound successfully"}
+
+
+@app.get("/api/v1/engines/{instance_id}/config", response_model=EngineConfig)
+async def get_engine_config(instance_id: str) -> EngineConfig:
+    """Retrieve persistent configuration (port, extra CLI arguments) for an engine instance."""
+    try:
+        return engine_manager.get_engine_config(instance_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/v1/engines/{instance_id}/config", response_model=EngineConfigResponse)
+@app.put("/api/v1/engines/{instance_id}/config", response_model=EngineConfigResponse)
+async def update_engine_config(instance_id: str, request: EngineConfigUpdateRequest) -> EngineConfigResponse:
+    """
+    Persist engine configuration (port, launch arguments).
+    Applies immediately to connection routing, updates supervisor launch settings,
+    and indicates whether a running engine requires a restart.
+    """
+    try:
+        cfg, requires_restart = engine_manager.save_engine_config(
+            instance_id=instance_id,
+            port=request.port,
+            extra_args=request.extra_args,
+        )
+        msg = "Configuration saved successfully."
+        if requires_restart:
+            msg = "Configuration saved. Engine restart is required for changes to take effect."
+        return EngineConfigResponse(
+            success=True,
+            instance_id=cfg.instance_id,
+            port=cfg.port,
+            extra_args=cfg.extra_args,
+            requires_restart=requires_restart,
+            message=msg,
+        )
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to save engine configuration: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to persist engine configuration: {e}")
 
 
 @app.get("/api/v1/runtime/{instance_id}/logs", response_model=EngineLogResponse)
