@@ -4,27 +4,33 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 import tempfile
-
-PNG_BYTES = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4"
-    b"\x00\x00\x00\x00IEND\xaeB`\x82"
-)
+from PIL import Image
+from io import BytesIO
 
 from app.runners.creative_runner import CreativeRunner
 from app.schemas.creative import CreativeActionRequest, CreativeActionType
 from app.storage.asset_store import AssetRecord
 
 
+def create_test_png(width: int, height: int, mode: str = "RGB") -> bytes:
+    """Create a valid PNG image as bytes."""
+    img = Image.new(mode, (width, height), color=(255, 255, 255, 255) if mode == "RGBA" else (255, 255, 255))
+    buf = BytesIO()
+    img.save(buf, "PNG")
+    return buf.getvalue()
+
+
 @pytest.fixture
 def temp_asset_files():
     """Create temporary image and mask files for testing."""
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as img_file:
-        img_file.write(PNG_BYTES)
+        img_file.write(create_test_png(512, 512, "RGB"))
+        img_file.flush()
         img_path = Path(img_file.name)
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as mask_file:
-        mask_file.write(PNG_BYTES)
+        mask_file.write(create_test_png(512, 512, "RGBA"))
+        mask_file.flush()
         mask_path = Path(mask_file.name)
 
     yield img_path, mask_path
@@ -164,6 +170,7 @@ async def test_inpaint_uploads_both_image_and_mask(temp_asset_files):
                 "subfolder": "berry_assets",
                 "type": "input",
             })
+            # Mock upload_mask to handle the converted mask file
             mock_comfy.upload_mask = AsyncMock(return_value={
                 "name": "uploaded_mask.png",
                 "subfolder": "berry_assets",
@@ -181,16 +188,20 @@ async def test_inpaint_uploads_both_image_and_mask(temp_asset_files):
                 mock_cache.get_async = AsyncMock(return_value=None)
                 mock_cache.set_async = AsyncMock()
 
-                result = await runner.execute(req)
+                # Mock normalize_mask_for_comfyui to avoid file system operations
+                with patch("app.runners.creative_runner.normalize_mask_for_comfyui") as mock_convert:
+                    mock_convert.return_value = mask_path  # Return original for test simplicity
 
-                # Verify both uploads were called
-                mock_comfy.upload_image.assert_called_once()
-                mock_comfy.upload_mask.assert_called_once()
+                    result = await runner.execute(req)
 
-                # Verify workflow submission happened after uploads
-                mock_comfy.queue_prompt.assert_called_once()
+                    # Verify both uploads were called
+                    mock_comfy.upload_image.assert_called_once()
+                    mock_comfy.upload_mask.assert_called_once()
 
-                assert result.success is True
+                    # Verify workflow submission happened after uploads
+                    mock_comfy.queue_prompt.assert_called_once()
+
+                    assert result.success is True
 
 
 @pytest.mark.asyncio
