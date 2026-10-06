@@ -30,9 +30,15 @@ def get_default_engine_dir() -> Path:
 class ComfySupervisor:
     """Supervisor managing the lifecycle of an isolated ComfyUI subprocess."""
 
-    def __init__(self, engine_dir: Optional[Path] = None, port: int = 8188) -> None:
+    def __init__(
+        self,
+        engine_dir: Optional[Path] = None,
+        port: int = 8188,
+        extra_args: Optional[List[str]] = None,
+    ) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
         self.port = port
+        self.extra_args: List[str] = list(extra_args) if extra_args else []
         self.runtime_dir = self.engine_dir / "runtime"
         self.comfy_dir = self.engine_dir / "comfyui"
         self.models_dir = self.engine_dir / "models"
@@ -167,6 +173,7 @@ berry_shared:
             "running": pid is not None,
             "pid": pid,
             "port": self.port,
+            "extra_args": list(self.extra_args),
             "engine_dir": str(self.engine_dir),
             "runtime_dir": str(self.runtime_dir),
             "comfy_dir": str(self.comfy_dir),
@@ -222,6 +229,11 @@ berry_shared:
             str(extra_paths_config),
             *hw_flags,
         ]
+
+        # Append configured extra launch arguments (avoid exact duplicates)
+        for arg in self.extra_args:
+            if arg not in cmd:
+                cmd.append(arg)
 
         try:
             self.ensure_directories()

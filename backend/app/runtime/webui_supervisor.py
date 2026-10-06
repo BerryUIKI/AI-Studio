@@ -24,9 +24,15 @@ logger = logging.getLogger(__name__)
 class WebUISupervisor:
     """Supervisor managing the lifecycle of an isolated Stable Diffusion WebUI subprocess."""
 
-    def __init__(self, engine_dir: Optional[Path] = None, port: int = 7860) -> None:
+    def __init__(
+        self,
+        engine_dir: Optional[Path] = None,
+        port: int = 7860,
+        extra_args: Optional[List[str]] = None,
+    ) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
         self.port = port
+        self.extra_args: List[str] = list(extra_args) if extra_args else []
         self.webui_dir = self.engine_dir / "webui"
         self.runtime_dir = self.engine_dir / "webui_runtime"
         self.models_dir = self.engine_dir / "models"
@@ -154,6 +160,7 @@ class WebUISupervisor:
             "running": pid is not None,
             "pid": pid,
             "port": self.port,
+            "extra_args": list(self.extra_args),
             "engine_dir": str(self.engine_dir),
             "webui_dir": str(self.webui_dir),
             "runtime_dir": str(self.runtime_dir),
@@ -236,6 +243,11 @@ class WebUISupervisor:
             "--vae-dir",
             str(self.models_dir / "vae"),
         ]
+
+        # Append configured extra launch arguments (avoid exact duplicates)
+        for arg in self.extra_args:
+            if arg not in cmd:
+                cmd.append(arg)
 
         try:
             self.ensure_directories()
