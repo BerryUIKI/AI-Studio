@@ -5,11 +5,32 @@ import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 import httpx
 
 from app.schemas.project import AssetRecord
 from app.storage.db import DatabaseManager, db_manager, get_default_data_dir
+
+
+def _inspect_media_dimensions(data: bytes, filename: str) -> Tuple[Optional[int], Optional[int]]:
+    """Inspect media bytes to detect true pixel dimensions."""
+    try:
+        from app.core.media_validator import validate_and_inspect_media
+        _, w, h = validate_and_inspect_media(data, filename)
+        if w > 0 and h > 0:
+            return w, h
+    except Exception:
+        pass
+
+    try:
+        from PIL import Image
+        import io
+        with Image.open(io.BytesIO(data)) as img:
+            return img.width, img.height
+    except Exception:
+        pass
+
+    return None, None
 
 
 class AssetStore:
@@ -34,6 +55,8 @@ class AssetStore:
         filename: str,
         media_type: str = "image",
         project_id: Optional[str] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
     ) -> AssetRecord:
         content_hash = hashlib.sha256(data).hexdigest()
         byte_size = len(data)
@@ -57,6 +80,12 @@ class AssetStore:
         if not target_path.exists():
             target_path.write_bytes(data)
 
+        # Decode actual dimensions if not provided
+        if width is None or height is None or width <= 0 or height <= 0:
+            detected_w, detected_h = _inspect_media_dimensions(data, filename)
+            width = width or detected_w
+            height = height or detected_h
+
         asset_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         rel_path = str(target_path.relative_to(self.assets_dir))
@@ -67,7 +96,7 @@ class AssetStore:
             INSERT INTO assets (id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (asset_id, project_id, filename, rel_path, media_type, content_hash, byte_size, None, None, now),
+            (asset_id, project_id, filename, rel_path, media_type, content_hash, byte_size, width, height, now),
         )
         await conn.commit()
 
@@ -79,6 +108,8 @@ class AssetStore:
             media_type=media_type,
             content_hash=content_hash,
             byte_size=byte_size,
+            width=width,
+            height=height,
             created_at=now,
         )
 
@@ -122,6 +153,18 @@ class AssetStore:
             row = await cursor.fetchone()
             if not row:
                 return None
+
+            w = row["width"]
+            h = row["height"]
+            if (w is None or h is None) and row["media_type"] == "image":
+                disk_file = self.assets_dir / row["file_path"]
+                if disk_file.is_file():
+                    det_w, det_h = _inspect_media_dimensions(disk_file.read_bytes(), row["filename"])
+                    if det_w and det_h:
+                        w, h = det_w, det_h
+                        await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
+                        await conn.commit()
+
             return AssetRecord(
                 id=row["id"],
                 project_id=row["project_id"],
@@ -130,8 +173,8 @@ class AssetStore:
                 media_type=row["media_type"],
                 content_hash=row["content_hash"],
                 byte_size=row["byte_size"],
-                width=row["width"],
-                height=row["height"],
+                width=w,
+                height=h,
                 created_at=row["created_at"],
             )
 
@@ -147,6 +190,18 @@ class AssetStore:
             row = await cursor.fetchone()
             if not row:
                 return None
+
+            w = row["width"]
+            h = row["height"]
+            if (w is None or h is None) and row["media_type"] == "image":
+                disk_file = self.assets_dir / row["file_path"]
+                if disk_file.is_file():
+                    det_w, det_h = _inspect_media_dimensions(disk_file.read_bytes(), row["filename"])
+                    if det_w and det_h:
+                        w, h = det_w, det_h
+                        await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
+                        await conn.commit()
+
             return AssetRecord(
                 id=row["id"],
                 project_id=row["project_id"],
@@ -155,8 +210,8 @@ class AssetStore:
                 media_type=row["media_type"],
                 content_hash=row["content_hash"],
                 byte_size=row["byte_size"],
-                width=row["width"],
-                height=row["height"],
+                width=w,
+                height=h,
                 created_at=row["created_at"],
             )
 
