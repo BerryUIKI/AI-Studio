@@ -5,6 +5,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
 import tempfile
 
+PNG_BYTES = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4"
+    b"\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
 from app.runners.creative_runner import CreativeRunner
 from app.schemas.creative import CreativeActionRequest, CreativeActionType
 from app.storage.asset_store import AssetRecord
@@ -14,11 +20,11 @@ from app.storage.asset_store import AssetRecord
 def temp_asset_files():
     """Create temporary image and mask files for testing."""
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as img_file:
-        img_file.write(b"\x89PNG\r\n\x1a\n" + b"fake_image_data")
+        img_file.write(PNG_BYTES)
         img_path = Path(img_file.name)
 
     with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as mask_file:
-        mask_file.write(b"\x89PNG\r\n\x1a\n" + b"fake_mask_data")
+        mask_file.write(PNG_BYTES)
         mask_path = Path(mask_file.name)
 
     yield img_path, mask_path
@@ -367,8 +373,8 @@ async def test_uploaded_filename_used_in_workflow():
 
                     # The workflow should reference the ComfyUI-returned filename, not the original
                     workflow_str = str(queued_workflow)
-                    assert "berry_assets/comfy_renamed_12345.png" in workflow_str or "comfy_renamed_12345.png" in workflow_str
-                    assert "original.png" not in workflow_str or "berry_assets" in workflow_str
+                    assert "berry_assets/comfy_renamed_12345.png" in workflow_str
+                    assert "original.png" not in workflow_str
 
                     assert result.success is True
     finally:
