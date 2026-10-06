@@ -233,7 +233,7 @@ async def test_webui_img2img_and_inpaint_enforce_selected_checkpoint():
 
 
 @pytest.mark.asyncio
-async def test_creative_runner_webui_provenance_and_caching():
+async def test_creative_runner_webui_provenance_and_caching(mock_engine_manager):
     """Verify CreativeRunner records effective model & revision identity and preserves them across cache hits."""
     runner = CreativeRunner()
 
