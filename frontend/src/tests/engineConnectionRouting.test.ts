@@ -50,7 +50,7 @@ describe('Engine Connection Routing Integration', () => {
     });
 
     // Mock fetch
-    global.fetch = vi.fn();
+    globalThis.fetch = vi.fn();
   });
 
   describe('Connection ID Mapping', () => {
