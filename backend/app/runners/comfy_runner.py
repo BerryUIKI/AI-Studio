@@ -9,7 +9,9 @@ Polls /history for real output files and persists them to managed asset storage.
 import asyncio
 import json
 import logging
+import mimetypes
 import uuid
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 
@@ -212,31 +214,35 @@ class ComfyUIClient:
         Returns the engine's filename and subfolder references for use in LoadImage nodes.
         Raises RuntimeError if upload fails.
         """
-        from pathlib import Path
-
         file_path = Path(image_path)
-        if not file_path.is_file():
+        if not await asyncio.to_thread(file_path.is_file):
             raise FileNotFoundError(f"Image file not found: {image_path}")
 
         try:
             client = self._get_client()
 
-            with open(file_path, "rb") as f:
-                files = {"image": (file_path.name, f, "image/png")}
-                data = {"subfolder": subfolder, "overwrite": str(overwrite).lower()}
+            content = await asyncio.to_thread(file_path.read_bytes)
+            mime_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+            files = {"image": (file_path.name, content, mime_type)}
+            data = {"subfolder": subfolder, "overwrite": str(overwrite).lower(), "type": "input"}
+            resp = await client.post(f"{self.base_url}/upload/image", files=files, data=data)
+            resp.raise_for_status()
 
-                resp = await client.post(f"{self.base_url}/upload/image", files=files, data=data)
-                resp.raise_for_status()
+            result = resp.json()
+            if (
+                not isinstance(result, dict)
+                or not isinstance(result.get("name"), str)
+                or not result["name"].strip()
+                or not isinstance(result.get("subfolder", subfolder), str)
+                or result.get("type", "input") != "input"
+            ):
+                raise RuntimeError(f"ComfyUI upload returned unexpected response: {result}")
 
-                result = resp.json()
-                if "name" not in result:
-                    raise RuntimeError(f"ComfyUI upload returned unexpected response: {result}")
-
-                return {
-                    "name": result["name"],
-                    "subfolder": result.get("subfolder", subfolder),
-                    "type": result.get("type", "input"),
-                }
+            return {
+                "name": result["name"],
+                "subfolder": result.get("subfolder", subfolder),
+                "type": result.get("type", "input"),
+            }
         except httpx.HTTPStatusError as http_err:
             raise RuntimeError(f"ComfyUI upload failed with status {http_err.response.status_code}: {http_err}") from http_err
         except Exception as err:
@@ -244,50 +250,14 @@ class ComfyUIClient:
 
     async def upload_mask(self, mask_path: str, subfolder: str = "", overwrite: bool = False) -> Dict[str, Any]:
         """
-        Upload a mask image to ComfyUI's input directory via POST /upload/mask.
+        Upload an independent mask file without changing its pixel/alpha data.
 
-        Returns the engine's filename and subfolder references for use in LoadImageMask nodes.
-        Falls back to /upload/image if /upload/mask is not available.
-        Raises RuntimeError if upload fails.
+        ComfyUI's /upload/mask edits the alpha channel of an existing image and
+        requires original_ref. Our graphs load a separate mask asset, so both
+        source images and masks use /upload/image. Mask semantics are handled
+        separately by the inpainting adapter.
         """
-        from pathlib import Path
-
-        file_path = Path(mask_path)
-        if not file_path.is_file():
-            raise FileNotFoundError(f"Mask file not found: {mask_path}")
-
-        try:
-            client = self._get_client()
-
-            with open(file_path, "rb") as f:
-                files = {"image": (file_path.name, f, "image/png")}
-                data = {"subfolder": subfolder, "overwrite": str(overwrite).lower()}
-
-                # Try /upload/mask first, fall back to /upload/image
-                try:
-                    resp = await client.post(f"{self.base_url}/upload/mask", files=files, data=data)
-                    resp.raise_for_status()
-                except httpx.HTTPStatusError as mask_err:
-                    if mask_err.response.status_code == 404:
-                        logger.debug("ComfyUI /upload/mask not available, falling back to /upload/image")
-                        resp = await client.post(f"{self.base_url}/upload/image", files=files, data=data)
-                        resp.raise_for_status()
-                    else:
-                        raise
-
-                result = resp.json()
-                if "name" not in result:
-                    raise RuntimeError(f"ComfyUI mask upload returned unexpected response: {result}")
-
-                return {
-                    "name": result["name"],
-                    "subfolder": result.get("subfolder", subfolder),
-                    "type": result.get("type", "input"),
-                }
-        except httpx.HTTPStatusError as http_err:
-            raise RuntimeError(f"ComfyUI mask upload failed with status {http_err.response.status_code}: {http_err}") from http_err
-        except Exception as err:
-            raise RuntimeError(f"Failed to upload mask to ComfyUI: {err}") from err
+        return await self.upload_image(mask_path, subfolder=subfolder, overwrite=overwrite)
 
 
 # Global default ComfyUI client instance

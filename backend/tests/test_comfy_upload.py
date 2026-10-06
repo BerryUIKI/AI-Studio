@@ -1,222 +1,120 @@
-"""Tests for ComfyUI asset upload functionality (issue #105)."""
+"""Exercise real multipart serialization for ComfyUI asset transfers (#105)."""
 
-import pytest
+from email import policy
+from email.parser import BytesParser
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock, patch, mock_open
+from typing import Any
+
 import httpx
+import pytest
 
 from app.runners.comfy_runner import ComfyUIClient
 
 
 @pytest.mark.asyncio
-async def test_upload_image_success():
-    """Upload image should post to /upload/image and return engine filename."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
+@pytest.mark.parametrize("host,port", [("127.0.0.1", 8188), ("engine.example", 9000)])
+@pytest.mark.parametrize("method,suffix,mime", [
+    ("upload_image", ".jpg", "image/jpeg"),
+    ("upload_mask", ".png", "image/png"),
+])
+async def test_upload_preserves_bytes_and_uses_engine_reference(
+    tmp_path: Path, host: str, port: int, method: str, suffix: str, mime: str,
+) -> None:
+    source = tmp_path / f"original{suffix}"
+    content = b"\x00\xff\x80source-or-mask-bytes\r\n"
+    source.write_bytes(content)
+    requests: list[httpx.Request] = []
 
-    mock_response_data = {
-        "name": "berry_test_12345.png",
-        "subfolder": "berry_assets",
-        "type": "input",
-    }
-    mock_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/image")
-    mock_resp = httpx.Response(200, json=mock_response_data, request=mock_request)
+    async def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        assert str(request.url) == f"http://{host}:{port}/upload/image"
+        body = await request.aread()
+        message = BytesParser(policy=policy.default).parsebytes(
+            f"Content-Type: {request.headers['content-type']}\r\n\r\n".encode() + body
+        )
+        parts = {
+            part.get_param("name", header="content-disposition"): part
+            for part in message.iter_parts()
+        }
+        assert parts["image"].get_filename() == source.name
+        assert parts["image"].get_content_type() == mime
+        assert parts["image"].get_payload(decode=True) == content
+        assert parts["subfolder"].get_payload(decode=True) == b"berry_assets"
+        assert parts["type"].get_payload(decode=True) == b"input"
+        assert parts["overwrite"].get_payload(decode=True) == b"false"
+        return httpx.Response(200, json={
+            "name": "renamed (1).png", "subfolder": "engine/subfolder", "type": "input",
+        })
 
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"fake_image_data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.return_value = mock_resp
-
-                result = await c.upload_image("/fake/path/test.png", subfolder="berry_assets")
-
-                assert result["name"] == "berry_test_12345.png"
-                assert result["subfolder"] == "berry_assets"
-                assert result["type"] == "input"
-
-                # Verify the POST was called with correct endpoint
-                mock_post.assert_called_once()
-                call_args = mock_post.call_args
-                assert "/upload/image" in str(call_args)
-
-
-@pytest.mark.asyncio
-async def test_upload_image_file_not_found():
-    """Upload should raise FileNotFoundError if source image doesn't exist."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
-
-    with patch("pathlib.Path.is_file", return_value=False):
-        with pytest.raises(FileNotFoundError) as exc_info:
-            await c.upload_image("/nonexistent/image.png")
-
-        assert "not found" in str(exc_info.value).lower()
-
-
-@pytest.mark.asyncio
-async def test_upload_image_http_error():
-    """Upload should raise RuntimeError with meaningful message on HTTP error."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
-
-    mock_resp = httpx.Response(500, json={"error": "Internal server error"})
-    http_error = httpx.HTTPStatusError("Server error", request=Mock(), response=mock_resp)
-
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"fake_data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.side_effect = http_error
-
-                with pytest.raises(RuntimeError) as exc_info:
-                    await c.upload_image("/fake/test.png")
-
-                assert "ComfyUI upload failed" in str(exc_info.value)
-                assert "500" in str(exc_info.value)
+    client = ComfyUIClient(host=host, port=port)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+        client._client = transport
+        result = await getattr(client, method)(str(source), subfolder="berry_assets")
+    assert len(requests) == 1
+    assert result == {"name": "renamed (1).png", "subfolder": "engine/subfolder", "type": "input"}
+    assert source.read_bytes() == content
 
 
 @pytest.mark.asyncio
-async def test_upload_image_missing_name_in_response():
-    """Upload should raise RuntimeError if response lacks 'name' field."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
-
-    mock_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/image")
-    mock_resp = httpx.Response(200, json={"status": "ok"}, request=mock_request)  # Missing 'name'
-
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"fake_data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.return_value = mock_resp
-
-                with pytest.raises(RuntimeError) as exc_info:
-                    await c.upload_image("/fake/test.png")
-
-                assert "unexpected response" in str(exc_info.value).lower()
-
-
-@pytest.mark.asyncio
-async def test_upload_mask_success():
-    """Upload mask should post to /upload/mask and return engine filename."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
-
-    mock_response_data = {
-        "name": "mask_12345.png",
-        "subfolder": "berry_assets",
-        "type": "input",
-    }
-    mock_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/mask")
-    mock_resp = httpx.Response(200, json=mock_response_data, request=mock_request)
-
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"fake_mask_data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.return_value = mock_resp
-
-                result = await c.upload_mask("/fake/mask.png", subfolder="berry_assets")
-
-                assert result["name"] == "mask_12345.png"
-                assert result["subfolder"] == "berry_assets"
-
-                # Verify POST to /upload/mask
-                mock_post.assert_called_once()
-                call_args = mock_post.call_args
-                assert "/upload/mask" in str(call_args)
+@pytest.mark.parametrize("response", [
+    {}, {"name": ""}, {"name": None}, {"name": 12},
+    {"name": "x.png", "subfolder": None},
+    {"name": "x.png", "type": "output"}, [],
+])
+async def test_invalid_upload_reference_is_rejected(tmp_path: Path, response: Any) -> None:
+    source = tmp_path / "source.png"
+    source.write_bytes(b"data")
+    client = ComfyUIClient()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response))
+    ) as transport:
+        client._client = transport
+        with pytest.raises(RuntimeError, match="unexpected response"):
+            await client.upload_image(str(source))
 
 
 @pytest.mark.asyncio
-async def test_upload_mask_fallback_to_upload_image():
-    """Upload mask should fall back to /upload/image if /upload/mask returns 404."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
+async def test_upload_defaults_and_explicit_overwrite(tmp_path: Path) -> None:
+    source = tmp_path / "source.png"
+    source.write_bytes(b"data")
 
-    # First call to /upload/mask returns 404
-    mock_404_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/mask")
-    mock_404_resp = httpx.Response(404, json={"error": "Not found"}, request=mock_404_request)
-    mask_error = httpx.HTTPStatusError("Not found", request=mock_404_request, response=mock_404_resp)
+    async def handle(request: httpx.Request) -> httpx.Response:
+        assert b'\r\n\r\ntrue\r\n' in await request.aread()
+        return httpx.Response(200, json={"name": "renamed.png"})
 
-    # Second call to /upload/image succeeds
-    mock_success_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/image")
-    mock_success_resp = httpx.Response(200, json={
-        "name": "fallback_mask.png",
-        "subfolder": "berry_assets",
-        "type": "input",
-    }, request=mock_success_request)
-
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"fake_mask")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                # First call raises 404, second call succeeds
-                mock_post.side_effect = [mask_error, mock_success_resp]
-
-                result = await c.upload_mask("/fake/mask.png", subfolder="berry_assets")
-
-                assert result["name"] == "fallback_mask.png"
-                assert mock_post.call_count == 2
+    client = ComfyUIClient()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+        client._client = transport
+        result = await client.upload_image(str(source), subfolder="berry_assets", overwrite=True)
+    assert result == {"name": "renamed.png", "subfolder": "berry_assets", "type": "input"}
 
 
 @pytest.mark.asyncio
-async def test_upload_mask_file_not_found():
-    """Upload mask should raise FileNotFoundError if mask file doesn't exist."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
+@pytest.mark.parametrize("method", ["upload_image", "upload_mask"])
+async def test_missing_file_does_not_upload(tmp_path: Path, method: str) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        pytest.fail("Missing files must not send HTTP requests")
 
-    with patch("pathlib.Path.is_file", return_value=False):
-        with pytest.raises(FileNotFoundError) as exc_info:
-            await c.upload_mask("/nonexistent/mask.png")
-
-        assert "not found" in str(exc_info.value).lower()
-
-
-@pytest.mark.asyncio
-async def test_upload_handles_subfolder_correctly():
-    """Upload should include subfolder in request data and handle it in response."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
-
-    mock_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/image")
-    mock_resp = httpx.Response(200, json={
-        "name": "test.png",
-        "subfolder": "custom_folder",
-        "type": "input",
-    }, request=mock_request)
-
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.return_value = mock_resp
-
-                result = await c.upload_image("/fake/test.png", subfolder="custom_folder")
-
-                assert result["subfolder"] == "custom_folder"
-
-                # Check that subfolder was passed in the form data
-                call_kwargs = mock_post.call_args.kwargs
-                assert "data" in call_kwargs
-                assert call_kwargs["data"]["subfolder"] == "custom_folder"
+    client = ComfyUIClient()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+        client._client = transport
+        with pytest.raises(FileNotFoundError, match="not found"):
+            await getattr(client, method)(str(tmp_path / "missing.png"))
 
 
 @pytest.mark.asyncio
-async def test_upload_overwrite_parameter():
-    """Upload should pass overwrite parameter correctly."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
+@pytest.mark.parametrize("failure", ["http", "connection"])
+async def test_upload_reports_failure(tmp_path: Path, failure: str) -> None:
+    source = tmp_path / "source.png"
+    source.write_bytes(b"data")
 
-    mock_request = httpx.Request("POST", "http://127.0.0.1:8188/upload/image")
-    mock_resp = httpx.Response(200, json={"name": "test.png", "subfolder": "", "type": "input"}, request=mock_request)
+    def handle(request: httpx.Request) -> httpx.Response:
+        if failure == "connection":
+            raise httpx.ConnectError("Connection refused", request=request)
+        return httpx.Response(500)
 
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.return_value = mock_resp
-
-                await c.upload_image("/fake/test.png", overwrite=True)
-
-                call_kwargs = mock_post.call_args.kwargs
-                assert call_kwargs["data"]["overwrite"] == "true"
-
-
-@pytest.mark.asyncio
-async def test_upload_connection_error():
-    """Upload should raise RuntimeError on connection failure."""
-    c = ComfyUIClient(host="127.0.0.1", port=8188)
-
-    with patch("pathlib.Path.is_file", return_value=True):
-        with patch("builtins.open", mock_open(read_data=b"data")):
-            with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-                mock_post.side_effect = httpx.ConnectError("Connection refused")
-
-                with pytest.raises(RuntimeError) as exc_info:
-                    await c.upload_image("/fake/test.png")
-
-                assert "Failed to upload image to ComfyUI" in str(exc_info.value)
+    client = ComfyUIClient()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as transport:
+        client._client = transport
+        with pytest.raises(RuntimeError, match="500|Connection refused"):
+            await client.upload_mask(str(source))

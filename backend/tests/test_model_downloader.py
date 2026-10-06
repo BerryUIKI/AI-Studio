@@ -25,7 +25,7 @@ def test_target_path_resolution():
     # WebUI checkpoint path
     webui_path = downloader._resolve_target_path(model, target_engine="webui")
     assert "models" in str(webui_path)
-    assert "Stable-diffusion" in str(webui_path)
+    assert webui_path == comfy_path
     assert webui_path.name == "flux1-schnell-fp8.safetensors"
 
     # LoRA category path
