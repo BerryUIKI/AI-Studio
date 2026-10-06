@@ -7,19 +7,25 @@ ownership: never attempts to kill external processes or mutate user installation
 """
 
 import asyncio
+import json
 import logging
+import os
+from pathlib import Path
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import httpx
 
 from app.runtime.supervisor import supervisor as comfy_supervisor
 from app.runtime.webui_supervisor import webui_supervisor
 from app.schemas.engine import (
+    EngineConfig,
     EngineConnection,
+    EngineInstanceInfo,
     EngineOwnership,
     EngineStatus,
     EngineType,
 )
+from app.storage.db import get_default_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +33,87 @@ logger = logging.getLogger(__name__)
 class EngineManager:
     """Registry and coordinator for local inference engine connections."""
 
-    def __init__(self) -> None:
+    def __init__(self, data_dir: Optional[Path] = None) -> None:
+        self.data_dir = data_dir or get_default_data_dir()
+        self.config_file = self.data_dir / "engine_configs.json"
         self._connections: Dict[str, EngineConnection] = {}
+        self._configs: Dict[str, Dict[str, Any]] = {}
+        self._load_configs()
         self._init_managed_engines()
+        self._apply_configs()
+
+    def _load_configs(self) -> None:
+        """Load persisted engine configurations from disk."""
+        if self.config_file.is_file():
+            try:
+                content = self.config_file.read_text(encoding="utf-8")
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    self._configs = data
+            except Exception as e:
+                logger.warning(f"Failed to load engine configs from {self.config_file}: {e}")
+
+    def _save_configs(self) -> None:
+        """Persist engine configurations to disk."""
+        try:
+            self.config_file.parent.mkdir(parents=True, exist_ok=True)
+            self.config_file.write_text(json.dumps(self._configs, indent=2), encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Failed to save engine configs to {self.config_file}: {e}")
+            raise
+
+    def _apply_configs(self) -> None:
+        """Apply persisted engine configurations to runtime supervisors and connections."""
+        # Managed ComfyUI
+        comfy_cfg = self._configs.get("comfyui-managed") or self._configs.get("managed_comfyui")
+        if comfy_cfg and isinstance(comfy_cfg, dict):
+            port = comfy_cfg.get("port")
+            if isinstance(port, int) and 1 <= port <= 65535:
+                comfy_supervisor.port = port
+                conn = self._connections.get("managed_comfyui")
+                if conn:
+                    conn.endpoint_url = f"http://127.0.0.1:{port}"
+                    conn.native_ui_url = f"http://127.0.0.1:{port}"
+            extra_args = comfy_cfg.get("extra_args")
+            if isinstance(extra_args, list):
+                comfy_supervisor.extra_args = [str(a) for a in extra_args]
+
+        # Managed WebUI
+        webui_cfg = self._configs.get("webui-managed") or self._configs.get("managed_webui")
+        if webui_cfg and isinstance(webui_cfg, dict):
+            port = webui_cfg.get("port")
+            if isinstance(port, int) and 1 <= port <= 65535:
+                webui_supervisor.port = port
+                conn = self._connections.get("managed_webui")
+                if conn:
+                    conn.endpoint_url = f"http://127.0.0.1:{port}"
+                    conn.native_ui_url = f"http://127.0.0.1:{port}"
+            extra_args = webui_cfg.get("extra_args")
+            if isinstance(extra_args, list):
+                webui_supervisor.extra_args = [str(a) for a in extra_args]
+
+        # Restore any persisted external engines
+        ext_list = self._configs.get("_external_engines", [])
+        if isinstance(ext_list, list):
+            for ext in ext_list:
+                try:
+                    eid = ext.get("id")
+                    if eid and eid not in self._connections:
+                        etype = EngineType(ext.get("engine_type", "comfyui"))
+                        eport = ext.get("port", 8188)
+                        self._connections[eid] = EngineConnection(
+                            id=eid,
+                            name=ext.get("name", "External Engine"),
+                            engine_type=etype,
+                            ownership=EngineOwnership.EXTERNAL,
+                            endpoint_url=f"http://127.0.0.1:{eport}",
+                            native_ui_url=f"http://127.0.0.1:{eport}",
+                            status=EngineStatus.STOPPED,
+                            models_path=ext.get("path"),
+                            capabilities=["txt2img", "img2img", "workflows"] if etype == EngineType.COMFYUI else ["txt2img", "img2img"],
+                        )
+                except Exception as e:
+                    logger.debug(f"Failed to restore external engine {ext}: {e}")
 
     def _init_managed_engines(self) -> None:
         """Register the built-in managed engine slots."""
@@ -45,7 +129,7 @@ class EngineManager:
             capabilities=["txt2img", "img2img", "workflows"],
         )
 
-        # Managed WebUI
+        # Managed SD WebUI
         self._connections["managed_webui"] = EngineConnection(
             id="managed_webui",
             name="Managed SD WebUI (Isolated)",
@@ -84,7 +168,180 @@ class EngineManager:
     def get_engine(self, engine_id: str) -> Optional[EngineConnection]:
         """Retrieve connection details for a specific engine."""
         self.list_engines()  # refresh statuses
-        return self._connections.get(engine_id)
+        conn = self._connections.get(engine_id)
+        if not conn:
+            if engine_id in ("comfyui-managed", "managed_comfyui"):
+                conn = self._connections.get("managed_comfyui")
+            elif engine_id in ("webui-managed", "managed_webui"):
+                conn = self._connections.get("managed_webui")
+        return conn
+
+    def list_connections(self) -> Dict[str, EngineConnection]:
+        """Return dict of active connections keyed by stable connection IDs."""
+        self.list_engines()
+        res = dict(self._connections)
+        if "managed_comfyui" in res and "comfyui-managed" not in res:
+            res["comfyui-managed"] = res["managed_comfyui"]
+        if "managed_webui" in res and "webui-managed" not in res:
+            res["webui-managed"] = res["managed_webui"]
+        return res
+
+    def _normalize_instance_id(self, instance_id: str) -> str:
+        if instance_id in ("comfyui-managed", "managed_comfyui"):
+            return "comfyui-managed"
+        if instance_id in ("webui-managed", "managed_webui"):
+            return "webui-managed"
+        return instance_id
+
+    def get_engine_config(self, instance_id: str) -> EngineConfig:
+        """Retrieve configuration (port and extra launch arguments) for an engine instance."""
+        norm_id = self._normalize_instance_id(instance_id)
+
+        if norm_id in ("builtin-canvas", "builtin-agents"):
+            raise ValueError(f"Built-in workspace '{norm_id}' does not have configurable engine settings.")
+
+        if norm_id in self._configs:
+            cfg = self._configs[norm_id]
+            return EngineConfig(
+                instance_id=norm_id,
+                port=cfg["port"],
+                extra_args=list(cfg.get("extra_args", [])),
+            )
+
+        if norm_id == "comfyui-managed":
+            return EngineConfig(
+                instance_id="comfyui-managed",
+                port=comfy_supervisor.port,
+                extra_args=list(getattr(comfy_supervisor, "extra_args", [])),
+            )
+        if norm_id == "webui-managed":
+            return EngineConfig(
+                instance_id="webui-managed",
+                port=webui_supervisor.port,
+                extra_args=list(getattr(webui_supervisor, "extra_args", [])),
+            )
+
+        conn = self.get_engine(norm_id)
+        if conn:
+            parsed_port = 8188 if conn.engine_type == EngineType.COMFYUI else 7860
+            try:
+                from urllib.parse import urlparse
+                p = urlparse(conn.endpoint_url).port
+                if p:
+                    parsed_port = p
+            except Exception:
+                pass
+            return EngineConfig(
+                instance_id=conn.id,
+                port=parsed_port,
+                extra_args=[],
+            )
+
+        raise KeyError(f"Engine instance '{instance_id}' not found.")
+
+    def save_engine_config(
+        self,
+        instance_id: str,
+        port: int,
+        extra_args: Optional[List[str]] = None,
+    ) -> Tuple[EngineConfig, bool]:
+        """
+        Validate, apply, and persist engine configuration.
+        Returns (EngineConfig, requires_restart: bool).
+        Guarantees managed/external ownership protection and connection identity preservation.
+        """
+        norm_id = self._normalize_instance_id(instance_id)
+        args_list = [str(a).strip() for a in (extra_args or []) if str(a).strip()]
+
+        # 1. Protection for built-in workspaces
+        if norm_id in ("builtin-canvas", "builtin-agents"):
+            raise ValueError(f"Built-in workspace '{norm_id}' does not support engine configuration.")
+
+        # 2. Check existence
+        is_managed = norm_id in ("comfyui-managed", "webui-managed")
+        ext_conn = None if is_managed else self.get_engine(norm_id)
+        if not is_managed and not ext_conn:
+            raise KeyError(f"Engine instance '{instance_id}' not found.")
+
+        # 3. Port validation
+        if not isinstance(port, int) or port < 1 or port > 65535:
+            raise ValueError("Port must be an integer between 1 and 65535.")
+
+        # Check conflict with Berry backend port
+        backend_port = 8000
+        try:
+            from app.main import launcher_config
+            backend_port = getattr(launcher_config, "port", 8000)
+        except Exception:
+            backend_port = int(os.environ.get("BERRY_PORT", "8000"))
+
+        if port == backend_port:
+            raise ValueError(f"Port {port} conflicts with Berry AI Studio backend port ({backend_port}).")
+
+        # Check conflict with other engines
+        if norm_id == "comfyui-managed":
+            if webui_supervisor.port == port:
+                raise ValueError(f"Port {port} conflicts with SD WebUI engine port ({webui_supervisor.port}).")
+        elif norm_id == "webui-managed":
+            if comfy_supervisor.port == port:
+                raise ValueError(f"Port {port} conflicts with ComfyUI engine port ({comfy_supervisor.port}).")
+
+        for cid, conn in self._connections.items():
+            if cid not in (norm_id, instance_id, "managed_comfyui", "managed_webui"):
+                try:
+                    from urllib.parse import urlparse
+                    c_port = urlparse(conn.endpoint_url).port
+                    if c_port == port:
+                        raise ValueError(f"Port {port} is already used by engine '{conn.name}'.")
+                except Exception:
+                    pass
+
+        # 4. Check if restart is required
+        requires_restart = False
+        if norm_id == "comfyui-managed":
+            if comfy_supervisor.is_running():
+                requires_restart = True
+        elif norm_id == "webui-managed":
+            if webui_supervisor.is_running():
+                requires_restart = True
+        elif ext_conn:
+            if ext_conn.status == EngineStatus.READY:
+                requires_restart = True
+
+        # 5. Apply configuration to supervisors and connections
+        if norm_id == "comfyui-managed":
+            comfy_supervisor.port = port
+            comfy_supervisor.extra_args = args_list
+            comfy_conn = self._connections.get("managed_comfyui")
+            if comfy_conn:
+                comfy_conn.endpoint_url = f"http://127.0.0.1:{port}"
+                comfy_conn.native_ui_url = f"http://127.0.0.1:{port}"
+        elif norm_id == "webui-managed":
+            webui_supervisor.port = port
+            webui_supervisor.extra_args = args_list
+            webui_conn = self._connections.get("managed_webui")
+            if webui_conn:
+                webui_conn.endpoint_url = f"http://127.0.0.1:{port}"
+                webui_conn.native_ui_url = f"http://127.0.0.1:{port}"
+        elif ext_conn:
+            ext_conn.endpoint_url = f"http://127.0.0.1:{port}"
+            ext_conn.native_ui_url = f"http://127.0.0.1:{port}"
+
+        # 6. Persist to disk
+        self._configs[norm_id] = {
+            "port": port,
+            "extra_args": args_list,
+        }
+        if ext_conn:
+            ext_engines = self._configs.get("_external_engines", [])
+            if isinstance(ext_engines, list):
+                for e in ext_engines:
+                    if e.get("id") == norm_id:
+                        e["port"] = port
+                        e["extra_args"] = args_list
+        self._save_configs()
+
+        return EngineConfig(instance_id=norm_id, port=port, extra_args=args_list), requires_restart
 
     async def connect_external_engine(
         self, engine_type: EngineType, endpoint_url: str, name: Optional[str] = None
@@ -200,6 +457,9 @@ class EngineManager:
                 endpoint=f"http://127.0.0.1:{comfy_supervisor.port}",
                 pid=getattr(getattr(comfy_supervisor, "_process", None), "pid", None) if comfy_running else None,
                 capabilities=["txt2img", "img2img", "workflows"],
+                port=comfy_supervisor.port,
+                extra_args=list(getattr(comfy_supervisor, "extra_args", [])),
+                connection_id="comfyui-managed",
             )
         )
 
@@ -220,6 +480,9 @@ class EngineManager:
                 endpoint=f"http://127.0.0.1:{webui_supervisor.port}",
                 pid=getattr(getattr(webui_supervisor, "_process", None), "pid", None) if webui_running else None,
                 capabilities=["txt2img", "img2img", "inpaint"],
+                port=webui_supervisor.port,
+                extra_args=list(getattr(webui_supervisor, "extra_args", [])),
+                connection_id="webui-managed",
             )
         )
 
@@ -227,6 +490,13 @@ class EngineManager:
         for conn_id, conn in self._connections.items():
             if conn.ownership == EngineOwnership.EXTERNAL:
                 ext_status = "running" if conn.status == EngineStatus.READY else "stopped"
+                ext_cfg = self._configs.get(conn.id, {})
+                parsed_port = None
+                try:
+                    from urllib.parse import urlparse
+                    parsed_port = urlparse(conn.endpoint_url).port
+                except Exception:
+                    pass
                 instances.append(
                     EngineInstanceInfo(
                         id=conn.id,
@@ -239,6 +509,9 @@ class EngineManager:
                         status=ext_status,
                         endpoint=conn.endpoint_url,
                         capabilities=conn.capabilities,
+                        port=ext_cfg.get("port", parsed_port),
+                        extra_args=list(ext_cfg.get("extra_args", [])),
+                        connection_id=conn.id,
                     )
                 )
 
@@ -384,12 +657,36 @@ class EngineManager:
             capabilities=["txt2img", "img2img", "workflows"] if eng_type == EngineType.COMFYUI else ["txt2img", "img2img"],
         )
         self._connections[engine_id] = conn
+        self._configs[engine_id] = {
+            "port": assigned_port,
+            "extra_args": list(extra_args) if extra_args else [],
+        }
+        ext_engines = self._configs.get("_external_engines", [])
+        if not isinstance(ext_engines, list):
+            ext_engines = []
+        ext_engines = [e for e in ext_engines if e.get("id") != engine_id]
+        ext_engines.append({
+            "id": engine_id,
+            "name": name,
+            "engine_type": eng_type.value,
+            "path": resolved,
+            "port": assigned_port,
+            "extra_args": list(extra_args) if extra_args else [],
+        })
+        self._configs["_external_engines"] = ext_engines
+        self._save_configs()
         return conn
 
     def unbind_external_engine(self, instance_id: str) -> bool:
         """Unbind external engine connection without deleting any files from disk."""
         if instance_id in self._connections:
             del self._connections[instance_id]
+            if instance_id in self._configs:
+                del self._configs[instance_id]
+            ext_engines = self._configs.get("_external_engines", [])
+            if isinstance(ext_engines, list):
+                self._configs["_external_engines"] = [e for e in ext_engines if e.get("id") != instance_id]
+            self._save_configs()
             return True
         return False
 
