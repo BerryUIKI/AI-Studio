@@ -9,7 +9,8 @@ interface CreativeState {
   steps: number;
   cfgScale: number;
   seed: number;
-  engineId: string;
+  connectionId: string;  // Stable connection ID (e.g., "comfyui-managed", "webui-managed")
+  engineId: string;      // Legacy field - deprecated
   model: string;
   referenceImage: ImageCardData | null;
   inpaintModalOpen: boolean;
@@ -32,7 +33,8 @@ interface CreativeState {
   setCfgScale: (cfg: number) => void;
   setDenoise: (denoise: number) => void;
   setSeed: (seed: number) => void;
-  setEngineId: (id: string) => void;
+  setConnectionId: (id: string) => void;
+  setEngineId: (id: string) => void;  // Legacy - deprecated
   setModel: (m: string) => void;
   setReferenceImage: (img: ImageCardData | null) => void;
   setFps: (fps: number) => void;
@@ -55,7 +57,8 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   cfgScale: 7.0,
   denoise: 0.75,
   seed: -1,
-  engineId: 'managed_comfyui',
+  connectionId: 'comfyui-managed',  // Default to managed ComfyUI connection
+  engineId: 'managed_comfyui',      // Legacy field for backward compatibility
   model: 'v1-5-pruned-emaonly.safetensors',
   referenceImage: null,
   inpaintModalOpen: false,
@@ -77,7 +80,18 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   setCfgScale: (cfgScale) => set({ cfgScale }),
   setDenoise: (denoise) => set({ denoise }),
   setSeed: (seed) => set({ seed }),
-  setEngineId: (engineId) => set({ engineId }),
+  setConnectionId: (connectionId) => set({ connectionId }),
+  setEngineId: (engineId) => {
+    // Map legacy engine_id to stable connection_id
+    const connectionIdMap: Record<string, string> = {
+      'managed_comfyui': 'comfyui-managed',
+      'comfyui': 'comfyui-managed',
+      'managed_webui': 'webui-managed',
+      'webui': 'webui-managed',
+    };
+    const connectionId = connectionIdMap[engineId] || engineId;
+    set({ engineId, connectionId });
+  },
   setModel: (model) => set({ model }),
   setReferenceImage: (referenceImage) => set({ referenceImage }),
   setFps: (fps) => set({ fps }),
@@ -104,7 +118,8 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       prompt: s.prompt,
       negative_prompt: s.negativePrompt,
       model: s.model,
-      engine_id: s.engineId,
+      connection_id: s.connectionId,  // Pass stable connection_id
+      engine_id: s.engineId,          // Legacy fallback for backward compatibility
       aspect_ratio: s.aspectRatio,
       steps: s.steps,
       cfg_scale: s.cfgScale,
