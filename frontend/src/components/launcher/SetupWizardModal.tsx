@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/useSettingsStore';
+import { t } from '../../i18n/translations';
 
 interface GpuDetail {
   index?: number;
@@ -370,15 +371,16 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <span>{isZh ? '系统硬件体检与本地模型部署向导' : 'Hardware Diagnostics & Model Setup'}</span>
+                <span>{t('setup_wizard_title', lang) || (isZh ? '系统硬件体检与本地模型部署向导' : 'Hardware Diagnostics & Model Setup')}</span>
                 <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   Embedded llama.cpp
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
-                {isZh
-                  ? '一站式真实检测硬件配置、管理内置 llama.cpp 嵌入引擎与极速部署本地大模型'
-                  : 'Live GPU diagnosis, embedded llama.cpp lifecycle & instant local model provisioning'}
+                {t('setup_wizard_subtitle', lang) ||
+                  (isZh
+                    ? '一站式真实检测硬件配置、管理内置 llama.cpp 嵌入引擎与极速部署本地大模型'
+                    : 'Live GPU diagnosis, embedded llama.cpp lifecycle & instant local model provisioning')}
               </p>
             </div>
           </div>
@@ -401,7 +403,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>{isZh ? '1. 硬件配置体检' : '1. Hardware Check'}</span>
+            <span>{t('setup_step_hardware', lang) || (isZh ? '1. 硬件配置体检' : '1. Hardware Check')}</span>
           </button>
           <button
             onClick={() => setActiveStep(2)}
@@ -412,7 +414,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{isZh ? '2. 选择与部署模型' : '2. Deploy Model'}</span>
+            <span>{t('setup_step_model', lang) || (isZh ? '2. 选择与部署模型' : '2. Deploy Model')}</span>
           </button>
           <button
             onClick={() => setActiveStep(3)}
@@ -423,7 +425,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{isZh ? '3. 体验就绪' : '3. Ready'}</span>
+            <span>{t('setup_step_ready', lang) || (isZh ? '3. 体验就绪' : '3. Ready')}</span>
           </button>
         </div>
 

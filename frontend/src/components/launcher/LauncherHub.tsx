@@ -6,6 +6,8 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useEngineStore, EngineInstance } from '../../stores/useEngineStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
+import { t } from '../../i18n/translations';
 import { InstanceCard } from './InstanceCard';
 
 export interface LauncherHubProps {
@@ -48,6 +50,9 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
     stopEngine,
   } = useEngineStore();
 
+  const { getEffectiveLanguage } = useSettingsStore();
+  const lang = getEffectiveLanguage();
+
   useEffect(() => {
     fetchInstances();
     const interval = setInterval(fetchInstances, 6000);
@@ -77,7 +82,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
               onClick={onOpenSetupWizard}
               className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-medium transition-all hover:scale-105 active:scale-95 shadow-sm"
             >
-              <span>⚡ 系统硬件体检与本地模型部署</span>
+              <span>{t('launcher_badge_hw_setup', lang)}</span>
             </button>
           )}
         </div>

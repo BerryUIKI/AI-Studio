@@ -27,18 +27,20 @@ import {
   resolveEffectiveLanguage,
 } from '../../i18n/translations';
 
+export type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
+
 interface SettingsViewProps {
+  initialSection?: SettingsSection;
   onOpenCloudSettings?: () => void;
   onOpenEnvironmentManager?: () => void;
 }
 
-type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
-
 export const SettingsView: React.FC<SettingsViewProps> = ({
+  initialSection = 'general',
   onOpenCloudSettings,
   onOpenEnvironmentManager,
 }) => {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
 
   // LLM Config state
   const [llmConfig, setLlmConfig] = useState({
@@ -103,13 +105,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setExitPolicy,
     defaultLandingView,
     setDefaultLandingView,
+    getEffectiveLanguage,
   } = useSettingsStore();
 
-  const currentLang = resolveEffectiveLanguage(language);
+  const currentLang = getEffectiveLanguage ? getEffectiveLanguage() : resolveEffectiveLanguage(language);
 
   const sections: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
     { id: 'general', label: t('tab_general', currentLang), icon: Languages },
-    { id: 'agent', label: 'AI Agent & LLM (大模型基座)', icon: Bot },
+    { id: 'agent', label: t('tab_agent', currentLang), icon: Bot },
     { id: 'startup', label: t('tab_startup', currentLang), icon: Compass },
     { id: 'exit', label: t('tab_exit', currentLang), icon: Power },
     { id: 'cloud', label: t('tab_cloud', currentLang), icon: Globe },
@@ -224,10 +227,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                   <Bot className="w-5 h-5 text-indigo-400" />
-                  <span>AI Agent 推理基座与大模型配置 (LLM Base)</span>
+                  <span>{t('agent_heading', currentLang)}</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  为右侧常驻 AI Agents 赋予真正的大语言模型推理与自主规划能力，优先支持本地私有化部署（内置 llama.cpp 嵌入引擎），亦支持云端商用模型。
+                  {t('agent_desc', currentLang)}
                 </p>
               </div>
 
@@ -236,10 +239,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div>
                   <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>系统配置体检与本地模型一键部署向导</span>
+                    <span>{t('agent_wizard_title', currentLang)}</span>
                   </h3>
                   <p className="text-[11px] text-slate-300 mt-0.5">
-                    全自动检测您的 NVIDIA 显卡显存、主机内存与磁盘，快速一键部署并下载 Qwen2.5 / DeepSeek-R1 本地大模型。
+                    {t('agent_wizard_desc', currentLang)}
                   </p>
                 </div>
                 <button
@@ -250,16 +253,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   }}
                   className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-xl shadow-md transition hover:scale-105 active:scale-95 shrink-0 ml-3"
                 >
-                  打开部署向导
+                  {t('agent_wizard_btn', currentLang)}
                 </button>
               </div>
 
               {/* Provider Selection */}
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-white/[0.08] space-y-4">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-200">基座供应商类型 (Provider)</label>
+                  <label className="text-xs font-semibold text-slate-200">{t('agent_provider_label', currentLang)}</label>
                   <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-slate-400">启用智能 Agent 推理</span>
+                    <span className="text-[11px] text-slate-400">{t('agent_enable_toggle', currentLang)}</span>
                     <input
                       type="checkbox"
                       checked={llmConfig.enabled}
@@ -271,10 +274,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   {[
-                    { id: 'llama_server', label: 'llama.cpp (内置嵌入)', desc: '免安装 · 零污染 · 画布通用' },
-                    { id: 'siliconflow', label: '硅基流动 (SiliconFlow)', desc: 'Qwen2.5 / DeepSeek 极速 API' },
-                    { id: 'deepseek', label: 'DeepSeek 官方', desc: 'DeepSeek-V3 / R1 推理' },
-                    { id: 'openai', label: 'OpenAI / Custom', desc: 'GPT-4o 或自定义端点' },
+                    { id: 'llama_server', label: t('agent_provider_llama_label', currentLang), desc: t('agent_provider_llama_desc', currentLang) },
+                    { id: 'siliconflow', label: t('agent_provider_siliconflow_label', currentLang), desc: t('agent_provider_siliconflow_desc', currentLang) },
+                    { id: 'deepseek', label: t('agent_provider_deepseek_label', currentLang), desc: t('agent_provider_deepseek_desc', currentLang) },
+                    { id: 'openai', label: t('agent_provider_openai_label', currentLang), desc: t('agent_provider_openai_desc', currentLang) },
                   ].map((p) => (
                     <button
                       key={p.id}
@@ -330,7 +333,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div>
                     <label className="text-[11px] font-medium text-slate-300 block mb-1">
-                      模型标识 (Model Identifier)
+                      {t('agent_model_id_label', currentLang)}
                     </label>
                     <input
                       type="text"
@@ -343,13 +346,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                   <div className="sm:col-span-2">
                     <label className="text-[11px] font-medium text-slate-300 block mb-1">
-                      API Key (本地 llama.cpp 可留空)
+                      {t('agent_api_key_label', currentLang)}
                     </label>
                     <input
                       type="password"
                       value={llmConfig.api_key || ''}
                       onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
-                      placeholder={llmConfig.provider === 'llama_server' ? '本地运行无需 API Key' : 'sk-...'}
+                      placeholder={llmConfig.provider === 'llama_server' ? t('agent_api_key_placeholder_llama', currentLang) : 'sk-...'}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -382,7 +385,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition flex items-center gap-1.5"
                   >
                     {llmTesting && <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />}
-                    <span>测试连通性 (Test Connection)</span>
+                    <span>{t('agent_btn_test', currentLang)}</span>
                   </button>
 
                   <button
@@ -391,7 +394,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     disabled={llmSaving}
                     className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5"
                   >
-                    {llmSaving ? '保存中...' : '保存配置 (Save Configuration)'}
+                    {llmSaving ? t('agent_btn_saving', currentLang) : t('agent_btn_save', currentLang)}
                   </button>
                 </div>
               </div>
