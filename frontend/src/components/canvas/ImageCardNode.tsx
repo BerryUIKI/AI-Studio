@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useRef, useState } from 'react';
 import { NodeProps } from '@xyflow/react';
 import {
   Download,
@@ -9,6 +9,9 @@ import {
   Video,
   GitBranch,
   Loader2,
+  AlertTriangle,
+  RefreshCw,
+  Upload,
 } from 'lucide-react';
 import { ImageCardData } from '../../types/creative';
 import { useCreativeStore } from '../../stores/useCreativeStore';
@@ -17,13 +20,76 @@ import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const cardData = data as unknown as ImageCardData;
-  const { setReferenceImage, openInpaint, openUpscale, openImg2Video } = useCreativeStore();
+  const { setReferenceImage, openInpaint, openUpscale, openImg2Video, executeCreativeAction } = useCreativeStore();
   const { removeNode, arrangeBranchTree } = useCanvasStore();
+
+  const [isMissingAsset, setIsMissingAsset] = useState<boolean>(Boolean(cardData.isMissing));
+  const [retryNonce, setRetryNonce] = useState<number>(0);
+  const [isReuploading, setIsReuploading] = useState<boolean>(false);
+  const replaceFileInputRef = useRef<HTMLInputElement>(null);
 
   const isGenerating = Boolean(cardData.isGenerating);
   const isVideo = cardData.mediaType === 'video' || Boolean(cardData.videoUrl);
   const targetMediaUrl = cardData.videoUrl || cardData.imageUrl || '';
   const isVideoContainer = targetMediaUrl.toLowerCase().match(/\.(mp4|webm|mov)(\?|#|$)/) !== null;
+
+  const handleReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsReuploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await fetch('/api/v1/creative/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (resp.ok) {
+        const asset = await resp.json();
+        useCanvasStore.setState((state) => ({
+          nodes: state.nodes.map((node) => {
+            if (node.id === id) {
+              return {
+                ...node,
+                data: {
+                  ...node.data,
+                  assetId: asset.id,
+                  imageUrl: `/api/v1/assets/${asset.id}/content`,
+                  width: asset.width || cardData.width,
+                  height: asset.height || cardData.height,
+                  label: asset.filename,
+                  isMissing: false,
+                },
+              };
+            }
+            return node;
+          }),
+        }));
+        setIsMissingAsset(false);
+        useCanvasStore.getState().notifyCanvasChange();
+      }
+    } catch (err) {
+      console.error('Failed to replace file:', err);
+    } finally {
+      setIsReuploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!cardData.provenance) return;
+    setIsMissingAsset(false);
+    await executeCreativeAction({
+      action: cardData.provenance.action,
+      prompt: cardData.provenance.prompt,
+      negative_prompt: cardData.provenance.negative_prompt,
+      model: cardData.provenance.model,
+      connection_id: cardData.provenance.connection_id,
+      steps: cardData.provenance.steps,
+      cfg_scale: cardData.provenance.cfg_scale,
+      seed: cardData.provenance.seed,
+    });
+  };
 
   const handleExport = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -72,7 +138,11 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   return (
     <div
       className={`group relative rounded-2xl bg-slate-900 border transition-all duration-200 overflow-visible shadow-2xl ${
-        selected ? 'border-indigo-500 ring-2 ring-indigo-500/30' : 'border-slate-800 hover:border-slate-700'
+        selected
+          ? 'border-indigo-500 ring-2 ring-indigo-500/30'
+          : isMissingAsset
+          ? 'border-rose-500/60 ring-1 ring-rose-500/30 hover:border-rose-400'
+          : 'border-slate-800 hover:border-slate-700'
       }`}
       style={{ width: 320 }}
     >
@@ -177,23 +247,113 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                 </div>
               </div>
             </div>
+          ) : isMissingAsset ? (
+            /* Actionable Missing File Recovery State */
+            <div
+              data-testid="missing-asset-recovery"
+              className="w-full min-h-[220px] p-5 flex flex-col items-center justify-center text-center bg-rose-950/20 border border-rose-500/30 rounded-xl m-2"
+            >
+              <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-2">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <span className="text-xs font-semibold text-rose-200">Asset File Missing</span>
+              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 max-w-[240px]">
+                {cardData.label || 'Referenced file cannot be found on disk.'}
+              </p>
+              {cardData.assetId && (
+                <span className="text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-[220px]">
+                  ID: {cardData.assetId}
+                </span>
+              )}
+
+              <div className="mt-3 flex flex-col gap-1.5 w-full max-w-[220px]">
+                <input
+                  type="file"
+                  ref={replaceFileInputRef}
+                  onChange={handleReplaceFile}
+                  accept="image/*,video/*"
+                  className="hidden"
+                  data-testid="replace-file-input"
+                />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    replaceFileInputRef.current?.click();
+                  }}
+                  disabled={isReuploading}
+                  className="w-full py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition shadow"
+                >
+                  {isReuploading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Locate / Replace File</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex gap-1.5 w-full">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRetryNonce((n) => n + 1);
+                      setIsMissingAsset(false);
+                    }}
+                    className="flex-1 py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition border border-slate-700"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Retry</span>
+                  </button>
+
+                  {p && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRegenerate();
+                      }}
+                      className="flex-1 py-1 px-2 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition border border-indigo-800"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>Regenerate</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeNode(id);
+                    }}
+                    className="py-1 px-2 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 rounded-lg text-xs font-medium flex items-center justify-center transition border border-rose-800/60"
+                    title="Remove missing card"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             /* Media Render (Image or Video) */
             <>
               {isVideo && (isVideoContainer || !targetMediaUrl.toLowerCase().match(/\.(webp|gif)(\?|#|$)/)) ? (
                 <video
-                  src={targetMediaUrl}
+                  src={retryNonce ? `${targetMediaUrl}?t=${retryNonce}` : targetMediaUrl}
                   controls
                   loop
                   playsInline
                   className="w-full h-auto object-contain max-h-[360px]"
+                  onError={() => setIsMissingAsset(true)}
                 />
               ) : (
                 <img
-                  src={targetMediaUrl || cardData.imageUrl}
+                  src={retryNonce ? `${targetMediaUrl}?t=${retryNonce}` : (targetMediaUrl || cardData.imageUrl)}
                   alt={cardData.label || 'Generated creative asset'}
                   className="w-full h-auto object-contain select-none"
                   loading="lazy"
+                  onError={() => setIsMissingAsset(true)}
                 />
               )}
 
