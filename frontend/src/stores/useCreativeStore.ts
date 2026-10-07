@@ -113,6 +113,9 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
     });
 
     const action = override?.action || (s.referenceImage ? 'img2img' : 'txt2img');
+    const isSourceDependent = ['upscale', 'img2img', 'inpaint', 'img2video'].includes(action);
+    const effectiveAspectRatio = isSourceDependent ? undefined : s.aspectRatio;
+
     const payload: CreativeActionRequest = {
       action,
       prompt: s.prompt,
@@ -120,7 +123,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       model: s.model,
       connection_id: s.connectionId,  // Pass stable connection_id
       engine_id: s.engineId,          // Legacy fallback for backward compatibility
-      aspect_ratio: s.aspectRatio,
+      ...(effectiveAspectRatio ? { aspect_ratio: effectiveAspectRatio } : {}),
       steps: s.steps,
       cfg_scale: s.cfgScale,
       denoise: s.denoise,
@@ -132,6 +135,10 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       duration_seconds: s.durationSeconds,
       ...override,
     };
+
+    if (isSourceDependent && !override?.aspect_ratio) {
+      delete payload.aspect_ratio;
+    }
 
     // Prepare placeholder card on canvas
     const canvasStore = useCanvasStore.getState();
@@ -150,11 +157,27 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       }
     }
 
+    let placeholderW = 512;
+    let placeholderH = 512;
+    if (action === 'upscale') {
+      const srcW = override?.width || s.referenceImage?.width || 512;
+      const srcH = override?.height || s.referenceImage?.height || 512;
+      const factor = override?.upscale_factor || 2.0;
+      placeholderW = Math.round(srcW * factor);
+      placeholderH = Math.round(srcH * factor);
+    } else if (override?.width && override?.height) {
+      placeholderW = override.width;
+      placeholderH = override.height;
+    } else if (s.referenceImage?.width && s.referenceImage?.height) {
+      placeholderW = s.referenceImage.width;
+      placeholderH = s.referenceImage.height;
+    }
+
     const placeholderCard: ImageCardData = {
       imageUrl: s.referenceImage?.imageUrl || '',
       mediaType: isVideo ? 'video' : 'image',
-      width: 512,
-      height: 512,
+      width: placeholderW,
+      height: placeholderH,
       label: s.prompt,
       isGenerating: true,
       generationStage: 'Preparing parameters...',
@@ -295,12 +318,44 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         y: 100 + Math.floor(existingNodes.length / 4) * 380,
       };
 
+      let resolvedWidth = typeof asset.width === 'number' && asset.width > 0 ? asset.width : undefined;
+      let resolvedHeight = typeof asset.height === 'number' && asset.height > 0 ? asset.height : undefined;
+
+      if (!resolvedWidth || !resolvedHeight) {
+        try {
+          if (typeof createImageBitmap === 'function') {
+            const bmp = await createImageBitmap(file);
+            resolvedWidth = resolvedWidth || bmp.width;
+            resolvedHeight = resolvedHeight || bmp.height;
+            bmp.close();
+          } else if (typeof Image !== 'undefined') {
+            const dims = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+              const img = new Image();
+              const objectUrl = URL.createObjectURL(file);
+              img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                resolve({ width: img.naturalWidth, height: img.naturalHeight });
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                reject();
+              };
+              img.src = objectUrl;
+            });
+            resolvedWidth = resolvedWidth || dims.width;
+            resolvedHeight = resolvedHeight || dims.height;
+          }
+        } catch {
+          // Fallback if client-side decoding fails
+        }
+      }
+
       const cardId = `image_upload_${Date.now()}`;
       const cardData: ImageCardData = {
         assetId: asset.id,
         imageUrl: `/api/v1/assets/${asset.id}/content`,
-        width: asset.width || 512,
-        height: asset.height || 512,
+        width: resolvedWidth || 512,
+        height: resolvedHeight || 512,
         label: asset.filename,
       };
 

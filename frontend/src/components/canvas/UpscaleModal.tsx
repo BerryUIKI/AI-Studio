@@ -7,11 +7,12 @@ export const UpscaleModal = () => {
     useCreativeStore();
   const [scaleFactor, setScaleFactor] = useState<number>(2.0);
   const [upscalerName, setUpscalerName] = useState<string>('R-ESRGAN 4x+');
+  const [naturalDim, setNaturalDim] = useState<{ width: number; height: number } | null>(null);
 
   if (!upscaleModalOpen || !referenceImage) return null;
 
-  const currentW = referenceImage.width || 512;
-  const currentH = referenceImage.height || 512;
+  const currentW = (referenceImage.width && referenceImage.width > 0) ? referenceImage.width : (naturalDim?.width || 512);
+  const currentH = (referenceImage.height && referenceImage.height > 0) ? referenceImage.height : (naturalDim?.height || 512);
   const targetW = Math.round(currentW * scaleFactor);
   const targetH = Math.round(currentH * scaleFactor);
 
@@ -57,11 +58,17 @@ export const UpscaleModal = () => {
               src={referenceImage.imageUrl}
               alt="Thumbnail"
               className="w-16 h-16 rounded-lg object-cover border border-slate-700"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if ((!referenceImage.width || !referenceImage.height) && img.naturalWidth && img.naturalHeight) {
+                  setNaturalDim({ width: img.naturalWidth, height: img.naturalHeight });
+                }
+              }}
             />
             <div className="flex flex-col text-xs">
               <span className="font-medium text-slate-200 line-clamp-1">{referenceImage.label || 'Selected Asset'}</span>
-              <span className="text-slate-400 mt-1">Current: {currentW} × {currentH} px</span>
-              <span className="text-emerald-400 font-medium">Target: {targetW} × {targetH} px</span>
+              <span className="text-slate-400 mt-1" data-testid="source-dimensions">Current: {currentW} × {currentH} px</span>
+              <span className="text-emerald-400 font-medium" data-testid="target-dimensions">Target: {targetW} × {targetH} px</span>
             </div>
           </div>
 
@@ -71,6 +78,7 @@ export const UpscaleModal = () => {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
+                data-testid="scale-factor-2x"
                 onClick={() => setScaleFactor(2.0)}
                 className={`py-2 px-3 rounded-xl border font-medium transition ${
                   scaleFactor === 2.0
@@ -82,6 +90,7 @@ export const UpscaleModal = () => {
               </button>
               <button
                 type="button"
+                data-testid="scale-factor-4x"
                 onClick={() => setScaleFactor(4.0)}
                 className={`py-2 px-3 rounded-xl border font-medium transition ${
                   scaleFactor === 4.0
