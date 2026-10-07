@@ -278,6 +278,17 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         selectedNodeId: placeholderId,
       }));
 
+      useCanvasStore.getState().addGenerationHistory({
+        id: `gen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        action: s.referenceImage ? (s.inpaintModalOpen ? 'inpaint' : 'img2img') : 'txt2img',
+        prompt: s.prompt,
+        timestamp: new Date().toISOString(),
+        assetId: result.asset_id,
+        imageUrl: result.image_url || result.video_url,
+        videoUrl: result.video_url,
+        provenance: result.provenance,
+      });
+
       set({ isGenerating: false });
       return result;
     } catch (err: unknown) {
@@ -370,6 +381,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         nodes: [...existingNodes, newCardNode],
         selectedNodeId: cardId,
       });
+      useCanvasStore.getState().notifyCanvasChange();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Image upload failed';
       set({ error: message });
