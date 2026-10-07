@@ -34,6 +34,42 @@ COMFYUI_GIT_REPO = "https://github.com/comfyanonymous/ComfyUI.git"
 WEBUI_GIT_REPO = "https://github.com/AUTOMATIC1111/stable-diffusion-webui.git"
 
 
+def find_git_executable() -> Optional[str]:
+    """
+    Find Git executable in this order:
+    1. Bundled portable Git (runtime/git/cmd/git.exe) - for clean-machine packages
+    2. System Git in PATH - for development environments
+
+    Returns the git command to use, or None if Git is not available.
+    """
+    # Check for bundled portable Git (packaged distribution)
+    if sys.platform == "win32":
+        # Try to find root directory by walking up from current file
+        current = Path(__file__).resolve()
+        for parent in [current.parent.parent.parent, current.parent.parent.parent.parent]:
+            bundled_git = parent / "runtime" / "git" / "cmd" / "git.exe"
+            if bundled_git.is_file():
+                logger.info(f"Using bundled portable Git: {bundled_git}")
+                return str(bundled_git)
+    else:
+        # Linux/macOS: check for bundled git in runtime/git/bin/git
+        current = Path(__file__).resolve()
+        for parent in [current.parent.parent.parent, current.parent.parent.parent.parent]:
+            bundled_git = parent / "runtime" / "git" / "bin" / "git"
+            if bundled_git.is_file():
+                logger.info(f"Using bundled portable Git: {bundled_git}")
+                return str(bundled_git)
+
+    # Fall back to system Git
+    git_path = shutil.which("git")
+    if git_path:
+        logger.info(f"Using system Git: {git_path}")
+        return "git"
+
+    logger.warning("Git not found in bundled runtime or system PATH")
+    return None
+
+
 class IsolatedEngineInstaller:
     """Manages staged installation of local engines inside hermetic environments."""
 
@@ -216,7 +252,14 @@ class IsolatedEngineInstaller:
                         shutil.rmtree(engine_target, ignore_errors=True)
 
                 if not engine_target.exists():
-                    clone_cmd = ["git", "clone", "--depth", "1", repo_url, str(engine_target)]
+                    git_exe = find_git_executable()
+                    if not git_exe:
+                        raise RuntimeError(
+                            "Git is required for engine installation but was not found. "
+                            "Please install Git from https://git-scm.com or ensure the portable Git bundle is present."
+                        )
+
+                    clone_cmd = [git_exe, "clone", "--depth", "1", repo_url, str(engine_target)]
                     proc = await asyncio.create_subprocess_exec(
                         *clone_cmd,
                         stdout=asyncio.subprocess.PIPE,
@@ -356,8 +399,15 @@ class IsolatedEngineInstaller:
 
             try:
                 # Step 1: Capture previous commit hash & requirements snapshot
+                git_exe = find_git_executable()
+                if not git_exe:
+                    raise RuntimeError(
+                        "Git is required for engine updates but was not found. "
+                        "Please install Git from https://git-scm.com or ensure the portable Git bundle is present."
+                    )
+
                 rev_proc = await asyncio.create_subprocess_exec(
-                    "git", "rev-parse", "HEAD",
+                    git_exe, "rev-parse", "HEAD",
                     cwd=str(engine_target),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -385,7 +435,7 @@ class IsolatedEngineInstaller:
 
                 # Step 2: Fetch and pull latest updates
                 pull_proc = await asyncio.create_subprocess_exec(
-                    "git", "pull", "--ff-only",
+                    git_exe, "pull", "--ff-only",
                     cwd=str(engine_target),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -396,7 +446,7 @@ class IsolatedEngineInstaller:
 
                 # Get new commit hash
                 rev_proc2 = await asyncio.create_subprocess_exec(
-                    "git", "rev-parse", "HEAD",
+                    git_exe, "rev-parse", "HEAD",
                     cwd=str(engine_target),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -430,7 +480,7 @@ class IsolatedEngineInstaller:
                     try:
                         logger.info(f"Rolling back {engine_type.value} to previous commit {previous_commit}...")
                         rollback_proc = await asyncio.create_subprocess_exec(
-                            "git", "checkout", previous_commit,
+                            git_exe, "checkout", previous_commit,
                             cwd=str(engine_target),
                             stdout=asyncio.subprocess.PIPE,
                             stderr=asyncio.subprocess.PIPE,
