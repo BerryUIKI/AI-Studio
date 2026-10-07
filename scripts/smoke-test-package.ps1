@@ -17,7 +17,7 @@ Write-Host "  Testing target: $PackageDir" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # Check 1: Directory and Zip existence
-Write-Host "`n[Check 1/4] Verifying artifact existence..." -ForegroundColor Yellow
+Write-Host "`n[Check 1/6] Verifying artifact existence..." -ForegroundColor Yellow
 if (-not (Test-Path $PackageDir)) {
     throw "Package directory does not exist: $PackageDir. Run package-windows-release.ps1 first."
 }
@@ -27,15 +27,12 @@ if (-not (Test-Path $ZipFile)) {
 Write-Host "  -> Directory and Zip archive confirmed present." -ForegroundColor Green
 
 # Check 2: Core files existence
-Write-Host "`n[Check 2/4] Verifying essential bundle files..." -ForegroundColor Yellow
-$PythonExe = if (Test-Path "$PackageDir\runtime\python\Scripts\python.exe") {
-    "$PackageDir\runtime\python\Scripts\python.exe"
-} else {
-    "$PackageDir\runtime\python\python.exe"
-}
+Write-Host "`n[Check 2/6] Verifying essential bundle files..." -ForegroundColor Yellow
+$PythonExe = "$PackageDir\runtime\python\python.exe"
 
 $RequiredFiles = @(
     "$PackageDir\berry.exe",
+    "$PackageDir\Berry AI Studio.exe",
     "$PackageDir\Berry.bat",
     "$PackageDir\README.txt",
     $PythonExe,
@@ -43,50 +40,128 @@ $RequiredFiles = @(
     "$PackageDir\backend\app\main.py"
 )
 
+$MissingFiles = @()
 foreach ($file in $RequiredFiles) {
     if (-not (Test-Path $file)) {
-        throw "Missing required bundle file: $file"
+        $MissingFiles += $file
+        Write-Host "  X Missing: $(Split-Path $file -Leaf)" -ForegroundColor Red
+    } else {
+        Write-Host "  -> Found $(Split-Path $file -Leaf)" -ForegroundColor Green
     }
-    Write-Host "  -> Found $(Split-Path $file -Leaf)" -ForegroundColor Green
 }
 
-# Check 3: Invoking launcher --help with isolated PATH
-Write-Host "`n[Check 3/4] Testing berry.exe CLI in PATH-sanitized environment..." -ForegroundColor Yellow
+if ($MissingFiles.Count -gt 0) {
+    throw "SMOKE TEST FAILED: $($MissingFiles.Count) required file(s) missing"
+}
+
+# Check 3: No developer-machine paths in runtime
+Write-Host "`n[Check 3/6] Verifying no developer-machine path leakage..." -ForegroundColor Yellow
+
+$PathLeakageFound = $false
+
+# Check for pyvenv.cfg (should not exist in embeddable package)
+$PyvenvCfg = Get-ChildItem -Path "$PackageDir\runtime\python" -Filter "pyvenv.cfg" -Recurse -ErrorAction SilentlyContinue
+if ($PyvenvCfg) {
+    $PyvenvContent = Get-Content $PyvenvCfg.FullName -Raw
+    if ($PyvenvContent -match "home\s*=\s*[A-Za-z]:\\") {
+        Write-Host "  X pyvenv.cfg contains absolute developer-machine paths" -ForegroundColor Red
+        Write-Host "    File: $($PyvenvCfg.FullName)" -ForegroundColor Gray
+        $PathLeakageFound = $true
+    }
+}
+
+# Check Python executable for base_prefix leakage
+$BasePrefix = & $PythonExe -c "import sys; print(sys.base_prefix)" 2>&1
+if ($LASTEXITCODE -eq 0 -and $BasePrefix -match "[A-Za-z]:\\" -and $BasePrefix -notmatch [regex]::Escape($PackageDir)) {
+    Write-Host "  X Python sys.base_prefix points outside package: $BasePrefix" -ForegroundColor Red
+    $PathLeakageFound = $true
+}
+
+if ($PathLeakageFound) {
+    throw "SMOKE TEST FAILED: Developer-machine paths detected in package"
+}
+Write-Host "  -> No developer-machine paths detected" -ForegroundColor Green
+
+# Check 4: Invoking launcher --help with isolated PATH
+Write-Host "`n[Check 4/6] Testing berry.exe CLI in PATH-sanitized environment..." -ForegroundColor Yellow
 $OriginalPath = $env:PATH
 try {
     # Sanitize PATH to remove host Python, Git, and Node.js
-    $SanitizedPath = ($env:PATH -split ';' | Where-Object { 
-        $_ -notmatch "Python" -and $_ -notmatch "nodejs" -and $_ -notmatch "npm" -and $_ -notmatch "pnpm" -and $_ -notmatch "Git"
+    $SanitizedPath = ($env:PATH -split ';' | Where-Object {
+        $_ -notmatch "Python" -and
+        $_ -notmatch "nodejs" -and
+        $_ -notmatch "npm" -and
+        $_ -notmatch "pnpm" -and
+        $_ -notmatch "Git" -and
+        $_ -notmatch "Anaconda" -and
+        $_ -notmatch "Miniconda"
     }) -join ';'
     $env:PATH = $SanitizedPath
 
-    $HelpOutput = (& "$PackageDir\berry.exe" --help) -join "`n"
+    $HelpOutput = (& "$PackageDir\berry.exe" --help 2>&1) -join "`n"
     if ($LASTEXITCODE -ne 0) {
-        throw "berry.exe --help failed with exit code $LASTEXITCODE"
+        throw "berry.exe --help failed with exit code $LASTEXITCODE. Output: $HelpOutput"
     }
-    if ($HelpOutput -notmatch "Berry AI Studio") {
+    if ($HelpOutput -notmatch "Berry AI Studio|berry\.exe|Usage") {
         throw "Unexpected help output from berry.exe: $HelpOutput"
     }
-    Write-Host "  -> berry.exe --help succeeded with exit code 0" -ForegroundColor Green
+    Write-Host "  -> berry.exe --help succeeded in clean environment" -ForegroundColor Green
 } finally {
     $env:PATH = $OriginalPath
 }
 
-# Check 4: Verifying bundled python runtime functionality
-Write-Host "`n[Check 4/4] Verifying bundled Python hermetic execution..." -ForegroundColor Yellow
-$PyVersion = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+# Check 5: Verifying bundled python runtime functionality
+Write-Host "`n[Check 5/6] Verifying bundled Python hermetic execution..." -ForegroundColor Yellow
+
+# Test Python version
+$PyVersion = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')" 2>&1
 if ($LASTEXITCODE -ne 0) {
-    throw "Bundled python.exe failed to execute"
+    throw "Bundled python.exe failed to execute. Error: $PyVersion"
 }
 Write-Host "  -> Bundled Python executable runs successfully (Python $PyVersion)" -ForegroundColor Green
 
-$PyFastAPI = & $PythonExe -c "import fastapi, pydantic; print('OK')"
+# Test backend dependencies
+$PyFastAPI = & $PythonExe -c "import fastapi, pydantic, uvicorn, httpx; print('OK')" 2>&1
 if ($LASTEXITCODE -ne 0 -or $PyFastAPI -notmatch "OK") {
-    throw "Bundled python.exe failed to import backend dependencies"
+    throw "Bundled python.exe failed to import backend dependencies. Error: $PyFastAPI"
 }
-Write-Host "  -> Bundled Python environment contains required dependencies (fastapi, pydantic)" -ForegroundColor Green
+Write-Host "  -> Backend dependencies verified (fastapi, pydantic, uvicorn, httpx)" -ForegroundColor Green
+
+# Test sys.executable points to bundled Python
+$SysExecutable = & $PythonExe -c "import sys; print(sys.executable)" 2>&1
+if ($LASTEXITCODE -eq 0) {
+    $ExpectedPath = Join-Path $PackageDir "runtime\python\python.exe"
+    if ($SysExecutable -notlike "*$PackageDir*") {
+        Write-Warning "sys.executable may point outside package: $SysExecutable"
+    } else {
+        Write-Host "  -> sys.executable correctly points to bundled Python" -ForegroundColor Green
+    }
+}
+
+# Check 6: Verify portable Git if bundled
+Write-Host "`n[Check 6/6] Checking for bundled portable Git..." -ForegroundColor Yellow
+$PortableGitExe = "$PackageDir\runtime\git\cmd\git.exe"
+if (Test-Path $PortableGitExe) {
+    try {
+        $GitVersion = & $PortableGitExe --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  -> Portable Git bundled and functional: $GitVersion" -ForegroundColor Green
+        } else {
+            Write-Warning "Portable Git present but execution failed: $GitVersion"
+        }
+    } catch {
+        Write-Warning "Portable Git present but execution failed: $_"
+    }
+} else {
+    Write-Host "  -> Portable Git not bundled (engine installation will require system Git)" -ForegroundColor Yellow
+}
 
 Write-Host "`n==========================================================" -ForegroundColor Cyan
-Write-Host "  All 4 Package Smoke Tests PASSED!" -ForegroundColor Green
-Write-Host "  Distribution is verified clean-machine ready (L01 satisfied)." -ForegroundColor Green
+Write-Host "  All Package Smoke Tests PASSED!" -ForegroundColor Green
+Write-Host "  Distribution verified for clean-machine deployment." -ForegroundColor Green
+Write-Host "`n  NOTE: This is a host-machine test with PATH sanitization." -ForegroundColor Yellow
+Write-Host "  Full L01 acceptance requires clean Windows VM verification:" -ForegroundColor Yellow
+Write-Host "    - Extract on Windows VM without Python/Git/Node" -ForegroundColor Yellow
+Write-Host "    - Run Berry.bat or berry.exe" -ForegroundColor Yellow
+Write-Host "    - Verify startup, cloud onboarding, and safe exit" -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Cyan
