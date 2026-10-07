@@ -38,6 +38,7 @@ interface CanvasState {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (definition: NodeDefinition, position?: { x: number; y: number }) => void;
+  updateNodeData: (nodeId: string, data: Record<string, any>) => void;
   updateNodeParam: (nodeId: string, paramName: string, value: NodeParamValue) => void;
   setNodeStatus: (nodeId: string, status: ExecutionStatus) => void;
   setNodeOutput: (nodeId: string, output: Record<string, NodeOutputValue>) => void;
@@ -349,6 +350,22 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       nodes: [...get().nodes, newNode],
       selectedNodeId: newNodeId,
+    });
+    get().notifyCanvasChange();
+  },
+
+  updateNodeData: (nodeId, data) => {
+    set({
+      nodes: get().nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            ...data,
+          },
+        };
+      }),
     });
     get().notifyCanvasChange();
   },

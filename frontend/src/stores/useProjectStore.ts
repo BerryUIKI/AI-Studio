@@ -237,8 +237,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const canvasState = useCanvasStore.getState();
+      const nextVersion = (currentProj.version || 1) + 1;
       const canvasPayload = {
-        version: currentProj.version || 1,
+        version: nextVersion,
         nodes: canvasState.nodes,
         edges: canvasState.edges,
         viewport: canvasState.viewport,
@@ -250,7 +251,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: currentProj.name,
-          version: currentProj.version || 1,
+          version: nextVersion,
           canvas: canvasPayload,
         }),
       });

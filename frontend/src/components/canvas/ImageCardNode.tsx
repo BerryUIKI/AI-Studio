@@ -46,27 +46,15 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
       });
       if (resp.ok) {
         const asset = await resp.json();
-        useCanvasStore.setState((state) => ({
-          nodes: state.nodes.map((node) => {
-            if (node.id === id) {
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  assetId: asset.id,
-                  imageUrl: `/api/v1/assets/${asset.id}/content`,
-                  width: asset.width || cardData.width,
-                  height: asset.height || cardData.height,
-                  label: asset.filename,
-                  isMissing: false,
-                },
-              };
-            }
-            return node;
-          }),
-        }));
+        useCanvasStore.getState().updateNodeData(id, {
+          assetId: asset.id,
+          imageUrl: `/api/v1/assets/${asset.id}/content`,
+          width: asset.width || cardData.width,
+          height: asset.height || cardData.height,
+          label: asset.filename,
+          isMissing: false,
+        });
         setIsMissingAsset(false);
-        useCanvasStore.getState().notifyCanvasChange();
       }
     } catch (err) {
       console.error('Failed to replace file:', err);
