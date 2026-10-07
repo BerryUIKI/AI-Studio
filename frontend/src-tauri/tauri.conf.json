@@ -21,11 +21,12 @@
         "fullscreen": false,
         "center": true,
         "decorations": false,
-        "shadow": true
+        "shadow": true,
+        "url": "http://127.0.0.1:8000"
       }
     ],
     "security": {
-      "csp": "default-src 'self' tauri: http://localhost:* http://127.0.0.1:*; img-src 'self' tauri: asset: data: blob: http://localhost:* http://127.0.0.1:*; connect-src 'self' tauri: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self' tauri: http://127.0.0.1:* http://localhost:*; img-src 'self' tauri: asset: data: blob: http://127.0.0.1:* http://localhost:* https:; media-src 'self' data: blob: http://127.0.0.1:* http://localhost:* https:; connect-src 'self' tauri: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'"
     }
   },
   "bundle": {
