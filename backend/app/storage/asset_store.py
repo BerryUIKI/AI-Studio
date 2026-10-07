@@ -110,6 +110,7 @@ class AssetStore:
             byte_size=byte_size,
             width=width,
             height=height,
+            file_exists=True,
             created_at=now,
         )
 
@@ -165,6 +166,9 @@ class AssetStore:
                         await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
                         await conn.commit()
 
+            disk_file = self.assets_dir / row["file_path"]
+            file_exists = disk_file.is_file()
+
             return AssetRecord(
                 id=row["id"],
                 project_id=row["project_id"],
@@ -175,6 +179,7 @@ class AssetStore:
                 byte_size=row["byte_size"],
                 width=w,
                 height=h,
+                file_exists=file_exists,
                 created_at=row["created_at"],
             )
 
@@ -202,6 +207,9 @@ class AssetStore:
                         await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
                         await conn.commit()
 
+            disk_file = self.assets_dir / row["file_path"]
+            file_exists = disk_file.is_file()
+
             return AssetRecord(
                 id=row["id"],
                 project_id=row["project_id"],
@@ -212,6 +220,7 @@ class AssetStore:
                 byte_size=row["byte_size"],
                 width=w,
                 height=h,
+                file_exists=file_exists,
                 created_at=row["created_at"],
             )
 
@@ -240,6 +249,7 @@ class AssetStore:
                     byte_size=row["byte_size"],
                     width=row["width"],
                     height=row["height"],
+                    file_exists=(self.assets_dir / row["file_path"]).is_file(),
                     created_at=row["created_at"],
                 )
                 for row in rows
