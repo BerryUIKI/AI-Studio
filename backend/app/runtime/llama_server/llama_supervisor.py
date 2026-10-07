@@ -322,12 +322,14 @@ class LlamaServerSupervisor:
                 subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
             else:
                 os.kill(pid, 15)
-            return {"success": True, "message": f"llama-server process {pid} terminated"}
+            result = {"success": True, "message": f"llama-server process {pid} terminated"}
         except Exception as e:
-            return {"success": False, "message": f"Error terminating llama-server: {e}"}
+            result = {"success": False, "message": f"Error terminating llama-server: {e}"}
         finally:
             self._clean_pid_file()
             self._active_model_path = None
+
+        return result
 
     async def install(self) -> Dict[str, Any]:
         """Download and unpack official pre-compiled standalone llama-server binary without host pollution."""
@@ -344,16 +346,53 @@ class LlamaServerSupervisor:
         import zipfile
         logger.info(f"Downloading pre-compiled llama-server to {self.llama_dir}...")
 
-        # Binary download candidate sources
+        # Determine platform-specific binary filename pattern
         if sys.platform == "win32":
+            binary_pattern = "bin-win-cpu-x64.zip"
+        else:
+            binary_pattern = "bin-ubuntu-x64.zip"
+
+        # Fetch latest release with actual binary assets from GitHub API
+        release_tag = "b11457"  # fallback to known working release
+        download_url = None
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, trust_env=False) as client:
+                resp = await client.get("https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=10")
+                if resp.status_code == 200:
+                    releases = resp.json()
+                    for release in releases:
+                        tag = release.get("tag_name", "")
+                        assets = release.get("assets", [])
+                        # Find the CPU binary asset for this platform
+                        for asset in assets:
+                            asset_name = asset.get("name", "")
+                            if binary_pattern in asset_name and asset_name.startswith("llama-"):
+                                download_url = asset.get("browser_download_url")
+                                release_tag = tag
+                                logger.info(f"Found latest llama.cpp binary release: {tag} ({asset_name})")
+                                break
+                        if download_url:
+                            break
+        except Exception as err:
+            logger.warning(f"Failed to fetch latest release from GitHub API: {err}")
+
+        # Build download source list with mirrors
+        if download_url:
             sources = [
-                "https://ghfast.top/https://github.com/ggml-org/llama.cpp/releases/download/b4800/llama-b4800-bin-win-cpu-x64.zip",
-                "https://github.com/ggml-org/llama.cpp/releases/download/b4800/llama-b4800-bin-win-cpu-x64.zip",
+                f"https://ghfast.top/{download_url}",  # GitHub mirror for faster downloads
+                download_url,  # Direct GitHub download
             ]
         else:
+            # Fallback to hardcoded known release
+            logger.warning(f"Using fallback release {release_tag}")
+            if sys.platform == "win32":
+                filename = f"llama-{release_tag}-bin-win-cpu-x64.zip"
+            else:
+                filename = f"llama-{release_tag}-bin-ubuntu-x64.zip"
             sources = [
-                "https://ghfast.top/https://github.com/ggml-org/llama.cpp/releases/download/b4800/llama-b4800-bin-ubuntu-x64.zip",
-                "https://github.com/ggml-org/llama.cpp/releases/download/b4800/llama-b4800-bin-ubuntu-x64.zip",
+                f"https://ghfast.top/https://github.com/ggml-org/llama.cpp/releases/download/{release_tag}/{filename}",
+                f"https://github.com/ggml-org/llama.cpp/releases/download/{release_tag}/{filename}",
             ]
 
         archive_path = self.llama_dir / "llama_server_dl.zip"
