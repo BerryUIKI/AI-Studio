@@ -27,18 +27,20 @@ import {
   resolveEffectiveLanguage,
 } from '../../i18n/translations';
 
+export type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
+
 interface SettingsViewProps {
+  initialSection?: SettingsSection;
   onOpenCloudSettings?: () => void;
   onOpenEnvironmentManager?: () => void;
 }
 
-type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
-
 export const SettingsView: React.FC<SettingsViewProps> = ({
+  initialSection = 'general',
   onOpenCloudSettings,
   onOpenEnvironmentManager,
 }) => {
-  const [activeSection, setActiveSection] = useState<SettingsSection>('general');
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
 
   // LLM Config state
   const [llmConfig, setLlmConfig] = useState({
@@ -103,9 +105,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setExitPolicy,
     defaultLandingView,
     setDefaultLandingView,
+    getEffectiveLanguage,
   } = useSettingsStore();
 
-  const currentLang = resolveEffectiveLanguage(language);
+  const currentLang = getEffectiveLanguage ? getEffectiveLanguage() : resolveEffectiveLanguage(language);
 
   const sections: { id: SettingsSection; label: string; icon: React.ElementType }[] = [
     { id: 'general', label: t('tab_general', currentLang), icon: Languages },
