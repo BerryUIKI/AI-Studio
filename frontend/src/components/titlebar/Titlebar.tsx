@@ -15,10 +15,16 @@ import {
   Copy,
   X,
   PanelRight,
+  Folder,
+  Save,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GpuStatusIndicator } from './GpuStatusIndicator';
+import { useProjectStore } from '../../stores/useProjectStore';
 
 export interface ComfyStatus {
   online: boolean;
@@ -40,6 +46,7 @@ export interface TitlebarProps {
   onImportImage: () => void;
   onOpenCloud: () => void;
   onOpenManager: () => void;
+  onOpenProjectManager?: () => void;
   showAgentPanel: boolean;
   onToggleAgent: () => void;
   showNodePalette: boolean;
@@ -60,6 +67,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   onImportImage,
   onOpenCloud,
   onOpenManager,
+  onOpenProjectManager,
   showAgentPanel,
   onToggleAgent,
   showNodePalette,
@@ -73,6 +81,11 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 }) => {
   const [isDesktop, setIsDesktop] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+
+  const currentProject = useProjectStore((s) => s.currentProject);
+  const autosaveStatus = useProjectStore((s) => s.autosaveStatus);
+  const saveProject = useProjectStore((s) => s.saveProject);
+  const setIsManagerModalOpen = useProjectStore((s) => s.setIsManagerModalOpen);
 
   useEffect(() => {
     let unlistenResize: (() => void) | undefined;
@@ -192,6 +205,62 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             v0.1.0
           </span>
         </div>
+      </div>
+
+      {/* Project Selector & Autosave Status */}
+      <div className="flex items-center gap-1.5 ml-3" data-no-drag>
+        <button
+          onClick={onOpenProjectManager ? onOpenProjectManager : () => setIsManagerModalOpen(true)}
+          title="Open Project Manager (Switch, Create, or Rename Projects)"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm max-w-[170px]"
+          data-testid="project-manager-btn"
+        >
+          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="truncate">{currentProject ? currentProject.name : 'Projects'}</span>
+        </button>
+
+        <button
+          onClick={() => saveProject()}
+          disabled={autosaveStatus === 'saving'}
+          title={
+            autosaveStatus === 'saving'
+              ? 'Saving project...'
+              : autosaveStatus === 'dirty'
+              ? 'Unsaved changes (Click to Save or Ctrl+S)'
+              : autosaveStatus === 'error'
+              ? 'Save failed (Click to retry)'
+              : 'Project saved'
+          }
+          className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition shadow-sm ${
+            autosaveStatus === 'dirty'
+              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
+              : autosaveStatus === 'saving'
+              ? 'bg-slate-800/80 text-indigo-300 border-slate-700/60'
+              : autosaveStatus === 'error'
+              ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30'
+              : 'bg-slate-800/60 hover:bg-slate-800/90 text-slate-400 border-slate-700/40'
+          }`}
+          data-testid="project-save-btn"
+        >
+          {autosaveStatus === 'saving' ? (
+            <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
+          ) : autosaveStatus === 'dirty' ? (
+            <Save className="w-3 h-3 text-amber-400" />
+          ) : autosaveStatus === 'error' ? (
+            <AlertCircle className="w-3 h-3 text-rose-400" />
+          ) : (
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+          )}
+          <span className="text-[11px]">
+            {autosaveStatus === 'saving'
+              ? 'Saving'
+              : autosaveStatus === 'dirty'
+              ? 'Save'
+              : autosaveStatus === 'error'
+              ? 'Error'
+              : 'Saved'}
+          </span>
+        </button>
       </div>
 
       {/* Center: Action Controls */}
