@@ -1062,15 +1062,29 @@ class LlamaServerStartRequest(BaseModel):
 @app.post("/api/v1/llama-server/start")
 async def start_llama_server_runtime(req: Optional[LlamaServerStartRequest] = None) -> Dict[str, Any]:
     """Start embedded llama-server process with selected GGUF model."""
-    model_name = req.model_name if req else None
-    gpu_layers = req.vram_gpu_layers if req else 99
-    return llama_server_supervisor.start(model_name, vram_gpu_layers=gpu_layers)
+    try:
+        model_name = req.model_name if req else None
+        gpu_layers = req.vram_gpu_layers if req else 99
+        result = llama_server_supervisor.start(model_name, vram_gpu_layers=gpu_layers)
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=500, detail="Invalid response from llama-server supervisor")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to start llama-server: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start llama-server: {str(e)}")
 
 
 @app.post("/api/v1/llama-server/stop")
 async def stop_llama_server_runtime() -> Dict[str, Any]:
     """Stop embedded llama-server process."""
-    return llama_server_supervisor.stop()
+    try:
+        result = llama_server_supervisor.stop()
+        if not isinstance(result, dict):
+            raise HTTPException(status_code=500, detail="Invalid response from llama-server supervisor")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to stop llama-server: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop llama-server: {str(e)}")
 
 
 @app.post("/api/v1/llama-server/install")
