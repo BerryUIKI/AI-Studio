@@ -79,6 +79,7 @@ export interface ImageCardData extends Record<string, unknown> {
   isGenerating?: boolean;
   generationStage?: string;
   generationProgress?: number;
+  isMissing?: boolean;
 }
 
 export interface WorkspaceFrameData extends Record<string, unknown> {

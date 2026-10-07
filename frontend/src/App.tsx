@@ -25,11 +25,13 @@ import { FloatingDownloadWidget } from './components/hub/FloatingDownloadWidget'
 import { DownloadManagerDrawer } from './components/hub/DownloadManagerDrawer';
 import { SettingsView } from './components/settings/SettingsView';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { ProjectManagerModal } from './components/project/ProjectManagerModal';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
 import { useEngineStore, type EngineInstance } from './stores/useEngineStore';
 import { useSettingsStore } from './stores/useSettingsStore';
 import { useNavigationStore } from './stores/useNavigationStore';
+import { useProjectStore } from './stores/useProjectStore';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -52,10 +54,28 @@ export default function App() {
   const [notInstalledError, setNotInstalledError] = useState<string | null>(null);
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
   const [showSetupWizard, setShowSetupWizard] = useState<boolean>(false);
+  const [showProjectModal, setShowProjectModal] = useState<boolean>(false);
 
   const { instances, fetchInstances, saveEngineConfig } = useEngineStore();
   const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore();
   const { setActiveView } = useNavigationStore();
+  const { initProject, flushPendingSave } = useProjectStore();
+
+  // Initialize active/default durable project on startup
+  useEffect(() => {
+    initProject();
+  }, [initProject]);
+
+  // Flush pending project autosaves when the window/tab is closing
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      flushPendingSave();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [flushPendingSave]);
 
   // Apply default landing view on initial mount
   useEffect(() => {
@@ -181,6 +201,12 @@ export default function App() {
     force?: boolean;
     stopManagedEngines?: boolean;
   }) => {
+    try {
+      await flushPendingSave();
+    } catch (e) {
+      console.warn('Failed to flush pending project save before close:', e);
+    }
+
     const mode = options?.mode || 'stop_owned';
     const force = options?.force || false;
     const stopManagedEngines = options?.stopManagedEngines;
@@ -325,6 +351,7 @@ export default function App() {
         onImportImage={() => fileInputRef.current?.click()}
         onOpenCloud={() => setShowCloudModal(true)}
         onOpenManager={() => setShowManagerModal(true)}
+        onOpenProjectManager={() => setShowProjectModal(true)}
         showAgentPanel={showAgentPanel}
         onToggleAgent={() => setShowAgentPanel(!showAgentPanel)}
         showNodePalette={showNodePalette}
@@ -451,6 +478,7 @@ export default function App() {
       <VideoModal />
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
       <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
+      <ProjectManagerModal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} />
       <AddEngineModal
         isOpen={showAddEngineModal}
         initialTab={addEngineInitialTab}

@@ -19,23 +19,29 @@ class ProjectStore:
         conn = await self.manager.get_connection()
         proj_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
-        default_canvas = {
+        version = data.version or 1
+        canvas = data.canvas if data.canvas is not None else {
+            "version": version,
             "nodes": [],
             "edges": [],
             "viewport": {"x": 0, "y": 0, "zoom": 1},
         }
+        if isinstance(canvas, dict) and "version" not in canvas:
+            canvas["version"] = version
+
         await conn.execute(
             """
-            INSERT INTO projects (id, name, canvas_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO projects (id, name, version, canvas_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (proj_id, data.name, json.dumps(default_canvas), now, now),
+            (proj_id, data.name, version, json.dumps(canvas), now, now),
         )
         await conn.commit()
         return Project(
             id=proj_id,
             name=data.name,
-            canvas=default_canvas,
+            version=version,
+            canvas=canvas,
             created_at=now,
             updated_at=now,
         )
@@ -43,16 +49,21 @@ class ProjectStore:
     async def get_project(self, project_id: str) -> Optional[Project]:
         conn = await self.manager.get_connection()
         async with conn.execute(
-            "SELECT id, name, canvas_json, created_at, updated_at FROM projects WHERE id = ?",
+            "SELECT id, name, version, canvas_json, created_at, updated_at FROM projects WHERE id = ?",
             (project_id,),
         ) as cursor:
             row = await cursor.fetchone()
             if not row:
                 return None
+            canvas_dict = json.loads(row["canvas_json"])
+            version_val = row["version"] if "version" in row.keys() and row["version"] is not None else 1
+            if isinstance(canvas_dict, dict) and "version" not in canvas_dict:
+                canvas_dict["version"] = version_val
             return Project(
                 id=row["id"],
                 name=row["name"],
-                canvas=json.loads(row["canvas_json"]),
+                version=version_val,
+                canvas=canvas_dict,
                 created_at=row["created_at"],
                 updated_at=row["updated_at"],
             )
@@ -60,19 +71,26 @@ class ProjectStore:
     async def list_projects(self) -> List[Project]:
         conn = await self.manager.get_connection()
         async with conn.execute(
-            "SELECT id, name, canvas_json, created_at, updated_at FROM projects ORDER BY updated_at DESC"
+            "SELECT id, name, version, canvas_json, created_at, updated_at FROM projects ORDER BY updated_at DESC"
         ) as cursor:
             rows = await cursor.fetchall()
-            return [
-                Project(
-                    id=row["id"],
-                    name=row["name"],
-                    canvas=json.loads(row["canvas_json"]),
-                    created_at=row["created_at"],
-                    updated_at=row["updated_at"],
+            result = []
+            for row in rows:
+                canvas_dict = json.loads(row["canvas_json"])
+                version_val = row["version"] if "version" in row.keys() and row["version"] is not None else 1
+                if isinstance(canvas_dict, dict) and "version" not in canvas_dict:
+                    canvas_dict["version"] = version_val
+                result.append(
+                    Project(
+                        id=row["id"],
+                        name=row["name"],
+                        version=version_val,
+                        canvas=canvas_dict,
+                        created_at=row["created_at"],
+                        updated_at=row["updated_at"],
+                    )
                 )
-                for row in rows
-            ]
+            return result
 
     async def update_project(self, project_id: str, update: ProjectUpdate) -> Optional[Project]:
         conn = await self.manager.get_connection()
@@ -81,22 +99,26 @@ class ProjectStore:
             return None
 
         new_name = update.name if update.name is not None else existing.name
+        new_version = update.version if update.version is not None else existing.version
         new_canvas = update.canvas if update.canvas is not None else existing.canvas
+        if isinstance(new_canvas, dict) and "version" not in new_canvas:
+            new_canvas["version"] = new_version
         now = datetime.now(timezone.utc).isoformat()
 
         await conn.execute(
             """
             UPDATE projects
-            SET name = ?, canvas_json = ?, updated_at = ?
+            SET name = ?, version = ?, canvas_json = ?, updated_at = ?
             WHERE id = ?
             """,
-            (new_name, json.dumps(new_canvas), now, project_id),
+            (new_name, new_version, json.dumps(new_canvas), now, project_id),
         )
         await conn.commit()
 
         return Project(
             id=project_id,
             name=new_name,
+            version=new_version,
             canvas=new_canvas,
             created_at=existing.created_at,
             updated_at=now,

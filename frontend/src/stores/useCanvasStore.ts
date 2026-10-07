@@ -11,23 +11,34 @@ import {
 } from '@xyflow/react';
 import { CustomNodeData, ExecutionStatus, NodeDefinition, NodeOutputValue, NodeParamValue } from '../types/workflow';
 import { CanvasNodeData, ImageCardData } from '../types/creative';
+import { GenerationHistoryItem, ProjectCanvasData, ProjectViewport } from '../types/project';
 
 const isImageCardNode = (n: Node<CanvasNodeData>): n is Node<ImageCardData> => n.type === 'imageCard';
 const isWorkflowNode = (n: Node<CanvasNodeData>): n is Node<CustomNodeData> => n.type === 'workflowNode' || !n.type;
 
+const canvasChangeListeners = new Set<() => void>();
+
 interface CanvasState {
   nodes: Node<CanvasNodeData>[];
   edges: Edge[];
+  viewport: ProjectViewport;
+  generationHistory: GenerationHistoryItem[];
   selectedNodeId: string | null;
   isExecuting: boolean;
   currentRunId: string | null;
   past: Node<CanvasNodeData>[][];
   future: Node<CanvasNodeData>[][];
 
+  setViewport: (viewport: ProjectViewport) => void;
+  addGenerationHistory: (item: GenerationHistoryItem) => void;
+  loadCanvas: (canvas: Partial<ProjectCanvasData>) => void;
+  subscribeCanvasChange: (listener: () => void) => () => void;
+  notifyCanvasChange: () => void;
   onNodesChange: (changes: NodeChange<Node<CanvasNodeData>>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (definition: NodeDefinition, position?: { x: number; y: number }) => void;
+  updateNodeData: (nodeId: string, data: Record<string, any>) => void;
   updateNodeParam: (nodeId: string, paramName: string, value: NodeParamValue) => void;
   setNodeStatus: (nodeId: string, status: ExecutionStatus) => void;
   setNodeOutput: (nodeId: string, output: Record<string, NodeOutputValue>) => void;
@@ -47,11 +58,54 @@ interface CanvasState {
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   nodes: [],
   edges: [],
+  viewport: { x: 0, y: 0, zoom: 1 },
+  generationHistory: [],
   selectedNodeId: null,
   isExecuting: false,
   currentRunId: null,
   past: [],
   future: [],
+
+  subscribeCanvasChange: (listener: () => void) => {
+    canvasChangeListeners.add(listener);
+    return () => {
+      canvasChangeListeners.delete(listener);
+    };
+  },
+
+  notifyCanvasChange: () => {
+    canvasChangeListeners.forEach((fn) => {
+      try {
+        fn();
+      } catch (err) {
+        console.error('Error in canvas change listener:', err);
+      }
+    });
+  },
+
+  setViewport: (viewport: ProjectViewport) => {
+    set({ viewport });
+    get().notifyCanvasChange();
+  },
+
+  addGenerationHistory: (item: GenerationHistoryItem) => {
+    set((state) => ({
+      generationHistory: [item, ...state.generationHistory.slice(0, 99)],
+    }));
+    get().notifyCanvasChange();
+  },
+
+  loadCanvas: (data: Partial<ProjectCanvasData>) => {
+    set({
+      nodes: data.nodes ? structuredClone(data.nodes) : [],
+      edges: data.edges ? structuredClone(data.edges) : [],
+      viewport: data.viewport ? structuredClone(data.viewport) : { x: 0, y: 0, zoom: 1 },
+      generationHistory: data.generationHistory ? structuredClone(data.generationHistory) : [],
+      selectedNodeId: null,
+      past: [],
+      future: [],
+    });
+  },
 
   pushSnapshot: () => {
     const currentNodes = structuredClone(get().nodes);
@@ -71,6 +125,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       past: newPast,
       future: [structuredClone(nodes), ...future],
     });
+    get().notifyCanvasChange();
   },
 
   redo: () => {
@@ -83,6 +138,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       past: [...past, structuredClone(nodes)],
       future: newFuture,
     });
+    get().notifyCanvasChange();
   },
 
   removeNode: (nodeId) => {
@@ -93,6 +149,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       edges: edges.filter((e) => e.source !== nodeId && e.target !== nodeId),
       selectedNodeId: selectedNodeId === nodeId ? null : selectedNodeId,
     });
+    get().notifyCanvasChange();
   },
 
   duplicateNode: (nodeId) => {
@@ -115,6 +172,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: [...nodes, clonedNode],
       selectedNodeId: clonedId,
     });
+    get().notifyCanvasChange();
   },
 
   arrangeBranchTree: (rootNodeId) => {
@@ -229,6 +287,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: [newFrame, ...state.nodes],
       selectedNodeId: frameId,
     }));
+    get().notifyCanvasChange();
     return frameId;
   },
 
@@ -236,12 +295,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({
       nodes: applyNodeChanges(changes, get().nodes),
     });
+    if (changes.some((c) => c.type !== 'select')) {
+      get().notifyCanvasChange();
+    }
   },
 
   onEdgesChange: (changes) => {
     set({
       edges: applyEdgeChanges(changes, get().edges),
     });
+    if (changes.some((c) => c.type !== 'select')) {
+      get().notifyCanvasChange();
+    }
   },
 
   onConnect: (connection) => {
@@ -255,6 +320,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         get().edges,
       ),
     });
+    get().notifyCanvasChange();
   },
 
   addNode: (definition, position) => {
@@ -285,6 +351,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       nodes: [...get().nodes, newNode],
       selectedNodeId: newNodeId,
     });
+    get().notifyCanvasChange();
+  },
+
+  updateNodeData: (nodeId, data) => {
+    set({
+      nodes: get().nodes.map((node) => {
+        if (node.id !== nodeId) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            ...data,
+          },
+        };
+      }),
+    });
+    get().notifyCanvasChange();
   },
 
   updateNodeParam: (nodeId, paramName, value) => {
@@ -303,6 +386,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         };
       }),
     });
+    get().notifyCanvasChange();
   },
 
   setNodeStatus: (nodeId, status) => {
@@ -340,6 +424,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   clearCanvas: () => {
     get().pushSnapshot();
     set({ nodes: [], edges: [], selectedNodeId: null, isExecuting: false, currentRunId: null });
+    get().notifyCanvasChange();
   },
 
   cancelRun: () => {

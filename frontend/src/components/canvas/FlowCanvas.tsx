@@ -19,6 +19,7 @@ import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { NodeDefinition } from '../../types/workflow';
 import { ImageCardData } from '../../types/creative';
+import { useProjectStore } from '../../stores/useProjectStore';
 
 const nodeTypes: NodeTypes = {
   workflowNode: WorkflowNode,
@@ -36,6 +37,8 @@ function FlowCanvasInner() {
   const {
     nodes,
     edges,
+    viewport,
+    setViewport: setViewportInStore,
     selectedNodeId,
     onNodesChange,
     onEdgesChange,
@@ -49,7 +52,27 @@ function FlowCanvasInner() {
   } = useCanvasStore();
 
   const { uploadCanvasImage } = useCreativeStore();
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, setViewport } = useReactFlow();
+  const currentProjectId = useProjectStore((s) => s.currentProject?.id);
+
+  // Synchronize ReactFlow viewport when project loads
+  useEffect(() => {
+    if (viewport && typeof viewport.x === 'number' && typeof viewport.zoom === 'number') {
+      setViewport(viewport, { duration: 0 });
+    }
+  }, [currentProjectId, setViewport]);
+
+  // Global Ctrl+S shortcut to save project
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        useProjectStore.getState().saveProject();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const [menuState, setMenuState] = useState<MenuState>({
     isOpen: false,
@@ -363,9 +386,13 @@ function FlowCanvasInner() {
         onPaneClick={handlePaneClick}
         onPaneContextMenu={handlePaneContextMenu}
         onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+        onMoveEnd={(_, vp) => {
+          setViewportInStore(vp);
+        }}
         zoomOnDoubleClick={false}
         nodeTypes={nodeTypes}
-        fitView
+        fitView={nodes.length === 0}
+        defaultViewport={viewport}
         className="dark"
         minZoom={0.2}
         maxZoom={2.5}

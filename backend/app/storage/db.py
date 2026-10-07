@@ -62,6 +62,7 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                version INTEGER DEFAULT 1,
                 canvas_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -118,6 +119,12 @@ class DatabaseManager:
             );
             """
         )
+        # Migrate existing schema if needed
+        async with conn.execute("PRAGMA table_info(projects);") as cursor:
+            cols = [row["name"] for row in await cursor.fetchall()]
+            if "version" not in cols:
+                await conn.execute("ALTER TABLE projects ADD COLUMN version INTEGER DEFAULT 1;")
+
         await conn.commit()
 
 
