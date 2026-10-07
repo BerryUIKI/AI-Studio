@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { ModelEvaluation, HardwareSummary } from '../../stores/useModelHubStore';
+import { useSettingsStore } from '../../stores/useSettingsStore';
+import { t } from '../../i18n/translations';
 import { ShieldCheck, AlertCircle, Cpu, HardDrive, Zap, Info } from 'lucide-react';
 
 interface CompatibilityBadgeProps {
@@ -69,6 +71,23 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
   const style = getBadgeStyle();
   const Icon = style.icon;
 
+  const { getEffectiveLanguage } = useSettingsStore();
+  const lang = getEffectiveLanguage();
+
+  const getDisplayTierLabel = (): string => {
+    if (!evaluation) return '';
+    if (evaluation.notes && evaluation.notes.toLowerCase().includes('cpu')) {
+      const cpuLabel = t('tier_cpu_mode', lang);
+      if (cpuLabel && cpuLabel !== 'tier_cpu_mode') return cpuLabel;
+    }
+    const tierKey = `tier_${evaluation.tier}`;
+    const localized = t(tierKey, lang);
+    if (localized && localized !== tierKey) {
+      return localized;
+    }
+    return evaluation.tier_label;
+  };
+
   return (
     <div
       className="relative inline-block"
@@ -82,7 +101,7 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
       >
         <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
         <Icon className="w-3 h-3" />
-        <span>{evaluation.tier_label}</span>
+        <span>{getDisplayTierLabel()}</span>
       </button>
 
       {/* Hover Diagnostic Breakdown Tooltip */}
