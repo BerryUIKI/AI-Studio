@@ -154,8 +154,8 @@ class WebUIRunner:
         return {
             "asset_id": asset.id,
             "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": req.width,
-            "height": req.height,
+            "width": asset.width or req.width,
+            "height": asset.height or req.height,
             "effective_model": effective_model,
             "model_hash": model_hash,
             "model_revision": model_hash,
@@ -202,8 +202,8 @@ class WebUIRunner:
         return {
             "asset_id": asset.id,
             "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": req.width,
-            "height": req.height,
+            "width": asset.width or req.width,
+            "height": asset.height or req.height,
             "effective_model": effective_model,
             "model_hash": model_hash,
             "model_revision": model_hash,
@@ -267,8 +267,8 @@ class WebUIRunner:
         return {
             "asset_id": asset.id,
             "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": req.width,
-            "height": req.height,
+            "width": asset.width or req.width,
+            "height": asset.height or req.height,
             "effective_model": effective_model,
             "model_hash": model_hash,
             "model_revision": model_hash,
@@ -298,13 +298,18 @@ class WebUIRunner:
 
         img_bytes = base64.b64decode(img_b64_out)
         asset = await asset_store.save_bytes(img_bytes, filename="webui_upscaled.png", media_type="image/png")
-        new_width = int(req.width * req.upscale_factor)
-        new_height = int(req.height * req.upscale_factor)
+        new_width = int(round(req.width * req.upscale_factor))
+        new_height = int(round(req.height * req.upscale_factor))
+        asset_w = getattr(asset, "width", None)
+        asset_h = getattr(asset, "height", None)
+        asset_id = getattr(asset, "id", None)
+        final_w = asset_w if isinstance(asset_w, int) else new_width
+        final_h = asset_h if isinstance(asset_h, int) else new_height
         return {
-            "asset_id": asset.id,
-            "image_url": f"/api/v1/assets/{asset.id}/content",
-            "width": new_width,
-            "height": new_height,
+            "asset_id": asset_id,
+            "image_url": f"/api/v1/assets/{asset_id}/content" if asset_id else "",
+            "width": final_w,
+            "height": final_h,
         }
 
 

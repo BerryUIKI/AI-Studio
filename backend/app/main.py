@@ -869,7 +869,7 @@ async def upload_creative_asset(file: UploadFile = File(...)) -> AssetRecord:
     filename = sanitize_filename(file.filename)
     validated_mime, w, h = validate_and_inspect_media(data, filename)
     category = "video" if validated_mime.startswith("video/") else "image"
-    return await asset_store.save_bytes(data, filename=filename, media_type=category)
+    return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
 
 
 class AssetUploadBase64Request(BaseModel):
@@ -890,7 +890,7 @@ async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRe
     filename = sanitize_filename(req.filename)
     validated_mime, w, h = validate_and_inspect_media(data, filename)
     category = "video" if validated_mime.startswith("video/") else "image"
-    return await asset_store.save_bytes(data, filename=filename, media_type=category)
+    return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
 
 
 agent_service = AgentService(
