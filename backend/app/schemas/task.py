@@ -14,6 +14,8 @@ TaskStatus = Literal[
     "failed",
     "cancel-requested",
     "cancelled",
+    "interrupted",
+    "outcome-unknown",
 ]
 
 
@@ -24,6 +26,7 @@ class RunRecord(BaseModel):
     status: TaskStatus = "queued"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     finished_at: Optional[str] = None
+    request: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskRecord(BaseModel):
@@ -38,6 +41,8 @@ class TaskRecord(BaseModel):
     error: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     finished_at: Optional[str] = None
+    project_id: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class WorkflowRunRequest(BaseModel):

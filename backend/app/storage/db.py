@@ -120,6 +120,11 @@ class DatabaseManager:
             """
         )
         # Migrate existing schema if needed
+        for table, column in (("runs", "request_json"), ("tasks", "metadata_json")):
+            async with conn.execute(f"PRAGMA table_info({table});") as cursor:
+                columns = [row["name"] for row in await cursor.fetchall()]
+            if column not in columns:
+                await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT;")
         async with conn.execute("PRAGMA table_info(projects);") as cursor:
             cols = [row["name"] for row in await cursor.fetchall()]
             if "version" not in cols:
