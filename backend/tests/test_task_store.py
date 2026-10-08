@@ -33,5 +33,13 @@ async def test_durable_history_and_restart_recovery(tmp_path: Path) -> None:
         assert history["remote"].params["nested"] == {"chroma_key": "green"}
         assert await store.list_tasks(project_id="another") == []
         assert "api_key" not in (await store.get_run("remote")).request
+        await store.append_event("done", {"type": "GRAPH_STARTED"})
+        await store.append_event("done", {"type": "GRAPH_FINISHED", "status": "completed"})
+        await manager.close()
+        events = await store.get_events("done", after_sequence=1)
+        assert len(events) == 1
+        assert events[0]["sequence"] == 2
+        assert events[0]["run_id"] == "done"
+        assert events[0]["status"] == "completed"
     finally:
         await manager.close()

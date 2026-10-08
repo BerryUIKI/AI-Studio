@@ -97,6 +97,24 @@ class TaskStore:
         await conn.commit()
         return cursor.rowcount
 
+    async def append_event(self, run_id: str, event: dict[str, Any]) -> None:
+        conn = await self.manager.get_connection()
+        await conn.execute(
+            """INSERT INTO workflow_events (run_id, sequence, event_json)
+               SELECT ?, COALESCE(MAX(sequence), 0) + 1, ? FROM workflow_events WHERE run_id = ?""",
+            (run_id, json.dumps(redact_submission({**event, "run_id": run_id})), run_id),
+        )
+        await conn.commit()
+
+    async def get_events(self, run_id: str, after_sequence: int = 0) -> list[dict[str, Any]]:
+        conn = await self.manager.get_connection()
+        async with conn.execute(
+            "SELECT sequence, event_json FROM workflow_events WHERE run_id = ? AND sequence > ? ORDER BY sequence LIMIT 500",
+            (run_id, after_sequence),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [{**json.loads(row["event_json"]), "sequence": row["sequence"]} for row in rows]
+
 
 task_store = TaskStore()
 execution_task: ContextVar[tuple[TaskStore, TaskRecord] | None] = ContextVar("execution_task", default=None)

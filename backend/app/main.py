@@ -42,6 +42,7 @@ from app.schemas.workflow_analysis import (
 )
 from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
+from app.core.workflow_runs import WorkflowEventSink, workflow_runs
 from app.core.execution_contract import ExecutionContractError, validate_execution_contract
 from app.core.media_validator import (
     validate_and_inspect_media,
@@ -118,7 +119,7 @@ from app.schemas.events import (
 )
 from app.schemas.node import NodeDefinition
 from app.schemas.project import Project, ProjectCreate, ProjectUpdate, AssetRecord
-from app.schemas.task import WorkflowRunRequest
+from app.schemas.task import WorkflowRunRequest, WorkflowSubscription
 from app.schemas.task import TaskRecord
 from app.storage.task_store import task_store
 from app.schemas.workflow import ExecutionPlan, PlannedNodeStep, WorkflowGraph
@@ -182,6 +183,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("Berry AI Studio API shutting down...")
+    await workflow_runs.shutdown()
     try:
         if llama_server_supervisor.is_running():
             logger.info("Stopping embedded llama-server process...")
@@ -421,8 +423,9 @@ async def generation_task_history(project_id: Optional[str] = None) -> List[Task
 @app.post("/api/v1/workflow/cancel/{run_id}")
 async def cancel_workflow_run(run_id: str) -> Dict[str, Any]:
     """Cancel an active DAG workflow run (R14)."""
-    if run_id in active_cancellations:
-        active_cancellations[run_id].set()
+    if workflow_runs.cancel(run_id) or run_id in active_cancellations:
+        if run_id in active_cancellations:
+            active_cancellations[run_id].set()
         return {"run_id": run_id, "success": True, "status": "cancelled"}
     return {"run_id": run_id, "success": False, "status": "not_found"}
 
@@ -1201,8 +1204,9 @@ async def get_asset_content(asset_id: str) -> FileResponse:
 
 @app.post("/api/v1/workflow/cancel/{run_id}")
 async def cancel_workflow_run(run_id: str) -> dict[str, Any]:
-    if run_id in active_cancellations:
-        active_cancellations[run_id].set()
+    if workflow_runs.cancel(run_id) or run_id in active_cancellations:
+        if run_id in active_cancellations:
+            active_cancellations[run_id].set()
         return {"success": True, "run_id": run_id, "status": "cancel-requested"}
     return {"success": False, "message": f"Run '{run_id}' not found or already completed"}
 
@@ -1268,15 +1272,18 @@ async def generate_plan(graph: WorkflowGraph, target_node: str | None = None) ->
     )
 
 
+@app.post("/api/v1/workflow/submit")
+async def submit_workflow(request: WorkflowRunRequest) -> dict[str, str]:
+    """Admit an immutable run once; subscribers never resubmit inference."""
+    try:
+        run_id = await workflow_runs.submit(request, _execute_workflow_request)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    return {"run_id": run_id, "status": "accepted"}
+
+
 @app.websocket("/ws/workflow/run")
 async def websocket_run_workflow(websocket: WebSocket) -> None:
-    """
-    WebSocket endpoint for real-time workflow execution with:
-    - Targeted single-node execution
-    - Port-aware semantic caching
-    - Strict failure boundaries (aborts dependent child nodes)
-    - Run cancellation support
-    """
     origin = websocket.headers.get("origin")
     if origin and not session_manager.is_origin_allowed(origin):
         logger.warning(f"Rejecting WebSocket handshake from unauthorized origin: {origin}")
@@ -1290,26 +1297,37 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
         return
 
     await websocket.accept()
+    run_id = None
     try:
-        raw = await websocket.receive_text()
-        parsed = json.loads(raw)
-        # Parse either WorkflowRunRequest or raw WorkflowGraph
-        if "graph" in parsed:
-            run_request = WorkflowRunRequest.model_validate(parsed)
-            graph = run_request.graph
-            target_node = run_request.target_node_id
-            run_id = run_request.run_id or str(uuid.uuid4())
+        parsed = json.loads(await websocket.receive_text())
+        after_sequence = 0
+        if parsed.get("type") == "SUBSCRIBE":
+            subscription = WorkflowSubscription.model_validate(parsed)
+            run_id = subscription.run_id
+            after_sequence = subscription.after_sequence
         else:
-            graph = WorkflowGraph.model_validate(parsed)
-            target_node = None
-            run_id = str(uuid.uuid4())
-    except Exception as e:
-        await websocket.send_text(json.dumps({"type": "ERROR", "message": f"Invalid graph payload: {e}"}))
-        await websocket.close()
-        return
+            request = WorkflowRunRequest.model_validate(parsed if "graph" in parsed else {"graph": parsed})
+            run_id = await workflow_runs.submit(request, _execute_workflow_request)
+        async for event in workflow_runs.subscribe(run_id, after_sequence):
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        logger.info("Workflow subscriber disconnected; execution continues independently")
+    except (ValueError, LookupError) as error:
+        await websocket.send_json({"type": "ERROR", "message": str(error), "run_id": run_id})
+    finally:
+        try:
+            await websocket.close()
+        except RuntimeError:
+            pass
 
+
+async def _execute_workflow_request(request: WorkflowRunRequest, websocket: WorkflowEventSink) -> None:
+    """Execute into a durable event sink without owning any client connection."""
+    graph = request.graph
+    target_node = request.target_node_id
+    run_id = request.run_id
     # Register cancellation token
-    cancel_event = asyncio.Event()
+    cancel_event = websocket.cancel_event
     active_cancellations[run_id] = cancel_event
     task_registry.register_task(
         task_id=run_id,
@@ -1386,6 +1404,8 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
                         val = source_output[edge.source_handle]
                         inputs[edge.target_handle] = val
                         bindings.append((edge.target_handle, compute_content_hash(val), edge.source_handle))
+
+            await websocket.bind_inputs(node.id, inputs)
 
             # Compute port-aware semantic hash
             if bindings:

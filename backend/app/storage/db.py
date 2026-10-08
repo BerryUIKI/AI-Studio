@@ -111,6 +111,14 @@ class DatabaseManager:
 
             CREATE INDEX IF NOT EXISTS idx_tasks_run ON tasks(run_id);
 
+            CREATE TABLE IF NOT EXISTS workflow_events (
+                run_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                event_json TEXT NOT NULL,
+                PRIMARY KEY (run_id, sequence),
+                FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS cache_entries (
                 node_hash TEXT PRIMARY KEY,
                 output_json TEXT NOT NULL,
