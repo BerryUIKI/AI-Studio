@@ -133,10 +133,12 @@ Write-Host "  -> backend application code copied" -ForegroundColor Green
 
 # Copy complete standalone Python runtime
 Write-Host "  -> Copying standalone Python runtime to runtime/python..." -ForegroundColor Yellow
+# Create destination directory structure explicitly
+New-Item -ItemType Directory -Path "$TargetDir\runtime\python" -Force | Out-Null
 Copy-Item -Recurse "$StandalonePython\*" -Destination "$TargetDir\runtime\python\" -Force
 Assert-FileExists "$TargetDir\runtime\python\python.exe" "Bundled Python executable"
 
-# Verify bundled Python is self-contained (no external base_prefix references)
+# Verify bundled Python is self-contained (test the STAGED runtime, not source)
 $BundledPyTest = & "$TargetDir\runtime\python\python.exe" -c "import sys, fastapi; print(f'Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} OK')" 2>&1
 if ($LASTEXITCODE -ne 0) {
     throw "PACKAGING FAILED: Bundled Python runtime cannot execute independently"
@@ -153,28 +155,52 @@ Write-Host "  -> Downloading portable Git..." -ForegroundColor Yellow
 try {
     $ProgressPreference = 'SilentlyContinue'
     Invoke-WebRequest -Uri $PortableGitUrl -OutFile $PortableGitExe -UseBasicParsing
+    Write-Host "    Downloaded portable Git installer" -ForegroundColor Gray
+} catch {
+    throw "PACKAGING FAILED: Failed to download portable Git from $PortableGitUrl : $_"
+}
 
-    # Extract portable Git (self-extracting 7z)
-    New-Item -ItemType Directory -Path $PortableGitPath -Force | Out-Null
-    Write-Host "  -> Extracting portable Git to runtime/git..." -ForegroundColor Yellow
+# Extract portable Git (self-extracting 7z)
+New-Item -ItemType Directory -Path $PortableGitPath -Force | Out-Null
+Write-Host "  -> Extracting portable Git to runtime/git..." -ForegroundColor Yellow
 
+try {
     # Use 7z if available, otherwise use the self-extractor
     $7z = Get-Command 7z -ErrorAction SilentlyContinue
     if ($7z) {
         & 7z x $PortableGitExe "-o$PortableGitPath" -y | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "7z extraction failed with exit code $LASTEXITCODE"
+        }
     } else {
-        Start-Process -FilePath $PortableGitExe -ArgumentList "-o`"$PortableGitPath`"","-y" -Wait -NoNewWindow
-    }
-
-    Remove-Item $PortableGitExe -Force
-
-    if (Test-Path "$PortableGitPath\cmd\git.exe") {
-        Write-Host "  -> Portable Git bundled successfully" -ForegroundColor Green
-    } else {
-        Write-Warning "Portable Git extraction may have failed; engine installation might require system Git"
+        # Self-extractor mode
+        $Process = Start-Process -FilePath $PortableGitExe -ArgumentList "-o`"$PortableGitPath`"","-y" -Wait -PassThru -NoNewWindow
+        if ($Process.ExitCode -ne 0) {
+            throw "Self-extractor failed with exit code $($Process.ExitCode)"
+        }
     }
 } catch {
-    Write-Warning "Failed to bundle portable Git: $_. Engine installation will require system Git."
+    throw "PACKAGING FAILED: Failed to extract portable Git: $_"
+} finally {
+    Remove-Item $PortableGitExe -Force -ErrorAction SilentlyContinue
+}
+
+# Verify Git extraction succeeded
+$BundledGit = "$PortableGitPath\cmd\git.exe"
+Assert-FileExists $BundledGit "Bundled Git executable"
+
+# Verify Git actually works
+try {
+    $GitVersion = & $BundledGit --version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git execution failed with exit code $LASTEXITCODE : $GitVersion"
+    }
+    if ($GitVersion -notmatch "git version") {
+        throw "Unexpected Git output: $GitVersion"
+    }
+    Write-Host "  -> Portable Git bundled and verified: $($GitVersion -replace '[\r\n]', '')" -ForegroundColor Green
+} catch {
+    throw "PACKAGING FAILED: Bundled Git is broken or incomplete: $_"
 }
 
 # Copy embedded llama-server runtime if present
