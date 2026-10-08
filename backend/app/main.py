@@ -42,6 +42,7 @@ from app.schemas.workflow_analysis import (
 )
 from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
+from app.core.execution_contract import ExecutionContractError, validate_execution_contract
 from app.core.media_validator import (
     validate_and_inspect_media,
     sanitize_filename,
@@ -1207,7 +1208,10 @@ async def generate_plan(graph: WorkflowGraph, target_node: str | None = None) ->
     try:
         resolver = DAGResolver(graph)
         sorted_nodes = resolver.topological_sort(target_node_id=target_node)
+        validate_execution_contract(graph, sorted_nodes, NODE_RUNNERS)
     except CyclicDependencyError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except ExecutionContractError as err:
         raise HTTPException(status_code=400, detail=str(err))
     except ValueError as err:
         raise HTTPException(status_code=404, detail=str(err))
@@ -1308,6 +1312,16 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
     try:
         resolver = DAGResolver(graph)
         sorted_nodes = resolver.topological_sort(target_node_id=target_node)
+        validate_execution_contract(graph, sorted_nodes, NODE_RUNNERS)
+    except ExecutionContractError as e:
+        await websocket.send_text(NodeErrorEvent(node_id=e.node_id, message=str(e), run_id=run_id).model_dump_json())
+        for node in graph.nodes:
+            await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error" if node.id == e.node_id else "cancelled", run_id=run_id).model_dump_json())
+        await websocket.send_text(GraphFinishedEvent(run_id=run_id, execution_time_ms=0, status="failed").model_dump_json())
+        await websocket.close()
+        active_cancellations.pop(run_id, None)
+        task_registry.unregister_task(run_id)
+        return
     except CyclicDependencyError as e:
         await websocket.send_text(json.dumps({"type": "ERROR", "message": str(e), "run_id": run_id}))
         await websocket.close()
@@ -1424,6 +1438,16 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
                     cancel_event.set()
                     break
 
+            if cancel_event.is_set():
+                await websocket.send_text(RunCancelledEvent(run_id=run_id).model_dump_json())
+                await websocket.send_text(GraphFinishedEvent(run_id=run_id, execution_time_ms=(time.monotonic() - start_time) * 1000, status="cancelled").model_dump_json())
+                break
+
+            definition = registry.get(node.type)
+            if not node_has_error and definition and any(port.id not in output for port in definition.outputs):
+                node_has_error = True
+                await websocket.send_text(NodeErrorEvent(node_id=node.id, message="Runner did not return its declared outputs", run_id=run_id).model_dump_json())
+
             if node_has_error:
                 failed_node_ids.add(node.id)
                 # Notify cancellation for all unexecuted descendants
@@ -1448,7 +1472,7 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
             # Loop completed without break
             elapsed_ms = (time.monotonic() - start_time) * 1000
             await websocket.send_text(
-                GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="completed").model_dump_json()
+                GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="failed" if failed_node_ids else "completed").model_dump_json()
             )
 
     except WebSocketDisconnect:
