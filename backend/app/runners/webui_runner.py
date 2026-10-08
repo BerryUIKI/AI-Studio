@@ -228,8 +228,8 @@ class WebUIRunner:
 
         # Validate mask dimensions match source (Issue #106)
         from PIL import Image
-        source_img = Image.open(img_path)
-        validate_mask_dimensions(mask_path, source_img.width, source_img.height)
+        with Image.open(img_path) as source_img:
+            validate_mask_dimensions(mask_path, source_img.width, source_img.height)
 
         # Convert mask for WebUI (Issue #106): grayscale white=edit, black=protect
         mask_bytes = mask_path.read_bytes()

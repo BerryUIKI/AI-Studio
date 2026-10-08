@@ -205,7 +205,7 @@ def compute_creative_cache_hash(
         "model": req.model,
         "connection_id": connection_id,  # Isolate by connection
         "provider_id": effective_provider,
-        "runner_version": "0.3.0",  # Bumped from 0.2.0 for Issue #127 connection routing
+        "runner_version": "0.4.0",  # Explicit grayscale cloud masks and dimension validation
         "width": req.width,
         "height": req.height,
         "steps": req.steps,
@@ -449,6 +449,14 @@ class CreativeRunner:
                     height=req.height,
                 )
 
+        if req.action == CreativeActionType.INPAINT:
+            try:
+                if not source_width or not source_height:
+                    raise ValueError("Source image dimensions could not be decoded.")
+                await asyncio.to_thread(validate_mask_dimensions, mask_file_path, source_width, source_height)
+            except (OSError, ValueError) as error:
+                return CreativeActionResult(success=False, task_id=task_id, error_message=str(error))
+
         try:
             # 1. Resolve unified execution plan before cache check & dispatch
             plan = resolve_execution_plan(req)
@@ -664,7 +672,7 @@ class CreativeRunner:
                     source_img = Image.open(input_file)
                     validate_mask_dimensions(mask_file, source_img.width, source_img.height)
 
-                converted_mask_path = normalize_mask_for_comfyui(mask_file)
+                converted_mask_path = await asyncio.to_thread(normalize_mask_for_comfyui, mask_file)
                 mask_result = await comfy_client.upload_mask(str(converted_mask_path), subfolder="berry_assets")
                 uploaded_mask_name = mask_result["name"]
                 if mask_result.get("subfolder"):
@@ -826,14 +834,14 @@ class CreativeRunner:
                 if not key:
                     raise RuntimeError("OpenAI API key missing. Configure it in Cloud Providers (BYOK).")
                 # Convert mask for OpenAI (Issue #106): transparent = edit
-                converted_mask_bytes = normalize_mask_for_openai(mask_bytes)
+                converted_mask_bytes = await asyncio.to_thread(normalize_mask_for_openai, mask_bytes)
                 remote_url = await _call_openai_inpaint(req.prompt, image_bytes, converted_mask_bytes, key)
             elif plan.provider_id == "fal_ai":
                 key = credentials_manager.get_key(CloudProviderId.FAL)
                 if not key:
                     raise RuntimeError("Fal.ai API key is required for cloud inpainting. Configure it in Cloud Settings (BYOK).")
-                # Convert mask for Fal.ai (Issue #106): opaque = edit (matches Berry, validate only)
-                converted_mask_bytes = normalize_mask_for_fal_ai(mask_bytes)
+                # flux-general/inpainting consumes grayscale white=edit, black=protect.
+                converted_mask_bytes = await asyncio.to_thread(normalize_mask_for_fal_ai, mask_bytes)
                 converted_mask_b64 = base64.b64encode(converted_mask_bytes).decode("utf-8")
                 remote_url = await _call_fal_ai_action(
                     action="inpaint",
