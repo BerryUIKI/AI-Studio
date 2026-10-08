@@ -1,57 +1,18 @@
-# Mask Normalization Implementation (Issue #106)
+# Inpainting Mask Contract (#106)
 
-## Berry Mask Convention
+Berry masks encode edit coverage in alpha: opaque painted pixels are edited; transparent pixels are protected. Partial alpha preserves brush-edge coverage. Imported masks must have alpha; arbitrary grayscale uploads are not silently reinterpreted.
 
-**Canonical Semantic**: Painted regions (opaque white, alpha=255) indicate areas TO BE EDITED by AI. Unpainted regions (transparent, alpha=0) indicate areas TO BE PROTECTED.
+| Adapter | Submitted mask | Painted region | Protected region |
+| --- | --- | --- | --- |
+| ComfyUI LoadImage | RGBA PNG, inverse alpha | Alpha 0 -> MASK 1 | Alpha 255 -> MASK 0 |
+| WebUI | Grayscale PNG from Berry alpha | White 255 | Black 0 |
+| OpenAI edits | RGBA PNG, inverse alpha | Transparent | Opaque |
+| Fal flux-general/inpainting | Grayscale PNG from Berry alpha | White 255 | Black 0 |
 
-This convention is documented in:
-- `backend/app/runners/mask_converter.py` module docstring
-- Test suite in `backend/tests/test_mask_converter.py`
+Fal uses an explicit grayscale mask rather than relying on transparency being interpreted consistently. Its documented [inpainting API](https://fal.ai/models/fal-ai/flux-general/inpainting/api) supplies a separate image and mask. [OpenAI mask guidance](https://developers.openai.com/api/docs/guides/image-generation) specifies transparent edit regions. ComfyUI LoadImage's mask remains inverse alpha.
 
-## Provider-Specific Conversions
+Every creative inpaint submission validates mask dimensions against the actual source before cache lookup or inference. Mismatches fail with guidance rather than stretching or cropping. Conversions preserve exact dimensions and coordinates. Temporary Comfy masks have unique filenames and are removed after upload. CPU mask conversion runs in a worker thread on creative cloud/Comfy paths. Cache runner version 0.4.0 invalidates older semantics.
 
-### ComfyUI
-- **Contract**: LoadImage MASK output = `1 - alpha`
-- **Issue**: Painted regions (alpha=255) become 0 (protect), transparent (alpha=0) becomes 1 (edit)
-- **Solution**: Invert alpha channel before upload
-- **Implementation**: `normalize_mask_for_comfyui()` creates temporary inverted mask
+Validation: 16 converter and cloud adapter payload tests pass. An 8x6 source with one painted pixel asserts the exact Fal/OpenAI payload meaning and unchanged coordinate alignment; mismatched dimensions prevent dispatch. Existing creative/upload/cancellation tests also pass (28 tests).
 
-### WebUI
-- **Contract**: Grayscale where white=edit, black=protect
-- **Match**: Semantically matches Berry convention
-- **Solution**: Convert RGBA alpha channel to grayscale L mode
-- **Implementation**: `normalize_mask_for_webui()` extracts alpha to grayscale
-
-### OpenAI
-- **Contract**: Alpha channel where transparent=edit, opaque=protect
-- **Issue**: Inverted from Berry convention
-- **Solution**: Invert alpha channel
-- **Implementation**: `normalize_mask_for_openai()` inverts alpha
-
-### Fal.ai
-- **Contract**: Alpha channel where opaque=edit, transparent=protect
-- **Match**: Exactly matches Berry convention
-- **Solution**: Validate format only, no conversion needed
-- **Implementation**: `normalize_mask_for_fal_ai()` validates image
-
-## Integration Points
-
-1. **ComfyUI**: `creative_runner._run_comfy()` converts mask before upload, cleans up temporary file
-2. **WebUI**: `webui_runner._run_inpaint()` converts mask before base64 encoding
-3. **Cloud**: `creative_runner._run_cloud()` converts based on provider_id
-4. **Validation**: All paths validate source/mask dimension alignment
-
-## Cache Invalidation
-
-Runner version bumped from `0.1.0` to `0.2.0` in `compute_creative_cache_hash()` to prevent reuse of results generated with incorrect mask semantics.
-
-## Test Coverage
-
-13 mask converter tests verify:
-- Berry convention documentation
-- Provider-specific conversions (ComfyUI, WebUI, OpenAI, Fal.ai)
-- Dimension validation and preservation
-- Edge cases: partial alpha, fully painted, fully transparent
-- File handle management
-
-All tests passing.
+These are deterministic adapter tests. Live engine/provider output preservation remains unverified; #106 stays open until a real known-region run records source, mask, output, engine/model/provider versions, and protected-area comparison. No paid inference was performed.

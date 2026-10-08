@@ -50,8 +50,8 @@ async def test_upload_then_queue_and_cache_reuse(
     async def handle(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/upload/image":
             body = await request.aread()
-            # Check for mask conversion: converted files have "_comfy" suffix
-            name = "mask" if b'filename="mask' in body else "source"
+            # Converted masks have unique names so concurrent uploads cannot collide.
+            name = "mask" if b'filename="berry-mask-' in body else "source"
             events.append(name)
             if name == "mask" and fail_mask:
                 return httpx.Response(503)

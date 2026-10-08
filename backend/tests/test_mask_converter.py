@@ -122,22 +122,21 @@ def test_openai_mask_alpha_inversion():
     assert unpainted_pixel[3] == 255, f"Unpainted region should have alpha=255 for OpenAI, got {unpainted_pixel[3]}"
 
 
-def test_fal_ai_mask_passthrough():
+def test_fal_ai_mask_grayscale():
     """
-    Fal.ai expects opaque (alpha=255) = edit, transparent (alpha=0) = protect.
-    This matches Berry convention exactly - just validate format.
+    The supported Fal endpoint expects white=edit and black=protect.
     """
     mask_bytes = create_test_mask(100, 100, (20, 20, 40, 40))
     converted_bytes = normalize_mask_for_fal_ai(mask_bytes)
 
-    # Should return original bytes since format matches
-    converted = Image.open(BytesIO(converted_bytes)).convert("RGBA")
+    converted = Image.open(BytesIO(converted_bytes))
+    assert converted.mode == "L"
 
     # Painted region should still be opaque
-    assert converted.getpixel((30, 30))[3] == 255
+    assert converted.getpixel((30, 30)) == 255
 
     # Unpainted region should still be transparent
-    assert converted.getpixel((5, 5))[3] == 0
+    assert converted.getpixel((5, 5)) == 0
 
 
 def test_mask_dimension_validation_success():
@@ -276,3 +275,17 @@ def test_fully_transparent_mask():
 
 
 from io import BytesIO
+
+
+def test_comfy_conversions_use_distinct_files(tmp_path: Path) -> None:
+    source = tmp_path / "mask.png"
+    source.write_bytes(create_test_mask(4, 4, (1, 1, 1, 1)))
+    first = normalize_mask_for_comfyui(source)
+    second = normalize_mask_for_comfyui(source)
+    try:
+        assert first != second
+        assert first.read_bytes() == second.read_bytes()
+        assert source.read_bytes() != first.read_bytes()
+    finally:
+        first.unlink()
+        second.unlink()
