@@ -56,8 +56,8 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "  -> pip installed: $PipVersion" -ForegroundColor Green
 
 # Test 5: Verify backend dependencies
-Write-Host "`n[Test 5/5] Verifying backend dependencies..." -ForegroundColor Yellow
-$RequiredPackages = @("fastapi", "pydantic", "uvicorn", "httpx", "pytest", "aiosqlite", "Pillow")
+Write-Host "`n[Test 5/6] Verifying backend dependencies..." -ForegroundColor Yellow
+$RequiredPackages = @("fastapi", "pydantic", "uvicorn", "httpx", "pytest", "aiosqlite", "PIL")
 $MissingPackages = @()
 
 foreach ($pkg in $RequiredPackages) {
@@ -74,7 +74,26 @@ if ($MissingPackages.Count -gt 0) {
     throw "Missing required packages: $($MissingPackages -join ', ')"
 }
 
+# Test 6: Verify venv module support (critical for engine installation)
+Write-Host "`n[Test 6/6] Verifying venv module support..." -ForegroundColor Yellow
+$VenvTest = & $PythonExe -c "import venv; print('OK')" 2>&1
+if ($LASTEXITCODE -ne 0 -or $VenvTest -notmatch "OK") {
+    throw "venv module not available. This runtime cannot create isolated engine environments."
+}
+Write-Host "  -> venv module available" -ForegroundColor Green
+
+# Test venv creation
+$TestVenvPath = Join-Path $PythonDir "test_venv_creation"
+& $PythonExe -m venv $TestVenvPath 2>&1 | Out-Null
+if ($LASTEXITCODE -eq 0 -and (Test-Path "$TestVenvPath\Scripts\python.exe")) {
+    Remove-Item -Recurse -Force $TestVenvPath
+    Write-Host "  -> venv creation successful" -ForegroundColor Green
+} else {
+    throw "venv creation failed. Engine installation will not work."
+}
+
 Write-Host "`n==========================================================" -ForegroundColor Cyan
-Write-Host "  Standalone Python Runtime Test PASSED!" -ForegroundColor Green
+Write-Host "  All Standalone Python Runtime Tests PASSED!" -ForegroundColor Green
 Write-Host "  Runtime is complete and self-contained." -ForegroundColor Green
+Write-Host "  Supports: backend startup, venv creation, engine isolation" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan

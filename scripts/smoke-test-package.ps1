@@ -121,11 +121,26 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "  -> Bundled Python executable runs successfully (Python $PyVersion)" -ForegroundColor Green
 
 # Test backend dependencies
+# Test backend dependencies
 $PyFastAPI = & $PythonExe -c "import fastapi, pydantic, uvicorn, httpx; print('OK')" 2>&1
 if ($LASTEXITCODE -ne 0 -or $PyFastAPI -notmatch "OK") {
     throw "Bundled python.exe failed to import backend dependencies. Error: $PyFastAPI"
 }
 Write-Host "  -> Backend dependencies verified (fastapi, pydantic, uvicorn, httpx)" -ForegroundColor Green
+
+# Test venv module (required for engine installation)
+$PyVenv = & $PythonExe -c "import venv; print('OK')" 2>&1
+if ($LASTEXITCODE -ne 0 -or $PyVenv -notmatch "OK") {
+    throw "Bundled python.exe missing venv module. Engine installation will fail. Error: $PyVenv"
+}
+Write-Host "  -> venv module available for engine isolation" -ForegroundColor Green
+
+# Test app.main import (backend startup capability)
+$PyAppMain = & $PythonExe -c "import sys; sys.path.insert(0, r'$PackageDir\backend'); import app.main; print('OK')" 2>&1
+if ($LASTEXITCODE -ne 0 -or $PyAppMain -notmatch "OK") {
+    throw "Bundled python.exe cannot import app.main. Backend startup will fail. Error: $PyAppMain"
+}
+Write-Host "  -> app.main import successful (backend startup capable)" -ForegroundColor Green
 
 # Test sys.executable points to bundled Python
 $SysExecutable = & $PythonExe -c "import sys; print(sys.executable)" 2>&1
@@ -139,26 +154,62 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 # Check 6: Verify portable Git if bundled
-Write-Host "`n[Check 6/6] Checking for bundled portable Git..." -ForegroundColor Yellow
+Write-Host "`n[Check 6/7] Verifying bundled portable Git..." -ForegroundColor Yellow
 $PortableGitExe = "$PackageDir\runtime\git\cmd\git.exe"
-if (Test-Path $PortableGitExe) {
-    try {
-        $GitVersion = & $PortableGitExe --version 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  -> Portable Git bundled and functional: $GitVersion" -ForegroundColor Green
-        } else {
-            Write-Warning "Portable Git present but execution failed: $GitVersion"
-        }
-    } catch {
-        Write-Warning "Portable Git present but execution failed: $_"
+if (-not (Test-Path $PortableGitExe)) {
+    throw "REQUIRED: Portable Git not found at $PortableGitExe. Engine installation will fail."
+}
+
+try {
+    $GitVersion = & $PortableGitExe --version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Bundled Git execution failed with exit code $LASTEXITCODE : $GitVersion"
     }
-} else {
-    Write-Host "  -> Portable Git not bundled (engine installation will require system Git)" -ForegroundColor Yellow
+    if ($GitVersion -notmatch "git version") {
+        throw "Bundled Git returned unexpected output: $GitVersion"
+    }
+    Write-Host "  -> Portable Git bundled and functional: $($GitVersion -replace '[\r\n]', '')" -ForegroundColor Green
+} catch {
+    throw "REQUIRED: Bundled Git is broken or incomplete: $_"
+}
+
+# Check 7: Test venv creation with bundled Python
+Write-Host "`n[Check 7/7] Testing isolated venv creation capability..." -ForegroundColor Yellow
+$TestVenvPath = "$PackageDir\test_venv_smoke"
+try {
+    & $PythonExe -m venv $TestVenvPath 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "venv creation failed with exit code $LASTEXITCODE"
+    }
+
+    $VenvPython = "$TestVenvPath\Scripts\python.exe"
+    if (-not (Test-Path $VenvPython)) {
+        throw "venv python.exe not created at $VenvPython"
+    }
+
+    # Test the venv Python works
+    $VenvTest = & $VenvPython -c "import sys; print('OK')" 2>&1
+    if ($LASTEXITCODE -ne 0 -or $VenvTest -notmatch "OK") {
+        throw "venv Python execution failed: $VenvTest"
+    }
+
+    Write-Host "  -> venv creation successful (engine installation capable)" -ForegroundColor Green
+} catch {
+    throw "CRITICAL: venv creation failed. Engine installation will not work: $_"
+} finally {
+    if (Test-Path $TestVenvPath) {
+        Remove-Item -Recurse -Force $TestVenvPath -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "`n==========================================================" -ForegroundColor Cyan
-Write-Host "  All Package Smoke Tests PASSED!" -ForegroundColor Green
+Write-Host "  All 7 Package Smoke Tests PASSED!" -ForegroundColor Green
 Write-Host "  Distribution verified for clean-machine deployment." -ForegroundColor Green
+Write-Host "`n  Verified capabilities:" -ForegroundColor Yellow
+Write-Host "    - Self-contained Python runtime with venv support" -ForegroundColor Yellow
+Write-Host "    - Backend startup (app.main import)" -ForegroundColor Yellow
+Write-Host "    - Isolated engine environment creation" -ForegroundColor Yellow
+Write-Host "    - Bundled Git for repository operations" -ForegroundColor Yellow
 Write-Host "`n  NOTE: This is a host-machine test with PATH sanitization." -ForegroundColor Yellow
 Write-Host "  Full L01 acceptance requires clean Windows VM verification:" -ForegroundColor Yellow
 Write-Host "    - Extract on Windows VM without Python/Git/Node" -ForegroundColor Yellow
