@@ -266,6 +266,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         generationProgress: 100,
       };
 
+      useCanvasStore.getState().pushSnapshot();
       useCanvasStore.setState((state) => ({
         nodes: state.nodes.map((node) => {
           if (node.id === placeholderId) {
@@ -378,8 +379,9 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         data: cardData,
       };
 
+      useCanvasStore.getState().pushSnapshot();
       useCanvasStore.setState({
-        nodes: [...existingNodes, newCardNode],
+        nodes: [...useCanvasStore.getState().nodes, newCardNode],
         selectedNodeId: cardId,
       });
       useCanvasStore.getState().notifyCanvasChange();

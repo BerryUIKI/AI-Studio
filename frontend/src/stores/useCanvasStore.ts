@@ -18,6 +18,18 @@ const isWorkflowNode = (n: Node<CanvasNodeData>): n is Node<CustomNodeData> => n
 
 const canvasChangeListeners = new Set<() => void>();
 
+interface CanvasSnapshot {
+  nodes: Node<CanvasNodeData>[];
+  edges: Edge[];
+  selectedNodeId: string | null;
+}
+
+function snapshotCanvas(state: CanvasState): CanvasSnapshot {
+  // Pending cards are transient; undo must never restore an abandoned spinner.
+  const nodes = state.nodes.filter((node) => !isImageCardNode(node) || !node.data.isGenerating);
+  return structuredClone({ nodes, edges: state.edges, selectedNodeId: nodes.some((node) => node.id === state.selectedNodeId) ? state.selectedNodeId : null });
+}
+
 interface CanvasState {
   nodes: Node<CanvasNodeData>[];
   edges: Edge[];
@@ -26,8 +38,9 @@ interface CanvasState {
   selectedNodeId: string | null;
   isExecuting: boolean;
   currentRunId: string | null;
-  past: Node<CanvasNodeData>[][];
-  future: Node<CanvasNodeData>[][];
+  past: CanvasSnapshot[];
+  future: CanvasSnapshot[];
+  isDragging: boolean;
 
   setViewport: (viewport: ProjectViewport) => void;
   addGenerationHistory: (item: GenerationHistoryItem) => void;
@@ -65,6 +78,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   currentRunId: null,
   past: [],
   future: [],
+  isDragging: false,
 
   subscribeCanvasChange: (listener: () => void) => {
     canvasChangeListeners.add(listener);
@@ -104,39 +118,42 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       selectedNodeId: null,
       past: [],
       future: [],
+      isDragging: false,
     });
   },
 
   pushSnapshot: () => {
-    const currentNodes = structuredClone(get().nodes);
+    const currentCanvas = snapshotCanvas(get());
     set((state) => ({
-      past: [...state.past.slice(-24), currentNodes],
+      past: [...state.past.slice(-24), currentCanvas],
       future: [],
     }));
   },
 
   undo: () => {
-    const { past, future, nodes } = get();
+    const { past, future } = get();
     if (past.length === 0) return;
     const previous = past[past.length - 1];
     const newPast = past.slice(0, -1);
     set({
-      nodes: previous,
+      ...structuredClone(previous),
       past: newPast,
-      future: [structuredClone(nodes), ...future],
+      future: [snapshotCanvas(get()), ...future],
+      isDragging: false,
     });
     get().notifyCanvasChange();
   },
 
   redo: () => {
-    const { past, future, nodes } = get();
+    const { past, future } = get();
     if (future.length === 0) return;
     const next = future[0];
     const newFuture = future.slice(1);
     set({
-      nodes: next,
-      past: [...past, structuredClone(nodes)],
+      ...structuredClone(next),
+      past: [...past, snapshotCanvas(get())],
       future: newFuture,
+      isDragging: false,
     });
     get().notifyCanvasChange();
   },
@@ -292,8 +309,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   onNodesChange: (changes) => {
+    const structural = changes.some((change) => change.type === 'add' || change.type === 'replace' ||
+      (change.type === 'remove' && get().nodes.some((node) => node.id === change.id)));
+    const movement = changes.filter((change) => (change.type === 'position' && change.position) ||
+      (change.type === 'dimensions' && change.resizing !== undefined));
+    if (structural || (movement.length > 0 && !get().isDragging)) get().pushSnapshot();
+    const removed = new Set(changes.filter((change) => change.type === 'remove').map((change) => change.id));
     set({
       nodes: applyNodeChanges(changes, get().nodes),
+      edges: get().edges.filter((edge) => !removed.has(edge.source) && !removed.has(edge.target)),
+      selectedNodeId: removed.has(get().selectedNodeId || '') ? null : get().selectedNodeId,
+      isDragging: movement.length ? movement.some((change) => (change.type === 'position' && change.dragging) ||
+        (change.type === 'dimensions' && change.resizing)) : get().isDragging,
     });
     if (changes.some((c) => c.type !== 'select')) {
       get().notifyCanvasChange();
@@ -301,6 +328,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   onEdgesChange: (changes) => {
+    if (changes.some((change) => change.type === 'add' || change.type === 'replace' ||
+      (change.type === 'remove' && get().edges.some((edge) => edge.id === change.id)))) get().pushSnapshot();
     set({
       edges: applyEdgeChanges(changes, get().edges),
     });
@@ -310,6 +339,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   onConnect: (connection) => {
+    get().pushSnapshot();
     set({
       edges: addEdge(
         {
@@ -371,6 +401,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   },
 
   updateNodeParam: (nodeId, paramName, value) => {
+    get().pushSnapshot();
     set({
       nodes: get().nodes.map((node) => {
         if (node.id !== nodeId || !isWorkflowNode(node)) return node;
