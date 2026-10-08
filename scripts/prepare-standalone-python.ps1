@@ -42,17 +42,9 @@ Write-Host "`n[2/4] Extracting Python runtime (this may take 2-3 minutes)..." -F
 Write-Host "  -> Running installer with TargetDir=$TargetDir" -ForegroundColor Gray
 
 try {
-    # Use /quiet mode with TargetDir to extract without system installation
-    $InstallArgs = @(
-        "/quiet",
-        "TargetDir=$TargetDir",
-        "Include_pip=1",
-        "Include_test=0",
-        "Include_tcltk=0",
-        "Include_launcher=0",
-        "InstallAllUsers=0",
-        "PrependPath=0"
-    )
+    # Use /passive mode with TargetDir and specific options
+    # InstallAllUsers=0 and no system modifications for portable install
+    $InstallArgs = "/passive TargetDir=`"$TargetDir`" Include_pip=1 Include_test=0 Include_tcltk=0 Include_launcher=0 InstallAllUsers=0 PrependPath=0 Shortcuts=0 AssociateFiles=0"
 
     $Process = Start-Process -FilePath $InstallerFile -ArgumentList $InstallArgs -Wait -PassThru -NoNewWindow
 
