@@ -275,3 +275,17 @@ def test_fully_transparent_mask():
 
 
 from io import BytesIO
+
+
+def test_comfy_conversions_use_distinct_files(tmp_path: Path) -> None:
+    source = tmp_path / "mask.png"
+    source.write_bytes(create_test_mask(4, 4, (1, 1, 1, 1)))
+    first = normalize_mask_for_comfyui(source)
+    second = normalize_mask_for_comfyui(source)
+    try:
+        assert first != second
+        assert first.read_bytes() == second.read_bytes()
+        assert source.read_bytes() != first.read_bytes()
+    finally:
+        first.unlink()
+        second.unlink()
