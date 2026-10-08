@@ -1,116 +1,66 @@
-# Berry AI Studio - Standalone Python Runtime Preparation
-# Downloads and configures a complete embeddable Python distribution for Windows packaging.
-
+# Full, relocatable CPython with venv/ensurepip for optional engine environments.
 param (
-    [string]$PythonVersion = "3.11.9",
-    [string]$TargetDir = "$PSScriptRoot\..\runtime\python-standalone"
+    [string]$TargetDir = "$PSScriptRoot\..\runtime\python-standalone",
+    [string]$ArchivePath = ""
 )
-
 $ErrorActionPreference = "Stop"
-
-Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "  Preparing Standalone Python Runtime" -ForegroundColor Cyan
-Write-Host "  Version: $PythonVersion" -ForegroundColor Cyan
-Write-Host "==========================================================" -ForegroundColor Cyan
-
-# Create target directory
-if (Test-Path $TargetDir) {
-    Write-Host "Removing existing standalone runtime at $TargetDir..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force $TargetDir
+$RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$TargetDir = [IO.Path]::GetFullPath($TargetDir)
+$AllowedRoot = Join-Path $RepoRoot "runtime"
+$ReviewRoot = Join-Path $RepoRoot ".review-runtime"
+if (-not ($TargetDir.StartsWith("$AllowedRoot\", [StringComparison]::OrdinalIgnoreCase) -or
+          $TargetDir.StartsWith("$ReviewRoot\", [StringComparison]::OrdinalIgnoreCase))) {
+    throw "Runtime target must be a child of repository runtime/ or .review-runtime/."
 }
-New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-
-# Download Python embeddable package
-$PythonMajorMinor = $PythonVersion.Substring(0, $PythonVersion.LastIndexOf('.'))
-$DownloadUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-embed-amd64.zip"
-$ZipFile = Join-Path $env:TEMP "python-$PythonVersion-embed-amd64.zip"
-
-Write-Host "`n[1/5] Downloading Python $PythonVersion embeddable package..." -ForegroundColor Yellow
-Write-Host "  URL: $DownloadUrl" -ForegroundColor Gray
-
+# Pin both source and checksum; an embeddable zip or host venv is not equivalent.
+$RuntimeUrl = "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-pc-windows-msvc-install_only.tar.gz"
+$RuntimeSha256 = "e90c1b6419da3bd812dd73bb3de40287a21abf153438147639ec5e20375ea93f"
+$StageDir = "$TargetDir.prepare-$([guid]::NewGuid().ToString('N'))"
+$BackupDir = "$TargetDir.previous-$([guid]::NewGuid().ToString('N'))"
+New-Item -ItemType Directory -Path $StageDir -Force | Out-Null
+$SavedTemp = $env:TEMP
+$SavedTmp = $env:TMP
+$env:TEMP = New-Item -ItemType Directory -Path "$StageDir\temp" -Force | Select-Object -ExpandProperty FullName
+$env:TMP = $env:TEMP
 try {
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $DownloadUrl -OutFile $ZipFile -UseBasicParsing
-    Write-Host "  -> Downloaded to: $ZipFile" -ForegroundColor Green
-} catch {
-    throw "Failed to download Python embeddable package: $_"
-}
-
-# Extract Python
-Write-Host "`n[2/5] Extracting Python runtime..." -ForegroundColor Yellow
-Expand-Archive -Path $ZipFile -DestinationPath $TargetDir -Force
-Remove-Item $ZipFile -Force
-Write-Host "  -> Extracted to: $TargetDir" -ForegroundColor Green
-
-# Download and install pip
-Write-Host "`n[3/5] Installing pip into standalone runtime..." -ForegroundColor Yellow
-$GetPipUrl = "https://bootstrap.pypa.io/get-pip.py"
-$GetPipFile = Join-Path $TargetDir "get-pip.py"
-
-try {
-    Invoke-WebRequest -Uri $GetPipUrl -OutFile $GetPipFile -UseBasicParsing
-    Write-Host "  -> Downloaded get-pip.py" -ForegroundColor Green
-} catch {
-    throw "Failed to download get-pip.py: $_"
-}
-
-# Uncomment import site in python*._pth to enable pip
-$PthFile = Get-ChildItem -Path $TargetDir -Filter "python*._pth" | Select-Object -First 1
-if ($PthFile) {
-    Write-Host "  -> Enabling site-packages in $($PthFile.Name)..." -ForegroundColor Gray
-    $PthContent = Get-Content $PthFile.FullName
-    $PthContent = $PthContent -replace '^#import site', 'import site'
-    $PthContent = $PthContent + "`nLib/site-packages"
-    Set-Content -Path $PthFile.FullName -Value $PthContent
-    Write-Host "  -> Enabled site-packages support" -ForegroundColor Green
-}
-
-# Install pip
-Push-Location $TargetDir
-try {
-    & ".\python.exe" "get-pip.py" --no-warn-script-location
-    if ($LASTEXITCODE -ne 0) { throw "pip installation failed" }
-    Remove-Item "get-pip.py" -Force
-    Write-Host "  -> pip installed successfully" -ForegroundColor Green
-} finally {
-    Pop-Location
-}
-
-# Install backend dependencies
-Write-Host "`n[4/5] Installing backend dependencies..." -ForegroundColor Yellow
-$RequirementsFile = "$PSScriptRoot\..\backend\requirements.txt"
-if (-not (Test-Path $RequirementsFile)) {
-    throw "requirements.txt not found at $RequirementsFile"
-}
-
-Push-Location $TargetDir
-try {
-    & ".\python.exe" -m pip install -r $RequirementsFile --no-warn-script-location
-    if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed" }
-    Write-Host "  -> All backend dependencies installed" -ForegroundColor Green
-} finally {
-    Pop-Location
-}
-
-# Verify installation
-Write-Host "`n[5/5] Verifying standalone runtime..." -ForegroundColor Yellow
-Push-Location $TargetDir
-try {
-    $PyVersion = & ".\python.exe" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
-    if ($LASTEXITCODE -ne 0) { throw "Python verification failed" }
-    Write-Host "  -> Python version: $PyVersion" -ForegroundColor Green
-
-    $TestImports = & ".\python.exe" -c "import fastapi, pydantic, uvicorn, httpx; print('OK')"
-    if ($LASTEXITCODE -ne 0 -or $TestImports -notmatch "OK") {
-        throw "Required dependencies not found"
+    $Archive = Join-Path $StageDir "python.tar.gz"
+    if ($ArchivePath) {
+        Copy-Item -LiteralPath $ArchivePath -Destination $Archive
+    } else {
+        Write-Host "Downloading pinned CPython 3.12.14 runtime..."
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $RuntimeUrl -OutFile $Archive -UseBasicParsing -TimeoutSec 180
     }
-    Write-Host "  -> Backend dependencies verified (fastapi, pydantic, uvicorn, httpx)" -ForegroundColor Green
+    if ((Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash -ne $RuntimeSha256) {
+        throw "Python archive checksum mismatch; existing runtime was preserved."
+    }
+    & tar -xf $Archive -C $StageDir
+    if ($LASTEXITCODE -ne 0) { throw "Python archive extraction failed." }
+    $PreparedDir = Join-Path $StageDir "python"
+    $PreparedPython = Join-Path $PreparedDir "python.exe"
+    if (-not (Test-Path -LiteralPath $PreparedPython)) { throw "Archive is missing python/python.exe." }
+    & $PreparedPython -I -m ensurepip --upgrade
+    if ($LASTEXITCODE -ne 0) { throw "Runtime ensurepip failed." }
+    & $PreparedPython -I -m pip install -r "$RepoRoot\backend\requirements.txt" --no-warn-script-location --no-cache-dir
+    if ($LASTEXITCODE -ne 0) { throw "Backend dependency installation failed." }
+    @{ source = $RuntimeUrl; sha256 = $RuntimeSha256; version = "3.12.14" } |
+        ConvertTo-Json | Set-Content -LiteralPath "$PreparedDir\berry-runtime.json" -Encoding UTF8
+    & "$PSScriptRoot\test-standalone-python.ps1" -PythonDir $PreparedDir
+    # Promote only a validated runtime. Keep the old one until relocation also passes.
+    if (Test-Path -LiteralPath $TargetDir) { Move-Item -LiteralPath $TargetDir -Destination $BackupDir }
+    try {
+        Move-Item -LiteralPath $PreparedDir -Destination $TargetDir
+        & "$PSScriptRoot\test-standalone-python.ps1" -PythonDir $TargetDir
+    } catch {
+        if (Test-Path -LiteralPath $TargetDir) { Remove-Item -LiteralPath $TargetDir -Recurse -Force }
+        if (Test-Path -LiteralPath $BackupDir) { Move-Item -LiteralPath $BackupDir -Destination $TargetDir }
+        throw
+    }
+    if (Test-Path -LiteralPath $BackupDir) { Remove-Item -LiteralPath $BackupDir -Recurse -Force }
+    Write-Host "Validated standalone runtime ready at $TargetDir"
 } finally {
-    Pop-Location
+    $env:TEMP = $SavedTemp
+    $env:TMP = $SavedTmp
+    # Both paths were derived from the checked absolute repository target above.
+    if (Test-Path -LiteralPath $StageDir) { Remove-Item -LiteralPath $StageDir -Recurse -Force }
 }
-
-Write-Host "`n==========================================================" -ForegroundColor Cyan
-Write-Host "  Standalone Python Runtime Ready!" -ForegroundColor Green
-Write-Host "  Location: $TargetDir" -ForegroundColor Green
-Write-Host "  Size: $((Get-ChildItem -Recurse $TargetDir | Measure-Object -Property Length -Sum).Sum / 1MB | ForEach-Object { [math]::Round($_, 1) }) MB" -ForegroundColor Green
-Write-Host "==========================================================" -ForegroundColor Cyan
