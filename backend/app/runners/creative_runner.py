@@ -19,6 +19,7 @@ import json
 import logging
 import random
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -65,6 +66,8 @@ from app.schemas.creative import (
     GenerationProvenance,
 )
 from app.storage.asset_store import asset_store
+from app.storage.task_store import execution_task, task_store
+from app.schemas.task import RunRecord, TaskRecord
 
 logger = logging.getLogger(__name__)
 
@@ -366,8 +369,41 @@ class CreativeRunner:
             "disclaimer": disclaimer,
         }
 
-    async def execute(self, req: CreativeActionRequest) -> CreativeActionResult:
-        task_id = f"task_{int(time.time() * 1000)}"
+    async def execute(self, req: CreativeActionRequest, task_id: Optional[str] = None) -> CreativeActionResult:
+        """Snapshot and persist every outcome, including cached and preflight failures."""
+        req = req.model_copy(deep=True)
+        task_id = task_id or f"task_{uuid.uuid4()}"
+        if await task_store.get_run(task_id) is None:
+            await task_store.create_run(RunRecord(id=task_id, project_id=req.project_id, request=req.model_dump()))
+        task = TaskRecord(id=task_id, run_id=task_id, node_id="canvas", node_type=req.action.value,
+                          params=req.model_dump(), inputs={"source_asset_id": req.input_image_id, "mask_asset_id": req.mask_image_id})
+        await task_store.save_task(task)
+        task.status = "running"
+        await task_store.save_task(task)
+        await task_store.finish_run(task_id, "running")
+        context_token = execution_task.set((task_store, task))
+        try:
+            result = await self._execute(req, task_id, task)
+            task.params = req.model_dump()
+            task.outputs = result.model_dump()
+            task.error = result.error_message
+            task.status = "cached" if result.is_cached else ("succeeded" if result.success else "failed")
+            if result.error_message == "Task cancelled by user.":
+                task.status = "cancelled"
+            if result.provenance:
+                task.metadata.update({"engine": "cloud" if result.provenance.provider_id not in ("comfyui", "webui") else result.provenance.provider_id,
+                                      "provider_id": result.provenance.provider_id, "connection_id": result.provenance.connection_id})
+            return result
+        except BaseException as error:
+            task.status = "interrupted" if isinstance(error, asyncio.CancelledError) else "failed"
+            task.error = str(error) or "Execution interrupted"
+            raise
+        finally:
+            execution_task.reset(context_token)
+            await task_store.save_task(task)
+            await task_store.finish_run(task_id, task.status)
+
+    async def _execute(self, req: CreativeActionRequest, task_id: str, persisted: TaskRecord) -> CreativeActionResult:
         start_time = time.monotonic()
         cancel_event = asyncio.Event()
         is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
@@ -452,6 +488,9 @@ class CreativeRunner:
         try:
             # 1. Resolve unified execution plan before cache check & dispatch
             plan = resolve_execution_plan(req)
+            persisted.params = req.model_dump()
+            persisted.metadata = {"engine": plan.engine, "provider_id": plan.provider_id, "model": plan.target_model}
+            await task_store.save_task(persisted)
 
             # 2. Resolve connection for local engine execution (Issue #127)
             connection = None

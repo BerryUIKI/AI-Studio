@@ -137,4 +137,5 @@ async def test_cache_key_and_provenance_reflect_resolved_provider():
         assert result.provenance is not None
         assert result.provenance.provider_id == "fal_ai"
         assert result.provenance.engine_id == "fal_ai"
-        mock_fal.assert_called_once_with("sdxl-turbo", "Ethereal space lotus", req.width, req.height, "fake-fal-key")
+        mock_fal.assert_called_once_with("sdxl-turbo", "Ethereal space lotus", 1024, 1024, "fake-fal-key")
+        assert req.width == 512  # Execution resolves a snapshot without mutating the submission.

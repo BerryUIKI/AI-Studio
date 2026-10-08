@@ -1,6 +1,7 @@
 """Durable submissions and task transitions, with conservative restart recovery."""
 
 import json
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
@@ -98,3 +99,13 @@ class TaskStore:
 
 
 task_store = TaskStore()
+execution_task: ContextVar[tuple[TaskStore, TaskRecord] | None] = ContextVar("execution_task", default=None)
+
+
+async def record_remote_job(job_id: str) -> None:
+    """Persist a provider-owned job identifier before starting to poll it."""
+    context = execution_task.get()
+    if context:
+        store, task = context
+        task.metadata["provider_job_id"] = job_id
+        await store.save_task(task)
