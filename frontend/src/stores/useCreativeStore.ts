@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { CreativeActionRequest, CreativeActionResult, ImageCardData } from '../types/creative';
 import { useCanvasStore } from './useCanvasStore';
+import { useProjectStore } from './useProjectStore';
 
 interface CreativeState {
   prompt: string;
@@ -232,7 +233,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       const resp = await fetch('/api/v1/creative/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, project_id: useProjectStore.getState().currentProject?.id }),
       });
 
       clearInterval(stageTimer);

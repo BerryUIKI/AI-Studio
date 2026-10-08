@@ -119,6 +119,8 @@ from app.schemas.events import (
 from app.schemas.node import NodeDefinition
 from app.schemas.project import Project, ProjectCreate, ProjectUpdate, AssetRecord
 from app.schemas.task import WorkflowRunRequest
+from app.schemas.task import TaskRecord
+from app.storage.task_store import task_store
 from app.schemas.workflow import ExecutionPlan, PlannedNodeStep, WorkflowGraph
 from app.storage.asset_store import asset_store
 from app.storage.db import db_manager
@@ -159,6 +161,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     setup_no_proxy()
     logger.info("Berry AI Studio API starting up...")
+    await task_store.reconcile_interrupted()
     
     # Startup reconciliation: reconcile orphan cache entries whose assets are missing
     try:
@@ -407,6 +410,12 @@ async def cancel_task_endpoint(task_id: str) -> Dict[str, Any]:
         active_cancellations[task_id].set()
         return {"task_id": task_id, "status": "cancelled", "engine_interrupted": False}
     raise HTTPException(status_code=404, detail=f"Active task '{task_id}' not found or already concluded.")
+
+
+@app.get("/api/v1/tasks/history", response_model=List[TaskRecord])
+async def generation_task_history(project_id: Optional[str] = None) -> List[TaskRecord]:
+    """Return durable outcomes, effective parameters, provenance and recovery guidance."""
+    return await task_store.list_tasks(project_id=project_id)
 
 
 @app.post("/api/v1/workflow/cancel/{run_id}")

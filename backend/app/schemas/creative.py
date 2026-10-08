@@ -15,6 +15,7 @@ class CreativeActionType(str, Enum):
 
 
 class CreativeActionRequest(BaseModel):
+    project_id: Optional[str] = None
     action: CreativeActionType
     prompt: str = ""
     negative_prompt: str = "low quality, blurry, deformed, bad anatomy"

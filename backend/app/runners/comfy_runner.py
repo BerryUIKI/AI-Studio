@@ -122,7 +122,11 @@ class ComfyUIClient:
         client = self._get_client()
         resp = await client.post(f"{self.base_url}/prompt", json=payload)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        if data.get("prompt_id"):
+            from app.storage.task_store import record_remote_job
+            await record_remote_job(str(data["prompt_id"]))
+        return data
 
     async def get_history(self, prompt_id: str) -> Dict[str, Any]:
         """Retrieve execution history for a given prompt_id."""
