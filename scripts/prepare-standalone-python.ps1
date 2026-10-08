@@ -46,7 +46,7 @@ Write-Host "  -> Extracted to: $TargetDir" -ForegroundColor Green
 # Download full installer to extract venv module
 Write-Host "`n[3/6] Downloading full installer for venv module..." -ForegroundColor Yellow
 $InstallerUrl = "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.exe"
-$InstallerFile = Join-Path $env:TEMP "python-$PythonVersion-amd64.exe"
+$InstallerFile = Join-Path $env:TEMP "python-installer-$(Get-Random).exe"
 
 try {
     Invoke-WebRequest -Uri $InstallerUrl -OutFile $InstallerFile -UseBasicParsing
