@@ -29,6 +29,7 @@ export interface GenerationProvenance {
 }
 
 export interface CreativeActionRequest {
+  project_id?: string;
   action: CreativeActionType;
   prompt: string;
   negative_prompt?: string;

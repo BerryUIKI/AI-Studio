@@ -416,6 +416,8 @@ async def _call_siliconflow_video(
         # Fallback to whatever URL/URI field is provided if not a recognized job ID
         return data.get("uri") or data.get("url")
 
+    from app.storage.task_store import record_remote_job
+    await record_remote_job(str(job_id))
     poll_endpoint = "https://api.siliconflow.cn/v1/video/status"
     start_poll = time.time()
     poll_timeout = 180.0

@@ -26,6 +26,7 @@ import { DownloadManagerDrawer } from './components/hub/DownloadManagerDrawer';
 import { SettingsView } from './components/settings/SettingsView';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { ProjectManagerModal } from './components/project/ProjectManagerModal';
+import { TaskHistory } from './components/project/TaskHistory';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
 import { useEngineStore, type EngineInstance } from './stores/useEngineStore';
@@ -402,6 +403,7 @@ export default function App() {
                   {showNodePalette && <NodePalette />}
                   <main className="flex-1 relative w-full h-full">
                     <FlowCanvas />
+                    <TaskHistory />
                     <CreationDock />
                   </main>
                 </div>
