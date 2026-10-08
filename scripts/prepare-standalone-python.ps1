@@ -57,9 +57,19 @@ Write-Host "  -> All backend dependencies installed" -ForegroundColor Green
 Write-Host "`n[3/3] Making runtime portable..." -ForegroundColor Yellow
 $PyvenvCfg = Join-Path $TargetDir "pyvenv.cfg"
 if (Test-Path $PyvenvCfg) {
-    # Remove or modify pyvenv.cfg to prevent external base references
-    Remove-Item $PyvenvCfg -Force
-    Write-Host "  -> Removed pyvenv.cfg (portable mode)" -ForegroundColor Green
+    # Modify pyvenv.cfg to use relative paths instead of removing it
+    $Content = Get-Content $PyvenvCfg
+    $NewContent = @()
+    foreach ($Line in $Content) {
+        # Keep the file but remove absolute home path references
+        if ($Line -match "^home\s*=") {
+            # Comment out or skip the home line - venv will work without it
+            continue
+        }
+        $NewContent += $Line
+    }
+    Set-Content -Path $PyvenvCfg -Value $NewContent
+    Write-Host "  -> Cleaned pyvenv.cfg (portable mode)" -ForegroundColor Green
 }
 
 # Verify runtime
