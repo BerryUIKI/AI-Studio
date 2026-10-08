@@ -1296,6 +1296,7 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
         return
 
     await websocket.accept()
+    run_id = None
     try:
         parsed = json.loads(await websocket.receive_text())
         after_sequence = 0
@@ -1311,7 +1312,7 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         logger.info("Workflow subscriber disconnected; execution continues independently")
     except (ValueError, LookupError) as error:
-        await websocket.send_json({"type": "ERROR", "message": str(error)})
+        await websocket.send_json({"type": "ERROR", "message": str(error), "run_id": run_id})
     finally:
         try:
             await websocket.close()

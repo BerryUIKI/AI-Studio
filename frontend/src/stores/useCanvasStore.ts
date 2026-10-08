@@ -13,6 +13,15 @@ import { CustomNodeData, ExecutionStatus, NodeDefinition, NodeOutputValue, NodeP
 import { CanvasNodeData, ImageCardData } from '../types/creative';
 import { GenerationHistoryItem, ProjectCanvasData, ProjectViewport } from '../types/project';
 
+interface WorkflowStreamEvent {
+  type: string;
+  run_id?: string;
+  sequence?: number;
+  node_id: string;
+  status: ExecutionStatus;
+  output: Record<string, NodeOutputValue>;
+}
+
 const isImageCardNode = (n: Node<CanvasNodeData>): n is Node<ImageCardData> => n.type === 'imageCard';
 const isWorkflowNode = (n: Node<CanvasNodeData>): n is Node<CustomNodeData> => n.type === 'workflowNode' || !n.type;
 
@@ -490,51 +499,33 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 3;
-    let heartbeatTimer: any = null;
     let isTerminated = false;
-
-    const stopHeartbeat = () => {
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = null;
-      }
-    };
+    let lastSequence = 0;
+    let socket: WebSocket | null = null;
 
     const cleanupExecution = () => {
       isTerminated = true;
-      stopHeartbeat();
-      set({ isExecuting: false, currentRunId: null });
+      socket?.close();
+      if (get().currentRunId === runId) set({ isExecuting: false, currentRunId: null });
     };
 
     const connect = () => {
-      if (isTerminated || !get().isExecuting) return;
+      if (isTerminated || get().currentRunId !== runId) return;
 
       try {
         const ws = new WebSocket(wsUrl);
+        socket = ws;
 
         ws.onopen = () => {
-          reconnectAttempts = 0;
-          ws.send(JSON.stringify(runPayload));
-
-          // Start client-side keepalive ping to maintain connection through proxies
-          stopHeartbeat();
-          heartbeatTimer = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              try {
-                ws.send(JSON.stringify({ type: 'PING' }));
-              } catch {
-                // ignore send error
-              }
-            }
-          }, 15000);
+          ws.send(JSON.stringify({ type: 'SUBSCRIBE', run_id: runId, after_sequence: lastSequence }));
         };
 
         ws.onmessage = (event) => {
           try {
-            const msg = JSON.parse(event.data);
-            if (msg.type === 'PONG') {
-              return;
-            }
+            const msg: WorkflowStreamEvent = JSON.parse(event.data);
+            if (get().currentRunId !== runId || msg.run_id !== runId) return;
+            if (msg.sequence !== undefined && msg.sequence <= lastSequence) return;
+            if (msg.sequence !== undefined) lastSequence = msg.sequence;
             if (msg.type === 'NODE_STATUS') {
               setNodeStatus(msg.node_id, msg.status);
             } else if (msg.type === 'NODE_OUTPUT') {
@@ -547,28 +538,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
               if (msg.node_id) {
                 setNodeStatus(msg.node_id, 'error');
               }
-              cleanupExecution();
+              if (msg.type === 'ERROR') cleanupExecution();
             }
           } catch {
             // ignore parsing error
           }
         };
 
-        ws.onerror = () => {
-          stopHeartbeat();
-        };
-
         ws.onclose = () => {
-          stopHeartbeat();
           // If clean termination occurred or run concluded, do not reconnect
-          if (isTerminated || !get().isExecuting) return;
+          if (isTerminated || get().currentRunId !== runId) return;
 
           // Attempt reconnection if abruptly disconnected
           if (reconnectAttempts < maxReconnectAttempts) {
             reconnectAttempts += 1;
             const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 4000);
             setTimeout(() => {
-              if (get().isExecuting && !isTerminated) {
+              if (get().currentRunId === runId && !isTerminated) {
                 connect();
               }
             }, delay);
@@ -581,6 +567,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       }
     };
 
-    connect();
+    try {
+      const response = await fetch('/api/v1/workflow/submit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runPayload),
+      });
+      if (!response.ok) throw new Error(`Workflow submission failed (${response.status})`);
+      connect();
+    } catch {
+      cleanupExecution();
+    }
   },
 }));
