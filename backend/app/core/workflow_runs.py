@@ -21,7 +21,8 @@ class WorkflowEventSink:
         self.cancel_event = cancel
         self.finished = False
         self.tasks = {node.id: TaskRecord(id=f"{request.run_id}:{node.id}", run_id=request.run_id,
-            node_id=node.id, node_type=node.type, params=node.params) for node in request.graph.nodes}
+            node_id=node.id, node_type=node.type, params=node.params,
+            metadata={"engine": "cloud" if node.type in {"text.llm", "image.generate"} else "local"}) for node in request.graph.nodes}
 
     async def initialize(self) -> None:
         for task in self.tasks.values():
@@ -100,7 +101,14 @@ class WorkflowRunService:
             if not sink.finished:
                 await sink.send_text(json.dumps({"type": "GRAPH_FINISHED", "status": "failed", "execution_time_ms": 0}))
         except asyncio.CancelledError:
-            await self.store.finish_run(request.run_id, "interrupted")
+            uncertain = False
+            for task in sink.tasks.values():
+                if task.status not in TERMINAL_STATUSES:
+                    task.status = "outcome-unknown" if task.metadata.get("engine") == "cloud" else "interrupted"
+                    uncertain |= task.status == "outcome-unknown"
+                    task.error = "Application stopped before completion. Check the engine/provider before retrying."
+                    await self.store.save_task(task)
+            await self.store.finish_run(request.run_id, "outcome-unknown" if uncertain else "interrupted")
             raise
         except Exception as error:
             await sink.send_text(json.dumps({"type": "ERROR", "message": str(error)}))
@@ -110,6 +118,13 @@ class WorkflowRunService:
             self._workers.pop(request.run_id, None)
             self._cancellations.pop(request.run_id, None)
             sink.changed.set()
+            self._changes.pop(request.run_id, None)
+
+    async def shutdown(self) -> None:
+        workers = list(self._workers.values())
+        for worker in workers:
+            worker.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
 
     def cancel(self, run_id: str) -> bool:
         event = self._cancellations.get(run_id)

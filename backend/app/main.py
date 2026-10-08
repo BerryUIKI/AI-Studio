@@ -183,6 +183,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
     logger.info("Berry AI Studio API shutting down...")
+    await workflow_runs.shutdown()
     try:
         if llama_server_supervisor.is_running():
             logger.info("Stopping embedded llama-server process...")
