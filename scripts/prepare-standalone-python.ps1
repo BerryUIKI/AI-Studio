@@ -53,23 +53,25 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  -> All backend dependencies installed" -ForegroundColor Green
 
-# Make portable by cleaning pyvenv.cfg
+# Make portable by updating pyvenv.cfg to use relative home
 Write-Host "`n[3/3] Making runtime portable..." -ForegroundColor Yellow
 $PyvenvCfg = Join-Path $TargetDir "pyvenv.cfg"
 if (Test-Path $PyvenvCfg) {
-    # Modify pyvenv.cfg to use relative paths instead of removing it
+    # Update pyvenv.cfg to reference the venv's own Scripts directory as home
+    # This makes it work without external Python installation
+    $ScriptsDir = Join-Path $TargetDir "Scripts"
     $Content = Get-Content $PyvenvCfg
     $NewContent = @()
     foreach ($Line in $Content) {
-        # Keep the file but remove absolute home path references
         if ($Line -match "^home\s*=") {
-            # Comment out or skip the home line - venv will work without it
-            continue
+            # Point home to the venv's own Scripts directory
+            $NewContent += "home = $ScriptsDir"
+        } else {
+            $NewContent += $Line
         }
-        $NewContent += $Line
     }
     Set-Content -Path $PyvenvCfg -Value $NewContent
-    Write-Host "  -> Cleaned pyvenv.cfg (portable mode)" -ForegroundColor Green
+    Write-Host "  -> Updated pyvenv.cfg for portability" -ForegroundColor Green
 }
 
 # Verify runtime
