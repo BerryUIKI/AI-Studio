@@ -50,3 +50,8 @@ class WorkflowRunRequest(BaseModel):
     target_node_id: Optional[str] = None
     run_id: Optional[str] = None
     project_id: Optional[str] = None
+
+
+class WorkflowSubscription(BaseModel):
+    run_id: str
+    after_sequence: int = Field(default=0, ge=0)
