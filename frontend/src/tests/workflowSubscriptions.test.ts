@@ -60,4 +60,14 @@ describe('Workflow subscriptions', () => {
     expect(useCanvasStore.getState().nodes[0].data.output).toBeUndefined();
     expect(useCanvasStore.getState().isExecuting).toBe(true);
   });
+
+  it('keeps the subscription alive while cancellation is requested', async () => {
+    await useCanvasStore.getState().runWorkflow();
+    const runId = useCanvasStore.getState().currentRunId;
+    useCanvasStore.getState().cancelRun();
+    expect(useCanvasStore.getState().currentRunId).toBe(runId);
+    expect(useCanvasStore.getState().isExecuting).toBe(true);
+    FakeSocket.instances[0].emit({ type: 'GRAPH_FINISHED', run_id: runId, sequence: 1, status: 'cancelled' });
+    expect(useCanvasStore.getState().isExecuting).toBe(false);
+  });
 });

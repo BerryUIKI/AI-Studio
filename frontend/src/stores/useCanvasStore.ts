@@ -12,6 +12,7 @@ import {
 import { CustomNodeData, ExecutionStatus, NodeDefinition, NodeOutputValue, NodeParamValue } from '../types/workflow';
 import { CanvasNodeData, ImageCardData } from '../types/creative';
 import { GenerationHistoryItem, ProjectCanvasData, ProjectViewport } from '../types/project';
+import { useProjectStore } from './useProjectStore';
 
 interface WorkflowStreamEvent {
   type: string;
@@ -471,7 +472,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const { currentRunId } = get();
     if (currentRunId) {
       fetch(`/api/v1/workflow/cancel/${currentRunId}`, { method: 'POST' }).catch(() => {});
-      set({ isExecuting: false, currentRunId: null });
+      // Keep the subscription and run identity until the server records an outcome.
     }
   },
 
@@ -508,6 +509,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     const runPayload = {
       run_id: runId,
+      project_id: useProjectStore.getState().currentProject?.id,
       target_node_id: targetNodeId || null,
       graph: {
         nodes: nodes.filter(isWorkflowNode).map((n) => ({

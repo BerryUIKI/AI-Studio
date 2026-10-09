@@ -26,6 +26,7 @@ from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
 from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
 from app.runners.creative_runner import creative_runner
+from app.core.creative_tasks import creative_tasks
 from app.core.agent_service import AgentService
 from app.schemas.agent import (
     AgentChatRequest,
@@ -184,6 +185,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger.info("Berry AI Studio API shutting down...")
     await workflow_runs.shutdown()
+    await creative_tasks.shutdown()
     try:
         if llama_server_supervisor.is_running():
             logger.info("Stopping embedded llama-server process...")
@@ -289,7 +291,7 @@ async def manager_status() -> ManagerStatusResponse:
     configured_clouds = sum(1 for p in credentials_manager.list_providers() if p.is_configured)
     models_count = len(model_store.list_models())
 
-    active_tasks_count = len(active_cancellations) + len(creative_runner.active_tasks)
+    active_tasks_count = task_registry.active_tasks_count()
 
     return ManagerStatusResponse(
         app_name="Berry AI Studio",
@@ -335,7 +337,7 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
     Guards active generation tasks and predictably terminates managed engines if configured.
     Never terminates external user engines.
     """
-    active_count = len(active_cancellations) + len(creative_runner.active_tasks)
+    active_count = task_registry.active_tasks_count()
     if active_count > 0 and not request.force:
         raise HTTPException(
             status_code=409,
@@ -344,6 +346,8 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
 
     # Abort active tasks if forced
     if active_count > 0:
+        for task in task_registry.list_active_tasks():
+            task_registry.cancel_task(task["id"])
         for run_id, cancel_evt in list(active_cancellations.items()):
             cancel_evt.set()
         for task_id in list(creative_runner.active_tasks.keys()):
@@ -385,18 +389,7 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
 @app.get("/api/v1/tasks/active")
 async def list_active_tasks() -> Dict[str, Any]:
     """List all currently executing generation and workflow tasks (R14)."""
-    tasks = []
-    for run_id in active_cancellations:
-        tasks.append({"id": run_id, "type": "workflow_graph", "status": "running"})
-    for task_id, info in creative_runner.active_tasks.items():
-        tasks.append({
-            "id": task_id,
-            "type": "creative_action",
-            "action": info.get("action"),
-            "engine": info.get("engine"),
-            "status": "running",
-            "start_time": info.get("start_time"),
-        })
+    tasks = task_registry.list_active_tasks()
     return {"active_tasks_count": len(tasks), "tasks": tasks}
 
 
@@ -406,11 +399,14 @@ async def cancel_task_endpoint(task_id: str) -> Dict[str, Any]:
     Cancel an active creative task (R14).
     Discloses remote cancellation limitations truthfully for cloud providers.
     """
+    if await creative_tasks.cancel(task_id):
+        return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False,
+                "disclaimer": "Queued work will stop before dispatch. Active engine/provider work may finish; remote cancellation is not confirmed and charges may still apply."}
     if task_id in creative_runner.active_tasks or task_id in creative_runner.active_cancellations:
         return await creative_runner.cancel_task(task_id)
-    if task_id in active_cancellations:
-        active_cancellations[task_id].set()
-        return {"task_id": task_id, "status": "cancelled", "engine_interrupted": False}
+    if workflow_runs.cancel(task_id) or task_registry.cancel_task(task_id):
+        await task_store.finish_run(task_id, "cancel-requested")
+        return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False}
     raise HTTPException(status_code=404, detail=f"Active task '{task_id}' not found or already concluded.")
 
 
@@ -426,7 +422,7 @@ async def cancel_workflow_run(run_id: str) -> Dict[str, Any]:
     if workflow_runs.cancel(run_id) or run_id in active_cancellations:
         if run_id in active_cancellations:
             active_cancellations[run_id].set()
-        return {"run_id": run_id, "success": True, "status": "cancelled"}
+        return {"run_id": run_id, "success": True, "status": "cancel-requested"}
     return {"run_id": run_id, "success": False, "status": "not_found"}
 
 
@@ -873,6 +869,20 @@ async def cancel_download_task(task_id: str) -> dict[str, Any]:
 async def execute_creative_action(req: CreativeActionRequest) -> CreativeActionResult:
     """Execute high-level image creation action (txt2img, img2img, inpaint, upscale)."""
     return await creative_runner.execute(req)
+
+
+@app.post("/api/v1/creative/submit", status_code=202)
+async def submit_creative_action(req: CreativeActionRequest) -> Dict[str, str]:
+    task_id = await creative_tasks.submit(req, creative_runner.execute)
+    return {"task_id": task_id, "status": "queued"}
+
+
+@app.get("/api/v1/creative/tasks/{task_id}", response_model=TaskRecord)
+async def creative_task_status(task_id: str) -> TaskRecord:
+    task = await task_store.get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Creative task not found.")
+    return task
 
 
 @app.post("/api/v1/creative/upload", response_model=AssetRecord)

@@ -172,8 +172,8 @@ async def test_execute_resolves_connection_before_dispatch(mock_engine_manager):
 
 
 @pytest.mark.asyncio
-async def test_cancel_task_uses_resolved_connection(mock_engine_manager):
-    """Cancellation must target the connection used by the task."""
+async def test_cancel_task_does_not_interrupt_unrelated_jobs(mock_engine_manager):
+    """Global interrupt cannot be used as a task-specific cancellation operation."""
     runner = CreativeRunner()
 
     # Register a task with connection_id
@@ -191,9 +191,6 @@ async def test_cancel_task_uses_resolved_connection(mock_engine_manager):
 
         result = await runner.cancel_task(task_id)
 
-    # Verify client was created with correct connection
-    MockClient.assert_called_once()
-    call_kwargs = MockClient.call_args[1]
-    assert call_kwargs["base_url"] == "http://studio.local:9000/comfy"
-
-    assert result["engine_interrupted"] is True
+    MockClient.assert_not_called()
+    assert result["status"] == "cancel-requested"
+    assert result["engine_interrupted"] is False

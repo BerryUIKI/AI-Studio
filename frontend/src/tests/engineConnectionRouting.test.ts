@@ -91,6 +91,8 @@ describe('Engine Connection Routing Integration', () => {
         json: async () => ({
           success: true,
           task_id: 'task-123',
+          status: 'succeeded', metadata: {},
+          outputs: { success: true, task_id: 'task-123', image_url: '/image.png', width: 512, height: 512 },
           asset_id: 'asset-456',
           image_url: '/image.png',
           width: 512,
@@ -105,7 +107,7 @@ describe('Engine Connection Routing Integration', () => {
       await store.executeCreativeAction();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/v1/creative/execute',
+        '/api/v1/creative/submit',
         expect.objectContaining({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -120,6 +122,8 @@ describe('Engine Connection Routing Integration', () => {
         json: async () => ({
           success: true,
           task_id: 'task-123',
+          status: 'succeeded', metadata: {},
+          outputs: { success: true, task_id: 'task-123', image_url: '/image.png', width: 512, height: 512 },
           asset_id: 'asset-456',
           image_url: '/image.png',
           width: 512,
@@ -145,6 +149,8 @@ describe('Engine Connection Routing Integration', () => {
         json: async () => ({
           success: true,
           task_id: 'task-img2img',
+          status: 'succeeded', metadata: {},
+          outputs: { success: true, task_id: 'task-img2img', image_url: '/output.png', width: 512, height: 512 },
           asset_id: 'asset-789',
           image_url: '/output.png',
           width: 512,
