@@ -101,3 +101,23 @@ async def test_uninstall_maintenance_blocks_new_admission(tmp_path: Path) -> Non
     with patch("app.runtime.uninstall.uninstall_managed_files", side_effect=remove):
         assert (await uninstall_managed(EngineType.COMFYUI, target, installer))["status"] == "not-installed"
     assert not task_registry.maintenance_active
+
+
+@pytest.mark.asyncio
+async def test_reinstall_does_not_delete_unknown_engine_files(tmp_path: Path) -> None:
+    installer = IsolatedEngineInstaller(tmp_path)
+    folder = tmp_path / "comfyui"
+    folder.mkdir()
+    user_file = folder / "user.settings"
+    user_file.write_bytes(b"retain")
+    with patch.object(installer, "create_isolated_venv", return_value=True):
+        result = await installer.install_engine(EngineType.COMFYUI)
+    assert "preserve the folder" in result.error_message
+    assert user_file.read_bytes() == b"retain"
+
+
+@pytest.mark.asyncio
+async def test_virtual_environment_target_cannot_escape_root(tmp_path: Path) -> None:
+    installer = IsolatedEngineInstaller(tmp_path / "managed")
+    with pytest.raises(ValueError, match="outside"):
+        await installer.create_isolated_venv(tmp_path / "external" / "runtime")
