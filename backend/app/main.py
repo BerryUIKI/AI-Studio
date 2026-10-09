@@ -40,6 +40,7 @@ from app.schemas.workflow_analysis import (
 from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
 from app.runtime.open_directory import open_directory
+from app.runtime.uninstall import uninstall_managed
 from app.core.workflow_runs import WorkflowEventSink, workflow_runs
 from app.core.execution_contract import ExecutionContractError, validate_execution_contract, validate_output_contract
 from app.core.workflow_spec import resolve_workflow_node
@@ -490,9 +491,22 @@ async def get_engine_manifest(engine_type: EngineType) -> EngineInstallManifest:
 @app.post("/api/v1/runtime/{engine_type}/install", response_model=EngineInstallManifest)
 async def trigger_engine_install(engine_type: EngineType, request: Optional[EngineInstallRequest] = None) -> EngineInstallManifest:
     """Start or check isolated installation of an engine without host pollution."""
+    if task_registry.maintenance_active:
+        raise HTTPException(status_code=409, detail="Engine maintenance is in progress.")
     # Spawn in background task to avoid blocking HTTP call
     asyncio.create_task(installer.install_engine(engine_type, mirror_preset=request.mirror_preset if request else None))
     return installer.read_manifest(engine_type)
+
+
+@app.post("/api/v1/runtime/{engine_type}/uninstall")
+async def uninstall_engine(engine_type: EngineType) -> dict[str, Any]:
+    target = supervisor if engine_type == EngineType.COMFYUI else webui_supervisor
+    try:
+        return await uninstall_managed(engine_type, target, installer)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    except OSError as error:
+        raise HTTPException(status_code=500, detail=f"Could not uninstall the managed engine: {error}")
 
 
 @app.get("/api/v1/runtime/{engine_type}/update/manifest", response_model=EngineUpdateManifest)
@@ -884,12 +898,23 @@ async def cancel_download_task(task_id: str) -> dict[str, Any]:
 @app.post("/api/v1/creative/execute", response_model=CreativeActionResult)
 async def execute_creative_action(req: CreativeActionRequest) -> CreativeActionResult:
     """Execute high-level image creation action (txt2img, img2img, inpaint, upscale)."""
-    return await creative_runner.execute(req)
+    task_id = f"task_{uuid.uuid4()}"
+    try:
+        task_registry.register_task(task_id, "creative_action", status="queued")
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
+    try:
+        return await creative_runner.execute(req, task_id)
+    finally:
+        task_registry.unregister_task(task_id)
 
 
 @app.post("/api/v1/creative/submit", status_code=202)
 async def submit_creative_action(req: CreativeActionRequest) -> Dict[str, str]:
-    task_id = await creative_tasks.submit(req, creative_runner.execute)
+    try:
+        task_id = await creative_tasks.submit(req, creative_runner.execute)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error))
     return {"task_id": task_id, "status": "queued"}
 
 

@@ -24,11 +24,17 @@ class CreativeTaskService:
     async def submit(self, request: CreativeActionRequest, executor: CreativeExecutor) -> str:
         request = request.model_copy(deep=True)
         task_id = f"task_{uuid.uuid4()}"
-        await self.store.create_run(RunRecord(id=task_id, project_id=request.project_id, request=request.model_dump()))
-        await self.store.save_task(TaskRecord(id=task_id, run_id=task_id, node_id="canvas",
-            node_type=request.action.value, params=request.model_dump()))
-        cancel = self._cancellations[task_id] = asyncio.Event()
+        cancel = asyncio.Event()
         task_registry.register_task(task_id, "creative_action", cancel, {"action": request.action.value}, status="queued")
+        self._cancellations[task_id] = cancel
+        try:
+            await self.store.create_run(RunRecord(id=task_id, project_id=request.project_id, request=request.model_dump()))
+            await self.store.save_task(TaskRecord(id=task_id, run_id=task_id, node_id="canvas",
+                node_type=request.action.value, params=request.model_dump()))
+        except BaseException:
+            task_registry.unregister_task(task_id)
+            self._cancellations.pop(task_id, None)
+            raise
         self._workers[task_id] = asyncio.create_task(self._execute(task_id, request, executor, cancel))
         return task_id
 
