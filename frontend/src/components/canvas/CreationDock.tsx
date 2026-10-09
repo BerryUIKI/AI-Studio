@@ -11,6 +11,30 @@ import {
 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 
+type CreativeTaskStatusProps = Pick<ReturnType<typeof useCreativeStore.getState>,
+  'isGenerating' | 'generationNotice' | 'generationStage' | 'activeTaskId' | 'cancellationRequested' | 'cancelGeneration'>;
+
+export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }: CreativeTaskStatusProps) => (
+  <>
+    {generationNotice && <p role="status" className="px-3 text-xs text-amber-200">{generationNotice}</p>}
+    {isGenerating && (
+      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-indigo-950/50 border border-indigo-800/60 text-xs">
+        <div className="flex items-center gap-2.5">
+          <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
+          <div className="flex flex-col">
+            <span className="font-medium text-indigo-200">{generationStage || 'Running'}</span>
+            <span className="text-[10px] text-slate-400">{activeTaskId || 'Waiting for task admission'}</span>
+          </div>
+        </div>
+        <button type="button" onClick={() => void cancelGeneration()} disabled={!activeTaskId || cancellationRequested}
+          className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-200 disabled:opacity-50">
+          {cancellationRequested ? 'Cancellation requested' : 'Cancel'}
+        </button>
+      </div>
+    )}
+  </>
+);
+
 export const CreationDock = () => {
   const {
     prompt,
@@ -36,7 +60,10 @@ export const CreationDock = () => {
     randomizeSeed,
     isGenerating,
     generationStage,
-    generationProgress,
+    activeTaskId,
+    cancellationRequested,
+    generationNotice,
+    cancelGeneration,
     error,
     executeCreativeAction,
   } = useCreativeStore();
@@ -73,27 +100,7 @@ export const CreationDock = () => {
           </div>
         )}
 
-        {/* Live Generation Stage Indicator (Issue #37) */}
-        {isGenerating && (
-          <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-indigo-950/50 border border-indigo-800/60 text-xs animate-in fade-in">
-            <div className="flex items-center gap-2.5">
-              <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
-              <div className="flex flex-col">
-                <span className="font-medium text-indigo-200">{generationStage || 'Processing generative inference...'}</span>
-                <span className="text-[10px] text-slate-400">Deterministic dirty-check verified</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-24 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="bg-indigo-500 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${generationProgress || 20}%` }}
-                />
-              </div>
-              <span className="text-[11px] font-mono text-indigo-300">{generationProgress}%</span>
-            </div>
-          </div>
-        )}
+        <CreativeTaskStatus {...{ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }} />
 
         {/* Reference Image Badge (Img2Img Mode) */}
         {referenceImage && (

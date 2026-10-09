@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 from app.main import active_cancellations, app, launcher_config
 from app.runtime.installer import IsolatedEngineInstaller
 from app.schemas.engine import EngineType, EngineUpdateStatus
+from app.core.task_registry import task_registry
 
 
 @pytest.fixture
@@ -79,6 +80,7 @@ def test_manager_shutdown_guards_active_tasks(client):
     fake_run_id = "test-run-active-guard"
     cancel_event = asyncio.Event()
     active_cancellations[fake_run_id] = cancel_event
+    task_registry.register_task(fake_run_id, "workflow_graph", cancel_event)
 
     try:
         # Non-forced shutdown should fail with 409
@@ -96,6 +98,7 @@ def test_manager_shutdown_guards_active_tasks(client):
             assert cancel_event.is_set()
     finally:
         active_cancellations.pop(fake_run_id, None)
+        task_registry.unregister_task(fake_run_id)
 
 
 @pytest.mark.asyncio

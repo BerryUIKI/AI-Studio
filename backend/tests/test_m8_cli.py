@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, active_cancellations
+from app.core.task_registry import task_registry
 
 client = TestClient(app)
 
@@ -52,6 +53,7 @@ def test_active_tasks_and_cancel_endpoints():
     test_task_id = "test-task-cli-123"
     cancel_event = asyncio.Event()
     active_cancellations[test_task_id] = cancel_event
+    task_registry.register_task(test_task_id, "workflow_graph", cancel_event)
 
     try:
         # Active tasks query
@@ -66,7 +68,7 @@ def test_active_tasks_and_cancel_endpoints():
         assert cancel_resp.status_code == 200
         data = cancel_resp.json()
         assert data["task_id"] == test_task_id
-        assert data["status"] == "cancelled"
+        assert data["status"] == "cancel-requested"
         assert cancel_event.is_set()
 
         # Cancel a non-existent task returns 404
@@ -74,3 +76,4 @@ def test_active_tasks_and_cancel_endpoints():
         assert nonexistent_resp.status_code == 404
     finally:
         active_cancellations.pop(test_task_id, None)
+        task_registry.unregister_task(test_task_id)

@@ -338,9 +338,9 @@ async def test_cloud_video_cancellation_disclaimer():
     cancel_res = await creative_runner.cancel_task(task_id)
 
     assert cancel_res["task_id"] == task_id
-    assert cancel_res["status"] == "cancelled"
+    assert cancel_res["status"] == "cancel-requested"
     assert cancel_res["disclaimer"] is not None
-    assert "external cloud providers" in cancel_res["disclaimer"]
+    assert "external cloud providers" in cancel_res["disclaimer"].lower()
 
 
 @pytest.mark.asyncio
