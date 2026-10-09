@@ -10,6 +10,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from app.runtime.process_diagnostics import ProcessDiagnostics
@@ -54,6 +55,7 @@ class ComfySupervisor:
         self.pid_file = self.engine_dir / "comfy.pid"
         self._process: Optional[subprocess.Popen] = None
         self.diagnostics = ProcessDiagnostics(self.engine_dir / "logs" / "comfyui.log")
+        self._started_at: Optional[float] = None
 
     def ensure_directories(self) -> None:
         """Ensure the isolated engine directory layout exists."""
@@ -118,6 +120,8 @@ berry_shared:
 
     def _verify_process_identity(self, pid: int) -> bool:
         """Verify the process at pid is actually owned by this supervisor, avoiding recycled PID collision."""
+        if self._process is not None and self._process.pid == pid and self._process.poll() is None:
+            return True
         if sys.platform == "win32":
             try:
                 import ctypes
@@ -156,6 +160,8 @@ berry_shared:
 
     def get_pid(self) -> Optional[int]:
         """Read active PID from the supervisor PID file if process is alive and verified."""
+        if self._process is not None and self._process.poll() is None:
+            return self._process.pid
         if not self.pid_file.is_file():
             return None
 
@@ -177,7 +183,9 @@ berry_shared:
     def get_status(self) -> Dict[str, Any]:
         """Return comprehensive status of the isolated runtime."""
         pid = self.get_pid()
+        exit_code = self._process.poll() if self._process is not None else None
         return {
+            "process_exit_code": exit_code if isinstance(exit_code, int) else None,
             "installed": self.is_installed(),
             "isolated_env_ready": self.has_isolated_env(),
             "running": pid is not None,
@@ -255,6 +263,7 @@ berry_shared:
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
             self.diagnostics.attach(self._process)
+            self._started_at = time.monotonic()
             pid = self._process.pid
             self.pid_file.write_text(str(pid), encoding="utf-8")
             return {

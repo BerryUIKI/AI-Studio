@@ -22,15 +22,15 @@ class ServiceHealthProbe:
     def __init__(self, ttl: float = 2, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self.ttl = ttl
         self.transport = transport
-        self._cache: dict[tuple[EngineType, int], tuple[float, ServiceObservation]] = {}
-        self._pending: dict[tuple[asyncio.AbstractEventLoop, EngineType, int], asyncio.Task[ServiceObservation]] = {}
+        self._cache: dict[tuple[EngineType, int, int | None], tuple[float, ServiceObservation]] = {}
+        self._pending: dict[tuple[asyncio.AbstractEventLoop, EngineType, int, int | None], asyncio.Task[ServiceObservation]] = {}
 
-    async def get(self, engine_type: EngineType, port: int) -> ServiceObservation:
-        key = (engine_type, port)
+    async def get(self, engine_type: EngineType, port: int, pid: int | None = None) -> ServiceObservation:
+        key = (engine_type, port, pid)
         cached = self._cache.get(key)
         if cached and time.monotonic() - cached[0] < self.ttl:
             return cached[1]
-        pending_key = (asyncio.get_running_loop(), engine_type, port)
+        pending_key = (asyncio.get_running_loop(), engine_type, port, pid)
         task = self._pending.get(pending_key)
         if task is None:
             task = asyncio.create_task(self._probe(engine_type, port))
@@ -70,9 +70,12 @@ async def observed_runtime_status(engine_type: EngineType, supervisor: Any) -> d
     if not status.get("installed"):
         state = "not-installed"
     elif not running:
-        state = "stopped"
+        failed = status.get("process_exit_code") not in (None, 0)
+        state = "failed" if failed else "stopped"
+        if failed:
+            status["health_error"] = f"Engine process exited with code {status['process_exit_code']}. Check engine logs before restarting."
     else:
-        observation = await service_health.get(engine_type, supervisor.port)
+        observation = await service_health.get(engine_type, supervisor.port, status.get("pid"))
         status.update(service_healthy=observation.healthy, service_checked_at=observation.checked_at, health_error=observation.error)
         started = getattr(supervisor, "_started_at", None)
         state = "ready" if observation.healthy else "starting" if started is not None and time.monotonic() - started < 30 else "unhealthy"
