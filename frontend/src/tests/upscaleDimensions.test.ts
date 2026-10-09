@@ -117,11 +117,14 @@ describe('Image Dimensions, Upscale Factors, and Metadata (Issue #123)', () => {
 
       let capturedPayload: any = null;
       globalThis.fetch = vi.fn().mockImplementation((url, init) => {
-        if (url === '/api/v1/creative/execute') {
+        if (url === '/api/v1/creative/submit') {
           capturedPayload = JSON.parse(init.body);
+          return Promise.resolve({ ok: true, json: async () => ({ task_id: 'task-upscale-1' }) });
+        }
+        if (url === '/api/v1/creative/tasks/task-upscale-1') {
           return Promise.resolve({
             ok: true,
-            json: async () => ({
+            json: async () => ({ status: 'succeeded', metadata: {}, outputs: {
               success: true,
               task_id: 'task-upscale-1',
               asset_id: 'asset-1280x720',
@@ -132,7 +135,7 @@ describe('Image Dimensions, Upscale Factors, and Metadata (Issue #123)', () => {
                 action: 'upscale',
                 dimensions: '1280x720',
               },
-            }),
+            } }),
           });
         }
         return Promise.reject(new Error(`Unhandled URL: ${url}`));
@@ -178,12 +181,14 @@ describe('Image Dimensions, Upscale Factors, and Metadata (Issue #123)', () => {
 
       let capturedPayload: any = null;
       globalThis.fetch = vi.fn().mockImplementation((_url, init) => {
-        capturedPayload = JSON.parse(init.body);
+        if (init?.body) capturedPayload = JSON.parse(init.body);
         return Promise.resolve({
           ok: true,
           json: async () => ({
             success: true,
             task_id: 'task-1',
+            status: 'succeeded', metadata: {},
+            outputs: { success: true, task_id: 'task-1', image_url: '/result.png', width: 640, height: 360 },
             width: 640,
             height: 360,
             image_url: '/result.png',

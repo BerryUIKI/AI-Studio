@@ -70,7 +70,9 @@ describe('Complete canvas transactions', () => {
 
   it('undoes and redoes a completed generation as a single insertion', async () => {
     useCreativeStore.setState({ referenceImage: null, isGenerating: false });
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: true, task_id: 'task', asset_id: 'result', image_url: '/api/v1/assets/result/content', width: 8, height: 6 }) }));
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ task_id: 'task' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'task', status: 'succeeded', metadata: {}, outputs: { success: true, task_id: 'task', asset_id: 'result', image_url: '/api/v1/assets/result/content', width: 8, height: 6 } }) }));
     await useCreativeStore.getState().executeCreativeAction();
     expect(useCanvasStore.getState().nodes).toHaveLength(3);
     expect(useCanvasStore.getState().past).toHaveLength(1);

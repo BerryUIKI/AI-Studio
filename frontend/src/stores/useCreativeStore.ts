@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { CreativeActionRequest, CreativeActionResult, ImageCardData } from '../types/creative';
 import { useCanvasStore } from './useCanvasStore';
 import { useProjectStore } from './useProjectStore';
+import { GenerationTask } from '../types/task';
 
 interface CreativeState {
   prompt: string;
@@ -23,6 +24,9 @@ interface CreativeState {
   motionBucketId: number;
   durationSeconds: number;
   isGenerating: boolean;
+  activeTaskId: string | null;
+  cancellationRequested: boolean;
+  generationNotice: string | null;
   generationStage: string;
   generationProgress: number;
   error: string | null;
@@ -47,6 +51,7 @@ interface CreativeState {
   closeModals: () => void;
   randomizeSeed: () => void;
   executeCreativeAction: (override?: Partial<CreativeActionRequest>) => Promise<CreativeActionResult | null>;
+  cancelGeneration: () => Promise<void>;
   uploadCanvasImage: (file: File, position?: { x: number; y: number }) => Promise<void>;
 }
 
@@ -70,6 +75,9 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   motionBucketId: 127,
   durationSeconds: 3.0,
   isGenerating: false,
+  activeTaskId: null,
+  cancellationRequested: false,
+  generationNotice: null,
   generationStage: 'Idle',
   generationProgress: 0,
   error: null,
@@ -104,13 +112,32 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
   closeModals: () => set({ inpaintModalOpen: false, upscaleModalOpen: false, videoModalOpen: false }),
   randomizeSeed: () => set({ seed: Math.floor(Math.random() * 2147483647) }),
 
+  cancelGeneration: async () => {
+    const taskId = get().activeTaskId;
+    if (!taskId || get().cancellationRequested) return;
+    try {
+      const response = await fetch(`/api/v1/tasks/${taskId}/cancel`, { method: 'POST' });
+      if (!response.ok) throw new Error(`Cancellation request failed (HTTP ${response.status})`);
+      const outcome: { disclaimer?: string } = await response.json();
+      if (get().activeTaskId === taskId) set({ cancellationRequested: true, generationStage: 'Cancellation requested',
+        generationNotice: outcome.disclaimer || 'Awaiting the execution outcome.' });
+    } catch (error: unknown) {
+      set({ error: error instanceof Error ? error.message : 'Cancellation request failed' });
+    }
+  },
+
   executeCreativeAction: async (override) => {
     const s = get();
+    if (s.isGenerating) return null;
+    const projectId = useProjectStore.getState().currentProject?.id;
     set({
       isGenerating: true,
       error: null,
-      generationStage: 'Preparing execution & checking cache...',
-      generationProgress: 15,
+      activeTaskId: null,
+      cancellationRequested: false,
+      generationNotice: null,
+      generationStage: 'Submitting task...',
+      generationProgress: 0,
     });
 
     const action = override?.action || (s.referenceImage ? 'img2img' : 'txt2img');
@@ -181,8 +208,8 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       height: placeholderH,
       label: s.prompt,
       isGenerating: true,
-      generationStage: 'Preparing parameters...',
-      generationProgress: 20,
+      generationStage: 'Submitting task...',
+      generationProgress: 0,
     };
 
     useCanvasStore.setState({
@@ -198,51 +225,36 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       selectedNodeId: placeholderId,
     });
 
-    // Simulated progress tick timer for fine-grained UX feedback
-    const stageTimer = setInterval(() => {
-      const curr = get().generationProgress;
-      if (curr < 85) {
-        let nextStage = 'Sampling latent diffusion steps...';
-        if (curr < 40) nextStage = 'Loading model checkpoint & latents...';
-        else if (curr < 75) nextStage = `Denoising step ${Math.round((curr / 85) * s.steps)}/${s.steps}...`;
-        else nextStage = 'Decoding VAE latent...';
-
-        const nextProgress = Math.min(85, curr + 12);
-        set({ generationProgress: nextProgress, generationStage: nextStage });
-
-        // Update placeholder card
-        useCanvasStore.setState((state) => ({
-          nodes: state.nodes.map((node) => {
-            if (node.id === placeholderId) {
-              return {
-                ...node,
-                data: {
-                  ...node.data,
-                  generationProgress: nextProgress,
-                  generationStage: nextStage,
-                },
-              };
-            }
-            return node;
-          }),
-        }));
-      }
-    }, 450);
-
     try {
-      const resp = await fetch('/api/v1/creative/execute', {
+      const resp = await fetch('/api/v1/creative/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...payload, project_id: useProjectStore.getState().currentProject?.id }),
+        body: JSON.stringify({ ...payload, project_id: projectId }),
       });
-
-      clearInterval(stageTimer);
 
       if (!resp.ok) {
         throw new Error(`Server returned HTTP ${resp.status}`);
       }
 
-      const result: CreativeActionResult = await resp.json();
+      const submission: { task_id: string } = await resp.json();
+      set({ activeTaskId: submission.task_id });
+      let result: CreativeActionResult;
+      for (;;) {
+        const statusResponse = await fetch(`/api/v1/creative/tasks/${submission.task_id}`, { signal: AbortSignal.timeout(30000) });
+        if (!statusResponse.ok) throw new Error(`Task status unavailable (HTTP ${statusResponse.status}); task ${submission.task_id} remains in history.`);
+        const task: GenerationTask = await statusResponse.json();
+        if (['succeeded', 'cached'].includes(task.status)) {
+          result = task.outputs as CreativeActionResult;
+          if (task.metadata.cancel_requested) set({ generationNotice: 'Execution completed before cancellation could be confirmed.' });
+          break;
+        }
+        if (['failed', 'cancelled', 'interrupted', 'outcome-unknown'].includes(task.status)) throw new Error(task.error || task.status);
+        const stage = task.status === 'cancel-requested' ? 'Cancellation requested; awaiting outcome' : task.status === 'queued' ? 'Queued' : 'Running';
+        set({ generationStage: stage });
+        useCanvasStore.setState((state) => ({ nodes: state.nodes.map((node) => node.id === placeholderId
+          ? { ...node, data: { ...node.data, generationStage: stage, generationProgress: 0 } } : node) }));
+        await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+      }
       if (!result.success || (!result.image_url && !result.video_url)) {
         throw new Error(result.error_message || 'Generation failed');
       }
@@ -265,6 +277,11 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         generationStage: 'Done',
         generationProgress: 100,
       };
+
+      if (useProjectStore.getState().currentProject?.id !== projectId) {
+        set({ isGenerating: false, generationNotice: 'Result saved in the original project task history.' });
+        return result;
+      }
 
       useCanvasStore.getState().pushSnapshot();
       useCanvasStore.setState((state) => ({
@@ -294,7 +311,6 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       set({ isGenerating: false });
       return result;
     } catch (err: unknown) {
-      clearInterval(stageTimer);
       // Remove failed placeholder card from canvas
       useCanvasStore.setState((state) => ({
         nodes: state.nodes.filter((node) => node.id !== placeholderId),

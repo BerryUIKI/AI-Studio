@@ -196,14 +196,11 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
         {/* Media Preview Container / Generating Stage Container */}
         <div className="relative bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[360px] overflow-hidden">
           {isGenerating ? (
-            /* Fine-Grained Generation State & Latent Denoising Preview (Issue #37) */
+            /* Observed state with an indeterminate activity indicator. */
             <div className="w-full h-64 p-6 flex flex-col items-center justify-center relative bg-gradient-to-b from-slate-950 via-indigo-950/20 to-slate-950">
-              {/* Simulated Latent Noise Emergence Background */}
+              {/* Activity decoration does not represent a provider preview. */}
               <div
                 className="absolute inset-0 opacity-20 bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px] animate-pulse"
-                style={{
-                  filter: `blur(${Math.max(0, 10 - ((cardData.generationProgress || 20) / 10))}px)`,
-                }}
               />
 
               <div className="relative z-10 flex flex-col items-center gap-3 w-full max-w-[240px] text-center">
@@ -221,17 +218,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                   <span className="text-xs font-semibold text-slate-200 block">
                     {cardData.generationStage || 'Generating...'}
                   </span>
-                  {/* Progress bar */}
-                  <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden border border-slate-700/50">
-                    <div
-                      className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${cardData.generationProgress || 25}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                    <span>Progress</span>
-                    <span>{cardData.generationProgress || 25}%</span>
-                  </div>
+                  <p className="text-[10px] text-slate-400">Waiting for an execution outcome</p>
                 </div>
               </div>
             </div>
