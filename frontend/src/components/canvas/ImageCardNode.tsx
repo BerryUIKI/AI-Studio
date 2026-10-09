@@ -16,6 +16,7 @@ import {
 import { ImageCardData } from '../../types/creative';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
+import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
 import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
@@ -67,16 +68,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const handleRegenerate = async () => {
     if (!cardData.provenance) return;
     setIsMissingAsset(false);
-    await executeCreativeAction({
-      action: cardData.provenance.action,
-      prompt: cardData.provenance.prompt,
-      negative_prompt: cardData.provenance.negative_prompt,
-      model: cardData.provenance.model,
-      connection_id: cardData.provenance.connection_id,
-      steps: cardData.provenance.steps,
-      cfg_scale: cardData.provenance.cfg_scale,
-      seed: cardData.provenance.seed,
-    });
+    await executeCreativeAction(creativeRequestFromProvenance(cardData.provenance));
   };
 
   const handleExport = (e: React.MouseEvent) => {

@@ -252,8 +252,8 @@ async def test_creative_runner_webui_provenance_and_caching(mock_engine_manager)
         async with httpx.AsyncClient(transport=transport, base_url="http://127.0.0.1:7860") as client:
             return await self._dispatch_action(client, req)
 
-    from unittest.mock import patch
-    with patch.object(WebUIRunner, "execute_action", mock_execute_action):
+    from unittest.mock import AsyncMock, patch
+    with patch("app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="verified-fixture-model")), patch.object(WebUIRunner, "execute_action", mock_execute_action):
         req = CreativeActionRequest(
             action=CreativeActionType.TXT2IMG,
             prompt=f"enchanted forest {uuid.uuid4()}",

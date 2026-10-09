@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import hashlib
 import pytest
 from PIL import Image
 
@@ -49,8 +50,8 @@ async def test_misaligned_cloud_mask_blocks_dispatch(tmp_path: Path) -> None:
     Image.new("RGB", (8, 6)).save(source)
     Image.new("RGBA", (4, 3)).save(mask)
     records = {
-        "source": SimpleNamespace(content_hash="source", width=8, height=6, path=source),
-        "mask": SimpleNamespace(content_hash="mask", path=mask),
+        "source": SimpleNamespace(content_hash=hashlib.sha256(source.read_bytes()).hexdigest(), width=8, height=6, path=source),
+        "mask": SimpleNamespace(content_hash=hashlib.sha256(mask.read_bytes()).hexdigest(), path=mask),
     }
     request = CreativeActionRequest(action="inpaint", engine_id="fal_ai", input_image_id="source", mask_image_id="mask")
     runner = CreativeRunner()

@@ -1,5 +1,6 @@
 """Integration tests for creative_runner ComfyUI asset upload (issue #105)."""
 
+import hashlib
 import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch, MagicMock
@@ -63,7 +64,7 @@ async def test_img2img_uploads_source_before_execution(temp_asset_files):
         filename="test.png",
         file_path="test.png",
         media_type="image",
-        content_hash="abc123",
+        content_hash=hashlib.sha256(img_path.read_bytes()).hexdigest(),
         byte_size=1000,
         created_at="2024-01-01T00:00:00Z",
     )
@@ -144,7 +145,7 @@ async def test_inpaint_uploads_both_image_and_mask(temp_asset_files, mock_engine
         filename="source.png",
         file_path="source.png",
         media_type="image",
-        content_hash="img_hash",
+        content_hash=hashlib.sha256(img_path.read_bytes()).hexdigest(),
         byte_size=1000,
         created_at="2024-01-01T00:00:00Z",
     )
@@ -154,7 +155,7 @@ async def test_inpaint_uploads_both_image_and_mask(temp_asset_files, mock_engine
         filename="mask.png",
         file_path="mask.png",
         media_type="image",
-        content_hash="mask_hash",
+        content_hash=hashlib.sha256(mask_path.read_bytes()).hexdigest(),
         byte_size=500,
         created_at="2024-01-01T00:00:00Z",
     )
@@ -256,7 +257,7 @@ async def test_upscale_uploads_source_image(temp_asset_files, mock_engine_manage
         filename="to_upscale.png",
         file_path="to_upscale.png",
         media_type="image",
-        content_hash="upscale_hash",
+        content_hash=hashlib.sha256(img_path.read_bytes()).hexdigest(),
         byte_size=1000,
         created_at="2024-01-01T00:00:00Z",
     )
@@ -314,7 +315,7 @@ async def test_upload_failure_prevents_workflow_submission(mock_engine_manager):
         filename="test.png",
         file_path="test.png",
         media_type="image",
-        content_hash="hash123",
+        content_hash=hashlib.sha256(b"fake_data").hexdigest(),
         byte_size=1000,
         created_at="2024-01-01T00:00:00Z",
     )
@@ -370,7 +371,7 @@ async def test_uploaded_filename_used_in_workflow(mock_engine_manager):
         filename="original.png",
         file_path="original.png",
         media_type="image",
-        content_hash="hash123",
+        content_hash=hashlib.sha256(b"fake_data").hexdigest(),
         byte_size=1000,
         created_at="2024-01-01T00:00:00Z",
     )

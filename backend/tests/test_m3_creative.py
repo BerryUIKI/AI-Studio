@@ -146,7 +146,7 @@ async def test_creative_runner_caching_and_provenance(mock_engine_manager):
         {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
     ]
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+    with patch("app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="verified-fixture-model")), patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
         "httpx.AsyncClient.post", new_callable=AsyncMock
     ) as mock_post:
         mock_get.return_value = mock_models_resp

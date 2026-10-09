@@ -11,6 +11,7 @@ import {
 import { ImageCardData } from '../../types/creative';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
+import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
 
 interface FloatingCardToolbarProps {
   nodeId: string;
@@ -20,6 +21,8 @@ interface FloatingCardToolbarProps {
 export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId, data }) => {
   const { setReferenceImage, openInpaint, openUpscale, openImg2Video } = useCreativeStore();
   const { duplicateNode, removeNode, arrangeBranchTree } = useCanvasStore();
+  const isGenerating = useCreativeStore((state) => state.isGenerating);
+  const executeCreativeAction = useCreativeStore((state) => state.executeCreativeAction);
 
   const isVideo = data.mediaType === 'video' || Boolean(data.videoUrl);
   const targetMediaUrl = data.videoUrl || data.imageUrl || '';
@@ -104,11 +107,26 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
       {/* Duplicate */}
       <button
         onClick={handleDuplicate}
-        title="Duplicate Card (Ctrl+D)"
+        title="Reuse this result without generation (Ctrl+D)"
         className="p-1.5 rounded-xl text-slate-300 hover:text-slate-100 hover:bg-slate-800 transition"
       >
         <Copy className="w-3.5 h-3.5" />
+        <span className="text-xs ml-1">Reuse</span>
       </button>
+
+      {data.provenance && (
+        <button
+          disabled={isGenerating}
+          onClick={() => {
+            if (data.provenance) void executeCreativeAction(creativeRequestFromProvenance(data.provenance, true));
+          }}
+          title="Generate with saved settings and a new random seed"
+          className="flex items-center gap-1 p-1.5 rounded-xl text-xs text-indigo-300 hover:bg-slate-800 disabled:opacity-50"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          New Variation
+        </button>
+      )}
 
       {/* Download */}
       <button

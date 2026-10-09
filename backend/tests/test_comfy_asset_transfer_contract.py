@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
+import hashlib
 import pytest
 
 from app.runners.comfy_runner import ComfyUIClient
@@ -41,7 +42,7 @@ async def test_upload_then_queue_and_cache_reuse(
         originals[path] = path.read_bytes()
         records[name] = AssetRecord(
             id=name, filename=path.name, file_path=path.name, media_type="image",
-            content_hash=f"{name}-hash", byte_size=path.stat().st_size,
+            content_hash=hashlib.sha256(path.read_bytes()).hexdigest(), byte_size=path.stat().st_size,
             created_at="2026-10-06T00:00:00Z",
         )
     events: list[str] = []
@@ -102,6 +103,7 @@ async def test_upload_then_queue_and_cache_reuse(
             with (
                 patch("app.runners.creative_runner.asset_store") as store,
                 patch("app.runners.creative_runner.cache_store") as cache,
+                patch("app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="verified-fixture-model")),
             ):
                 store.get_asset = AsyncMock(side_effect=records.get)
                 store.get_absolute_path = Mock(side_effect=lambda rec: tmp_path / rec.filename)

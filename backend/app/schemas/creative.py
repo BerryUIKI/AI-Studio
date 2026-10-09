@@ -41,6 +41,7 @@ class CreativeActionRequest(BaseModel):
 
 
 class GenerationProvenance(BaseModel):
+    parameters: Dict[str, Any] = Field(default_factory=dict)
     action: CreativeActionType
     prompt: str
     negative_prompt: Optional[str] = None
