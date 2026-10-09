@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ModelReadiness, type ModelReadinessEvidence } from './ModelReadiness';
 import {
   X,
   Server,
@@ -46,7 +47,7 @@ interface ManagerStatus {
   };
 }
 
-interface ModelItem {
+interface ModelItem extends ModelReadinessEvidence {
   id: string;
   name: string;
   file_path: string;
@@ -593,13 +594,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
                             </div>
                           </td>
                           <td className="px-3 py-2">
-                            {m.is_ready ? (
-                              <span className="text-emerald-400">Ready</span>
-                            ) : (
-                              <span className="text-amber-400" title={m.guidance || ''}>
-                                Missing Dependencies
-                              </span>
-                            )}
+                            <ModelReadiness model={m} />
                           </td>
                         </tr>
                       ))
