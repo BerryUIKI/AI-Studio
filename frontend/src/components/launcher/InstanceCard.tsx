@@ -262,7 +262,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                         className="flex items-center w-full px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5 mr-2 text-red-400" />
-                        <span>{instance.is_managed ? 'Uninstall' : 'Unbind Engine'}</span>
+                        <span>{instance.is_managed ? 'Uninstall' : 'Remove Connection'}</span>
                       </button>
                     )}
                   </div>

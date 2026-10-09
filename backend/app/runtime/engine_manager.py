@@ -474,7 +474,7 @@ class EngineManager:
                 version="v0.3.8",
                 is_managed=True,
                 is_builtin=False,
-                install_path=str(getattr(comfy_supervisor, "engine_dir", "")),
+                install_path=str(comfy_supervisor.comfy_dir),
                 status=comfy_status,
                 endpoint=f"http://127.0.0.1:{comfy_supervisor.port}",
                 pid=getattr(getattr(comfy_supervisor, "_process", None), "pid", None) if comfy_running else None,
@@ -497,7 +497,7 @@ class EngineManager:
                 version="v1.9.3",
                 is_managed=True,
                 is_builtin=False,
-                install_path=str(getattr(webui_supervisor, "engine_dir", "")),
+                install_path=str(webui_supervisor.webui_dir),
                 status=webui_status,
                 endpoint=f"http://127.0.0.1:{webui_supervisor.port}",
                 pid=getattr(getattr(webui_supervisor, "_process", None), "pid", None) if webui_running else None,
@@ -527,7 +527,7 @@ class EngineManager:
                         version=conn.version or "External",
                         is_managed=False,
                         is_builtin=False,
-                        install_path=conn.models_path,
+                        install_path=next((item.get("path") for item in self._configs.get("_external_engines", []) if item.get("id") == conn.id), None),
                         status=ext_status,
                         endpoint=conn.endpoint_url,
                         capabilities=conn.capabilities,
@@ -652,6 +652,24 @@ class EngineManager:
                 logger.debug(f"Error checking candidate directory {cand}: {e}")
 
         return detected
+
+    def get_install_directory(self, instance_id: str) -> Path:
+        normalized = self._normalize_instance_id(instance_id)
+        if normalized == "comfyui-managed":
+            directory = comfy_supervisor.comfy_dir
+        elif normalized == "webui-managed":
+            directory = webui_supervisor.webui_dir
+        else:
+            connection = self._connections.get(instance_id)
+            if not connection or connection.ownership != EngineOwnership.EXTERNAL:
+                raise KeyError("Engine connection does not have an installation directory")
+            path = next((item.get("path") for item in self._configs.get("_external_engines", []) if item.get("id") == instance_id), None)
+            if not path:
+                raise FileNotFoundError("No local installation directory is recorded for this connection")
+            directory = Path(path)
+        if not directory.is_dir():
+            raise FileNotFoundError(f"Installation directory does not exist: {directory}")
+        return directory.resolve()
 
     def bind_external_engine(self, engine_type_str: str, name: str, path_str: str, port: Optional[int] = None, extra_args: Optional[List[str]] = None) -> Any:
         """Bind an external engine path as a connection. Strictly non-destructive."""
