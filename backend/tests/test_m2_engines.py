@@ -205,8 +205,8 @@ def create_synthetic_safetensors(file_path: Path, header_dict: dict) -> None:
     with open(file_path, "wb") as f:
         f.write(struct.pack("<Q", header_len))
         f.write(header_json)
-        # Write dummy 64 bytes of weight data
-        f.write(b"\x00" * 64)
+        data_length = max((v["data_offsets"][1] for k, v in header_dict.items() if k != "__metadata__"), default=0)
+        f.write(b"\x00" * data_length)
 
 
 def test_safetensors_header_and_architecture_detection():
@@ -222,8 +222,8 @@ def test_safetensors_header_and_architecture_detection():
             "__metadata__": {"modelspec.architecture": "stable-diffusion-xl-v1-base"},
             "model.diffusion_model.input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight": {
                 "dtype": "F16",
-                "shape": [2048, 2048],
-                "data_offsets": [0, 64],
+                "shape": [1, 2048],
+                "data_offsets": [0, 4096],
             },
         }
         create_synthetic_safetensors(sdxl_file, sdxl_header)
@@ -233,7 +233,7 @@ def test_safetensors_header_and_architecture_detection():
         lora_header = {
             "lora_unet_down_blocks_0_attentions_0_proj_in.lora_down.weight": {
                 "dtype": "F16",
-                "shape": [4, 320],
+                "shape": [1, 32],
                 "data_offsets": [0, 64],
             }
         }
@@ -264,8 +264,11 @@ def test_safetensors_header_and_architecture_detection():
         assert sdxl_rec is not None
         assert sdxl_rec.architecture == ModelArchitecture.SDXL
         assert sdxl_rec.category == ModelCategory.CHECKPOINT
-        assert "comfyui" in sdxl_rec.engine_compatibility
-        assert "webui" in sdxl_rec.engine_compatibility
+        assert "comfyui" in sdxl_rec.possible_engines
+        assert "webui" in sdxl_rec.possible_engines
+        assert sdxl_rec.engine_compatibility == []
+        assert sdxl_rec.integrity_status == "structurally-valid"
+        assert not sdxl_rec.is_ready
 
 
 def test_api_m2_endpoints():

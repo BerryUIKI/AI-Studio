@@ -7,6 +7,8 @@ import struct
 import pytest
 
 from app.core.model_validation import inspect_model
+from app.schemas.model import ModelArchitecture, ModelCategory
+from app.storage.model_store import ModelStore
 
 
 def write_model(path: Path, header: dict, data: bytes = b"\0\0") -> Path:
@@ -55,3 +57,23 @@ def test_unknown_dtype_and_gguf_magic_are_unverified(tmp_path: Path) -> None:
     assert inspect_model(gguf).integrity == "invalid"
     gguf.write_bytes(b"GGUF" + struct.pack("<I", 3))
     assert inspect_model(gguf).integrity == "unverified"
+
+
+def test_unknown_models_not_ready_and_revision_uses_bytes(tmp_path: Path) -> None:
+    root = tmp_path / "models"
+    root.mkdir()
+    model = root / "unknown.gguf"
+    model.write_bytes(b"not-a-real-model")
+    store = ModelStore(tmp_path / "engine")
+    store.add_root("fixture", str(root), "Fixture")
+    record = store.scan_all_roots()[0]
+    assert not record.is_ready
+    assert record.integrity_status == "invalid"
+    assert record.architecture == ModelArchitecture.UNKNOWN
+    assert record.category == ModelCategory.UNKNOWN
+    assert record.engine_compatibility == []
+    assert record.possible_engines == []
+    model.write_bytes(b"NOT-A-REAL-MODEL")
+    changed = store.scan_all_roots()[0]
+    assert changed.content_hash != record.content_hash
+    assert changed.id != record.id
