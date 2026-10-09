@@ -295,13 +295,24 @@ berry_shared:
 
         try:
             if sys.platform == "win32":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
+                result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
+                if result.returncode != 0:
+                    raise RuntimeError(f"Process termination failed (exit {result.returncode})")
             else:
                 os.kill(pid, signal.SIGTERM)
+            if self._process is not None and self._process.pid == pid:
+                self._process.wait(timeout=5)
+            else:
+                deadline = time.monotonic() + 5
+                while self._verify_process_identity(pid) and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                if self._verify_process_identity(pid):
+                    raise RuntimeError("Process has not exited; check engine logs before retrying")
         except Exception as err:
             return {"success": False, "message": f"Error stopping process: {err}"}
-        finally:
-            self._clean_pid_file()
+        self._clean_pid_file()
+        self._process = None
+        self._started_at = None
 
         return {"success": True, "message": f"ComfyUI process {pid} stopped"}
 

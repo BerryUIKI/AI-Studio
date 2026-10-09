@@ -14,6 +14,7 @@ import pytest
 from app.runtime.service_health import ServiceHealthProbe, observed_runtime_status
 from app.schemas.engine import EngineType
 from app.runtime.supervisor import ComfySupervisor
+from app.runtime.webui_supervisor import WebUISupervisor
 
 
 @pytest.mark.asyncio
@@ -83,3 +84,14 @@ async def test_failed_process_returns_actionable_diagnostics() -> None:
     assert status["lifecycle_state"] == "failed"
     assert "code 4" in status["health_error"]
     assert "logs" in status["health_error"]
+
+
+@pytest.mark.parametrize("supervisor_type", [ComfySupervisor, WebUISupervisor])
+def test_failed_termination_preserves_process_status(tmp_path: Path, supervisor_type: type) -> None:
+    target = supervisor_type(tmp_path)
+    target._process = SimpleNamespace(pid=123, poll=lambda: None)
+    with patch("sys.platform", "win32"), patch("subprocess.run", return_value=SimpleNamespace(returncode=1)):
+        result = target.stop()
+    assert result["success"] is False
+    assert target.get_pid() == 123
+    assert "termination failed" in result["message"]
