@@ -77,3 +77,46 @@ def test_unknown_models_not_ready_and_revision_uses_bytes(tmp_path: Path) -> Non
     changed = store.scan_all_roots()[0]
     assert changed.content_hash != record.content_hash
     assert changed.id != record.id
+
+
+def component_header() -> dict:
+    keys = ["text_model.embeddings.token_embedding.weight", "text_model.encoder.layers.11.weight",
+            "encoder.block.23.layer.0.SelfAttention.q.weight", "shared.weight",
+            "encoder.conv_in.weight", "decoder.conv_out.weight"]
+    result = {}
+    cursor = 0
+    for key in keys:
+        shape = [1, 768] if "token_embedding" in key else [1]
+        length = 1536 if "token_embedding" in key else 2
+        result[key] = tensor(shape, [cursor, cursor + length])
+        cursor += length
+    return result
+
+
+def test_flux_dependencies_resolve_inventory_and_bundles(tmp_path: Path) -> None:
+    root = tmp_path / "models"
+    root.mkdir()
+    flux_header = {"double_blocks.0.weight": tensor()}
+    flux_file = write_model(root / "flux.safetensors", flux_header)
+    store = ModelStore(tmp_path / "engine")
+    store.add_root("fixture", str(root), "Fixture")
+    record = store.scan_all_roots()[0]
+    assert record.missing_dependencies == ["clip_l", "t5xxl", "ae (vae)"]
+    assert record.dependency_status == "missing"
+    fake = root / "clip_l-t5xxl-ae.safetensors"
+    fake.write_bytes(b"invalid")
+    assert next(r for r in store.scan_all_roots() if r.name == "flux").dependency_status == "missing"
+    components = component_header()
+    component_file = write_model(root / "components.safetensors", components, b"\0" * 1546)
+    record = next(r for r in store.scan_all_roots() if r.name == "flux")
+    assert record.dependency_status == "present"
+    assert record.missing_dependencies == []
+    assert not record.is_ready
+    component_file.unlink()
+    assert next(r for r in store.scan_all_roots() if r.name == "flux").dependency_status == "missing"
+    bundled = {**flux_header, **components}
+    bundled["double_blocks.0.weight"] = tensor(offsets=[1546, 1548])
+    write_model(flux_file, bundled, b"\0" * 1548)
+    record = next(r for r in store.scan_all_roots() if r.name == "flux")
+    assert record.dependency_status == "present"
+    assert set(record.available_components) == {"clip_l", "t5xxl", "ae (vae)"}

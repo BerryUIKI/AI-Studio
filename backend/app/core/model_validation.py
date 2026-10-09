@@ -37,6 +37,28 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def identify_components(header: dict[str, Any]) -> list[str]:
+    """Recognize tensor families; presence does not prove engine-tested completeness."""
+    tensors = {key: value for key, value in header.items() if key != "__metadata__"}
+    components: list[str] = []
+    clip_embedding = any(
+        key.endswith("text_model.embeddings.token_embedding.weight")
+        and isinstance(value, dict) and len(value.get("shape", [])) == 2
+        and value["shape"][1] == 768 for key, value in tensors.items()
+    )
+    if clip_embedding and any("text_model.encoder.layers.11." in key for key in tensors):
+        components.append("clip_l")
+    if any(key.endswith("encoder.block.23.layer.0.SelfAttention.q.weight") for key in tensors) and any(
+        key.endswith("shared.weight") for key in tensors
+    ):
+        components.append("t5xxl")
+    if any(key.endswith("encoder.conv_in.weight") for key in tensors) and any(
+        key.endswith("decoder.conv_out.weight") for key in tensors
+    ):
+        components.append("ae (vae)")
+    return components
+
+
 def inspect_model(path: Path) -> ModelInspection:
     if path.suffix.lower() != ".safetensors":
         if path.suffix.lower() == ".gguf":

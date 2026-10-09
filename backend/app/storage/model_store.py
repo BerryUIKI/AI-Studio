@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.core.content_identity import hash_file
-from app.core.model_validation import inspect_model
+from app.core.model_validation import identify_components, inspect_model
 from app.runtime.supervisor import get_default_engine_dir
 from app.storage.config_files import write_json_atomic
 from app.core.workers import run_blocking
@@ -235,6 +235,7 @@ class ModelStore:
                 format_recognized=inspection.format_recognized,
                 architecture_status="recognized" if recognized else "unverified",
                 possible_engines=possible_engines,
+                available_components=identify_components(header),
                 guidance=inspection.reason or "File structure inspected; engine compatibility has not been tested.",
                 metadata={k: v for k, v in metadata.items() if isinstance(v, (str, int, float, bool))},
             )
@@ -250,6 +251,16 @@ class ModelStore:
         """Scan all active root directories and return discovered models."""
         with self._scan_lock:
             records = self._scan_all_roots()
+            available = {component for record in records for component in record.available_components}
+            for record in records:
+                if record.architecture == ModelArchitecture.FLUX and record.architecture_status == "recognized":
+                    record.missing_dependencies = [name for name in ("clip_l", "t5xxl", "ae (vae)") if name not in available]
+                    record.dependency_status = "missing" if record.missing_dependencies else "present"
+                    record.guidance = (
+                        "FLUX component tensor families are present in the catalog; mounting and engine inference remain unverified."
+                        if not record.missing_dependencies else
+                        "FLUX requires CLIP-L, T5-XXL and an autoencoder. Missing from catalog: " + ", ".join(record.missing_dependencies)
+                    )
             self._inventory = records
             self._inventory_updated = time.monotonic()
             seen = {record.file_path for record in records}
