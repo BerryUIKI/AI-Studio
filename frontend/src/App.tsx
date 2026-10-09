@@ -49,6 +49,7 @@ export default function App() {
   const [addEngineInitialTab, setAddEngineInitialTab] = useState<'detected' | 'browse' | 'install'>('detected');
   const [showDeploymentDrawer, setShowDeploymentDrawer] = useState<boolean>(false);
   const [deploymentEngineType, setDeploymentEngineType] = useState<'comfyui' | 'webui'>('comfyui');
+  const [deploymentMirror, setDeploymentMirror] = useState<string | undefined>();
   const [selectedConfigInstance, setSelectedConfigInstance] = useState<EngineInstance | null>(null);
   const [selectedLogInstance, setSelectedLogInstance] = useState<EngineInstance | null>(null);
   const [notInstalledTarget, setNotInstalledTarget] = useState<EngineInstance | null>(null);
@@ -85,8 +86,9 @@ export default function App() {
     }
   }, [defaultLandingView, setActiveView]);
 
-  const handleStartDeployment = (type: 'comfyui' | 'webui') => {
+  const handleStartDeployment = (type: 'comfyui' | 'webui', mirrorPreset?: string) => {
     setDeploymentEngineType(type);
+    setDeploymentMirror(mirrorPreset);
     setShowDeploymentDrawer(true);
   };
 
@@ -491,6 +493,7 @@ export default function App() {
       <DeploymentDrawer
         isOpen={showDeploymentDrawer}
         engineType={deploymentEngineType}
+        mirrorPreset={deploymentMirror}
         onClose={() => setShowDeploymentDrawer(false)}
       />
       <EngineNotInstalledModal

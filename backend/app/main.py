@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+from app.schemas.engine import EngineInstallRequest
 from contextlib import asynccontextmanager
 import json
 import logging
@@ -482,10 +483,10 @@ async def get_engine_manifest(engine_type: EngineType) -> EngineInstallManifest:
 
 
 @app.post("/api/v1/runtime/{engine_type}/install", response_model=EngineInstallManifest)
-async def trigger_engine_install(engine_type: EngineType) -> EngineInstallManifest:
+async def trigger_engine_install(engine_type: EngineType, request: Optional[EngineInstallRequest] = None) -> EngineInstallManifest:
     """Start or check isolated installation of an engine without host pollution."""
     # Spawn in background task to avoid blocking HTTP call
-    asyncio.create_task(installer.install_engine(engine_type))
+    asyncio.create_task(installer.install_engine(engine_type, mirror_preset=request.mirror_preset if request else None))
     return installer.read_manifest(engine_type)
 
 

@@ -329,7 +329,7 @@ class ModelDownloader:
 
     def _select_source_url(self, model: HubModelRecord, mirror_preset: Optional[str]) -> str:
         """Select best URL based on active mirror configuration."""
-        active_preset = mirror_preset or mirror_manager.get_config().active_preset
+        active_preset = mirror_preset or mirror_manager.get_config()["active_preset"]
         if active_preset == "china_mainland":
             # Find mirror link first
             for src in model.sources:
@@ -337,7 +337,7 @@ class ModelDownloader:
                     return src.url
 
         if model.sources:
-            return model.sources[0].url
+            return mirror_manager.transform_model_url(model.sources[0].url, active_preset)
         return ""
 
     def start_download(
