@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from app.core.task_registry import task_registry
+from app.core.workers import run_blocking
+from app.runtime.managed_files import managed_child, reject_redirected_tree
 from app.runtime.supervisor import get_default_engine_dir
 from app.storage.db import get_default_data_dir
 from app.storage.config_files import write_json_atomic
@@ -167,21 +169,24 @@ class IsolatedEngineInstaller:
         self, runtime_dir: Path, on_log: Optional[Callable[[str], None]] = None
     ) -> bool:
         """Create a hermetic virtual environment without polluting host."""
+        if runtime_dir.name not in {"runtime", "webui_runtime"} or runtime_dir != managed_child(self.engine_dir, runtime_dir.name):
+            raise ValueError("Virtual environment target is outside the designated managed runtime")
         if on_log:
             on_log(f"Creating isolated virtualenv in {runtime_dir}...")
 
         # If previous broken venv exists, remove it cleanly
         python_bin = self._get_python_bin(runtime_dir)
         if runtime_dir.exists() and not python_bin.is_file():
-            shutil.rmtree(runtime_dir, ignore_errors=True)
+            await run_blocking(reject_redirected_tree, runtime_dir)
+            await run_blocking(shutil.rmtree, runtime_dir)
 
         if not python_bin.is_file():
             # Run venv creation in threadpool to avoid blocking event loop
-            def _create_env():
+            def _create_env() -> None:
                 builder = venv.EnvBuilder(with_pip=True, clear=True)
                 builder.create(runtime_dir)
 
-            await asyncio.to_thread(_create_env)
+            await run_blocking(_create_env)
 
         return python_bin.is_file()
 
@@ -225,8 +230,10 @@ class IsolatedEngineInstaller:
                 if on_progress:
                     on_progress(manifest)
 
-                engine_target = Path(manifest.engine_dir)
-                runtime_target = Path(manifest.runtime_dir)
+                engine_target = managed_child(self.engine_dir, engine_type.value)
+                runtime_target = managed_child(self.engine_dir, "runtime" if engine_type == EngineType.COMFYUI else "webui_runtime")
+                manifest.engine_dir = str(engine_target)
+                manifest.runtime_dir = str(runtime_target)
 
                 # Phase 1: Virtualenv Creation
                 manifest.phase = InstallPhase.CREATING_VENV
@@ -256,7 +263,9 @@ class IsolatedEngineInstaller:
                     has_entrypoint = any(ep.is_file() for ep in entrypoints)
                     has_git = (engine_target / ".git").is_dir()
                     if not has_entrypoint or not has_git:
-                        shutil.rmtree(engine_target, ignore_errors=True)
+                        if any(engine_target.iterdir()):
+                            raise RuntimeError("Existing engine entrypoint or repository is incomplete. Use Uninstall to preserve the folder before reinstalling.")
+                        await run_blocking(engine_target.rmdir)
 
                 if not engine_target.exists():
                     git_exe = find_git_executable()

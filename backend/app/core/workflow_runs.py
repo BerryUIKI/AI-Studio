@@ -86,13 +86,21 @@ class WorkflowRunService:
                 if existing.request != redact_submission(request.model_dump()):
                     raise ValueError("Run ID already belongs to a different immutable submission")
                 return request.run_id
-            await self.store.create_run(RunRecord(id=request.run_id, project_id=request.project_id,
-                target_node_id=request.target_node_id, request=request.model_dump()))
-            changed = self._changes.setdefault(request.run_id, asyncio.Event())
-            cancel = self._cancellations.setdefault(request.run_id, asyncio.Event())
+            changed = asyncio.Event()
+            cancel = asyncio.Event()
             task_registry.register_task(request.run_id, "workflow_graph", cancel)
+            self._changes[request.run_id] = changed
+            self._cancellations[request.run_id] = cancel
             sink = WorkflowEventSink(request, self.store, changed, cancel)
-            await sink.initialize()
+            try:
+                await self.store.create_run(RunRecord(id=request.run_id, project_id=request.project_id,
+                    target_node_id=request.target_node_id, request=request.model_dump()))
+                await sink.initialize()
+            except BaseException:
+                task_registry.unregister_task(request.run_id)
+                self._changes.pop(request.run_id, None)
+                self._cancellations.pop(request.run_id, None)
+                raise
             self._workers[request.run_id] = asyncio.create_task(self._execute(request, sink, executor))
         return request.run_id
 
