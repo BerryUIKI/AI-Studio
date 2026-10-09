@@ -138,7 +138,7 @@ class ModelStore:
     def __init__(self, engine_dir: Optional[Path] = None) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
         self.roots: Dict[str, ModelRoot] = {}
-        self._cached_records: Dict[str, Tuple[float, int, ModelRecord]] = {}  # path -> (mtime, size, record)
+        self._cached_records: Dict[str, Tuple[int, int, ModelRecord]] = {}  # path -> (mtime, size, record)
         self._inventory: List[ModelRecord] = []
         self._inventory_updated = 0.0
         self._scan_lock = threading.RLock()

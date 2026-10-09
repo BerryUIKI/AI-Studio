@@ -157,3 +157,28 @@ async def test_health_remains_responsive_during_media_disk_write(tmp_path: Path)
                 assert (await save).byte_size > 3 * 1024 * 1024
             finally:
                 await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_runtime_status_probe_does_not_block_health() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_probe() -> dict[str, bool]:
+        entered.set()
+        assert release.wait(3)
+        return {"running": False}
+
+    with patch("app.main.supervisor.get_status", side_effect=slow_probe):
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost:8000") as client:
+            status = asyncio.create_task(client.get("/api/v1/runtime/status"))
+            try:
+                while not entered.is_set():
+                    await asyncio.sleep(0.001)
+                start = time.monotonic()
+                assert (await client.get("/health")).status_code == 200
+                assert time.monotonic() - start < 0.5
+                assert not status.done()
+            finally:
+                release.set()
+                assert (await status).json() == {"running": False}

@@ -172,8 +172,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Auto-start embedded llama-server if installed in isolated app engine directory
     try:
-        if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
-            models = llama_server_supervisor.list_local_models()
+        if await run_blocking(llama_server_supervisor.is_installed) and not await run_blocking(llama_server_supervisor.is_running):
+            models = await run_blocking(llama_server_supervisor.list_local_models)
             if models:
                 logger.info(f"Detected installed embedded llama-server, auto-starting with {models[0].name}...")
                 await mutate_process("llama", llama_server_supervisor.start, models[0].name)
@@ -188,7 +188,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await creative_tasks.shutdown()
     await inventory_warmup
     try:
-        if llama_server_supervisor.is_running():
+        if await run_blocking(llama_server_supervisor.is_running):
             logger.info("Stopping embedded llama-server process...")
             await mutate_process("llama", llama_server_supervisor.stop)
     except Exception as e:
@@ -362,10 +362,10 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
 
     stopped_engines = []
     if stop_managed:
-        if supervisor.is_running():
+        if await run_blocking(supervisor.is_running):
             await mutate_process("comfyui", supervisor.stop)
             stopped_engines.append("managed_comfyui")
-        if webui_supervisor.is_running():
+        if await run_blocking(webui_supervisor.is_running):
             await mutate_process("webui", webui_supervisor.stop)
             stopped_engines.append("managed_webui")
 
@@ -447,7 +447,7 @@ async def comfy_models() -> dict[str, List[str]]:
 @app.get("/api/v1/runtime/status")
 async def runtime_status() -> dict[str, Any]:
     """Check the status of the sandboxed ComfyUI runtime and process supervisor."""
-    return supervisor.get_status()
+    return await run_blocking(supervisor.get_status)
 
 
 @app.post("/api/v1/runtime/start", response_model=RuntimeStartResponse)
@@ -465,7 +465,7 @@ async def runtime_stop() -> dict[str, Any]:
 @app.get("/api/v1/runtime/webui/status")
 async def runtime_webui_status() -> dict[str, Any]:
     """Check the status of the sandboxed WebUI runtime and supervisor."""
-    return webui_supervisor.get_status()
+    return await run_blocking(webui_supervisor.get_status)
 
 
 @app.post("/api/v1/runtime/webui/start", response_model=RuntimeStartResponse)
