@@ -2,11 +2,15 @@
 
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import pytest
 
 from app.runtime.managed_files import managed_child, uninstall_managed_files
 from app.schemas.engine import EngineType
+from app.runtime.installer import IsolatedEngineInstaller
+from app.runtime.uninstall import uninstall_managed
+from app.core.task_registry import task_registry
 
 
 def test_uninstall_removes_environment_preserves_entire_engine_and_shared_data(tmp_path: Path) -> None:
@@ -64,3 +68,36 @@ def test_cleanup_failure_reports_retained_environment(tmp_path: Path) -> None:
 def test_managed_target_cannot_escape_root(tmp_path: Path) -> None:
     with pytest.raises(ValueError):
         managed_child(tmp_path, "../external")
+
+
+@pytest.mark.asyncio
+async def test_running_engine_and_active_tasks_prevent_uninstall(tmp_path: Path) -> None:
+    installer = IsolatedEngineInstaller(tmp_path)
+    target = SimpleNamespace(engine_dir=tmp_path, is_running=lambda: True, get_pid=lambda: 123)
+    with pytest.raises(ValueError, match="Stop the managed"):
+        await uninstall_managed(EngineType.COMFYUI, target, installer)
+    assert not task_registry.maintenance_active
+    target.is_running = lambda: False
+    target.get_pid = lambda: None
+    task_registry.register_task("fixture-uninstall-active", "fixture")
+    try:
+        with pytest.raises(ValueError, match="active work"):
+            await uninstall_managed(EngineType.COMFYUI, target, installer)
+    finally:
+        task_registry.unregister_task("fixture-uninstall-active")
+
+
+@pytest.mark.asyncio
+async def test_uninstall_maintenance_blocks_new_admission(tmp_path: Path) -> None:
+    installer = IsolatedEngineInstaller(tmp_path)
+    target = SimpleNamespace(engine_dir=tmp_path, is_running=lambda: False, get_pid=lambda: None)
+
+    def remove(root: Path, engine_type: EngineType) -> dict:
+        assert task_registry.maintenance_active
+        with pytest.raises(ValueError, match="maintenance"):
+            task_registry.register_task("fixture-new", "fixture")
+        return {"status": "not-installed", "retained_path": None}
+
+    with patch("app.runtime.uninstall.uninstall_managed_files", side_effect=remove):
+        assert (await uninstall_managed(EngineType.COMFYUI, target, installer))["status"] == "not-installed"
+    assert not task_registry.maintenance_active

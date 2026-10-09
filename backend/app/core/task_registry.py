@@ -23,6 +23,7 @@ class TaskLifecycleRegistry:
         self._cancellations: Dict[str, asyncio.Event] = {}
         self._update_locks: Dict[str, asyncio.Lock] = {}
         self._install_locks: Dict[str, asyncio.Lock] = {}
+        self.maintenance_active = False
 
     def register_task(
         self,
@@ -33,6 +34,8 @@ class TaskLifecycleRegistry:
         status: str = "running",
     ) -> asyncio.Event:
         """Register a task with its cancellation event and optional metadata."""
+        if self.maintenance_active and task_id not in self._tasks:
+            raise ValueError("Engine maintenance is in progress; submit work after it finishes.")
         event = cancel_event or asyncio.Event()
         self._tasks[task_id] = {
             "id": task_id,
