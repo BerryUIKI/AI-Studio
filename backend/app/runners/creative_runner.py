@@ -373,13 +373,16 @@ class CreativeRunner:
                                       "provider_id": result.provenance.provider_id, "connection_id": result.provenance.connection_id})
             return result
         except BaseException as error:
-            task.status = "interrupted" if isinstance(error, asyncio.CancelledError) else "failed"
+            task.status = ("outcome-unknown" if task.metadata.get("engine") == "cloud" else "interrupted") if isinstance(error, asyncio.CancelledError) else "failed"
             task.error = str(error) or "Execution interrupted"
             raise
         finally:
             execution_task.reset(context_token)
             await task_store.save_task(task)
             await task_store.finish_run(task_id, task.status)
+            self.active_tasks.pop(task_id, None)
+            self.active_cancellations.pop(task_id, None)
+            task_registry.unregister_task(task_id)
 
     async def _execute(self, req: CreativeActionRequest, task_id: str, persisted: TaskRecord) -> CreativeActionResult:
         start_time = time.monotonic()
@@ -646,11 +649,6 @@ class CreativeRunner:
                 width=req.width,
                 height=req.height,
             )
-        finally:
-            self.active_tasks.pop(task_id, None)
-            self.active_cancellations.pop(task_id, None)
-            task_registry.unregister_task(task_id)
-
     async def _run_comfy(
         self,
         req: CreativeActionRequest,

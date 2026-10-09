@@ -91,6 +91,21 @@ class TaskStore:
             outputs=json.loads(row["outputs_json"] or "{}"), error=row["error_msg"], metadata=json.loads(row["metadata_json"] or "{}"),
         )
 
+    async def request_cancel(self, task_id: str) -> bool:
+        """Do not overwrite a terminal result when cancellation races completion."""
+        conn = await self.manager.get_connection()
+        cursor = await conn.execute(
+            """UPDATE tasks SET status = 'cancel-requested',
+               metadata_json = json_set(COALESCE(metadata_json, '{}'), '$.cancel_requested', json('true'))
+               WHERE id = ? AND status IN ('queued', 'running', 'cancel-requested')""", (task_id,),
+        )
+        await conn.execute(
+            """UPDATE runs SET status = 'cancel-requested' WHERE id = (SELECT run_id FROM tasks WHERE id = ?)
+               AND status IN ('queued', 'running', 'cancel-requested')""", (task_id,),
+        )
+        await conn.commit()
+        return cursor.rowcount > 0
+
     async def reconcile_interrupted(self) -> int:
         """Never automatically resubmit uncertain remote work at duplicate cost."""
         conn = await self.manager.get_connection()

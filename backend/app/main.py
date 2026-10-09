@@ -404,7 +404,7 @@ async def cancel_task_endpoint(task_id: str) -> Dict[str, Any]:
                 "disclaimer": "Queued work will stop before dispatch. Active engine/provider work may finish; remote cancellation is not confirmed and charges may still apply."}
     if task_id in creative_runner.active_tasks or task_id in creative_runner.active_cancellations:
         return await creative_runner.cancel_task(task_id)
-    if workflow_runs.cancel(task_id):
+    if workflow_runs.cancel(task_id) or task_registry.cancel_task(task_id):
         await task_store.finish_run(task_id, "cancel-requested")
         return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False}
     raise HTTPException(status_code=404, detail=f"Active task '{task_id}' not found or already concluded.")

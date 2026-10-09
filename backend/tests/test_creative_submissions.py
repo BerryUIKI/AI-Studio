@@ -57,6 +57,8 @@ async def test_submit_returns_before_inference_and_cancel_preserves_real_result(
             assert task.status == "succeeded"
             assert task.metadata["cancel_requested"] is True
             assert task.outputs["asset_id"] == "output"
+            assert not await store.request_cancel(task_id)
+            assert (await store.get_task(task_id)).status == "succeeded"
             assert not any(item["id"] == task_id for item in task_registry.list_active_tasks())
     finally:
         release.set()
@@ -79,8 +81,9 @@ async def test_queued_cancel_never_dispatches_or_interrupts_other_task(tmp_path:
         task_id = await service.submit(request, runner)
         assert any(item["id"] == task_id and item["status"] == "queued" for item in task_registry.list_active_tasks())
         assert await service.cancel(task_id)
+        assert (await store.get_task(task_id)).status == "cancelled"
         service._slots.release()
-        await asyncio.gather(*list(service._workers.values()))
+        await asyncio.gather(*list(service._workers.values()), return_exceptions=True)
         runner.assert_not_awaited()
         assert (await store.get_task(task_id)).status == "cancelled"
         assert (await store.get_run(task_id)).status == "cancelled"
