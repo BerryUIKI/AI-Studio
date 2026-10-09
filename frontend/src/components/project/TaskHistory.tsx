@@ -1,3 +1,4 @@
+import { mediaCardFields } from '../../utils/media';
 import { useCallback, useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useCreativeStore } from '../../stores/useCreativeStore';
@@ -42,7 +43,7 @@ export function TaskHistory() {
     const id = `history_${task.id}_${Date.now()}`;
     useCanvasStore.setState({ nodes: [...canvas.nodes, {
       id, type: 'imageCard', position: { x: 100, y: 100 },
-      data: { assetId: result.asset_id, imageUrl, videoUrl: result.video_url, mediaType: result.video_url ? 'video' : 'image',
+      data: { ...mediaCardFields(result), assetId: result.asset_id, imageUrl, videoUrl: result.video_url, mediaType: result.video_url ? 'video' : 'image',
         width: result.width || 512, height: result.height || 512, provenance: result.provenance, label: result.provenance?.prompt || task.node_type },
     }], selectedNodeId: id });
     canvas.notifyCanvasChange();

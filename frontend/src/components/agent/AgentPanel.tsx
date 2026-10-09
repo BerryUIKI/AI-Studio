@@ -1,3 +1,4 @@
+import { mediaCardFields } from '../../utils/media';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
@@ -159,6 +160,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
           const cardId = `${isVideo ? 'video' : 'image'}_agent_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
           const cardData: ImageCardData = {
+        ...mediaCardFields(res),
             assetId: res.asset_id,
             imageUrl: res.image_url || res.video_url || '',
             videoUrl: res.video_url,

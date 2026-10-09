@@ -12,6 +12,7 @@ import { ImageCardData } from '../../types/creative';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
+import { downloadOriginalMedia } from '../../utils/media';
 
 interface FloatingCardToolbarProps {
   nodeId: string;
@@ -25,17 +26,12 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
   const executeCreativeAction = useCreativeStore((state) => state.executeCreativeAction);
 
   const isVideo = data.mediaType === 'video' || Boolean(data.videoUrl);
-  const targetMediaUrl = data.videoUrl || data.imageUrl || '';
 
   const handleExport = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!targetMediaUrl) return;
-    const link = document.createElement('a');
-    link.href = targetMediaUrl;
-    link.download = `${data.label || 'berry_asset'}.${isVideo ? 'mp4' : 'png'}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    void downloadOriginalMedia(data).catch((error: unknown) => useCreativeStore.setState({
+      error: error instanceof Error ? error.message : 'Could not export media',
+    }));
   };
 
   const handleDuplicate = (e: React.MouseEvent) => {

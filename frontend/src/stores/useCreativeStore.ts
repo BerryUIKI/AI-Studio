@@ -1,3 +1,4 @@
+import { mediaCardFields } from '../utils/media';
 import { create } from 'zustand';
 import { CreativeActionRequest, CreativeActionResult, ImageCardData } from '../types/creative';
 import { useCanvasStore } from './useCanvasStore';
@@ -265,6 +266,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       });
 
       const updatedCardData: ImageCardData = {
+        ...mediaCardFields(result),
         assetId: result.asset_id,
         imageUrl: result.image_url || result.video_url || '',
         videoUrl: result.video_url,
@@ -381,6 +383,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
 
       const cardId = `image_upload_${Date.now()}`;
       const cardData: ImageCardData = {
+        ...mediaCardFields(asset),
         assetId: asset.id,
         imageUrl: `/api/v1/assets/${asset.id}/content`,
         width: resolvedWidth || 512,
