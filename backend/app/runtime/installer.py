@@ -16,10 +16,12 @@ import sys
 import venv
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.core.task_registry import task_registry
 from app.runtime.supervisor import get_default_engine_dir
+from app.storage.db import get_default_data_dir
+from app.storage.config_files import write_json_atomic
 from app.schemas.engine import (
     EngineInstallManifest,
     EngineType,
@@ -187,6 +189,7 @@ class IsolatedEngineInstaller:
         self,
         engine_type: EngineType,
         on_progress: Optional[Callable[[EngineInstallManifest], None]] = None,
+        mirror_preset: Optional[str] = None,
     ) -> EngineInstallManifest:
         """
         Run complete isolated installation:
@@ -209,7 +212,12 @@ class IsolatedEngineInstaller:
         async with install_lock:
             self._active_installs.add(engine_key)
             try:
+                repo_url = mirror_manager.transform_git_url(
+                    COMFYUI_GIT_REPO if engine_type == EngineType.COMFYUI else WEBUI_GIT_REPO, mirror_preset)
+                pip_index = mirror_manager.get_pip_index_url(mirror_preset)
                 manifest = self.read_manifest(engine_type)
+                manifest.source_url = repo_url
+                manifest.pip_index_url = pip_index
                 now_str = datetime.now(timezone.utc).isoformat()
                 manifest.created_at = now_str
                 manifest.phase = InstallPhase.CHECKING
@@ -241,7 +249,6 @@ class IsolatedEngineInstaller:
                 if on_progress:
                     on_progress(manifest)
 
-                repo_url = COMFYUI_GIT_REPO if engine_type == EngineType.COMFYUI else WEBUI_GIT_REPO
                 entrypoints = self._get_expected_entrypoints(engine_type, engine_target)
 
                 # If destination directory exists but has no valid entrypoint or git repo, clean it up before cloning
@@ -287,6 +294,7 @@ class IsolatedEngineInstaller:
 
                 # Strict: execute ONLY pip inside runtime_target!
                 install_cmd = [str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file)]
+                install_cmd.extend(["--index-url", pip_index])
                 proc = await asyncio.create_subprocess_exec(
                     *install_cmd,
                     cwd=str(engine_target),
@@ -358,6 +366,8 @@ class IsolatedEngineInstaller:
         """
         engine_key = engine_type.value
         update_lock = task_registry.get_update_lock(engine_key)
+        git_mirror_args = mirror_manager.git_override_args()
+        pip_index_args = ["--index-url", mirror_manager.get_pip_index_url()]
 
         # Acquire exclusive update lease for this engine
         if update_lock.locked():
@@ -435,7 +445,7 @@ class IsolatedEngineInstaller:
 
                 # Step 2: Fetch and pull latest updates
                 pull_proc = await asyncio.create_subprocess_exec(
-                    git_exe, "pull", "--ff-only",
+                    git_exe, *git_mirror_args, "pull", "--ff-only",
                     cwd=str(engine_target),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -458,7 +468,7 @@ class IsolatedEngineInstaller:
                 # Step 3: Update dependencies in isolated venv
                 if req_file.is_file() and pip_bin.is_file():
                     pip_proc = await asyncio.create_subprocess_exec(
-                        str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file),
+                        str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file), *pip_index_args,
                         cwd=str(engine_target),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE,
@@ -491,7 +501,7 @@ class IsolatedEngineInstaller:
                             if req_file.is_file() and pip_bin.is_file():
                                 try:
                                     rb_pip = await asyncio.create_subprocess_exec(
-                                        str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file),
+                                        str(pip_bin), "install", "--no-warn-script-location", "-r", str(req_file), *pip_index_args,
                                         cwd=str(engine_target),
                                         stdout=asyncio.subprocess.PIPE,
                                         stderr=asyncio.subprocess.PIPE,
@@ -513,7 +523,8 @@ class IsolatedEngineInstaller:
 class MirrorManager:
     """Manages active network mirror presets for high-speed download in China Mainland or restricted networks."""
 
-    def __init__(self) -> None:
+    def __init__(self, config_file: Optional[Path] = None) -> None:
+        self.config_file = config_file or get_default_data_dir() / "mirror_config.json"
         self.active_preset: str = "direct"
         self.custom_git_mirror: Optional[str] = None
         self.custom_pypi_mirror: Optional[str] = None
@@ -543,6 +554,18 @@ class MirrorManager:
             },
         ]
 
+        if self.config_file.is_file():
+            try:
+                config = json.loads(self.config_file.read_text(encoding="utf-8"))
+                if not isinstance(config, dict):
+                    raise ValueError("Mirror configuration must be an object")
+                preset = config.get("active_preset", "direct")
+                self.active_preset = preset if preset in {"direct", "china_mainland", "custom"} else "direct"
+                for field in ("custom_git_mirror", "custom_pypi_mirror", "custom_hf_mirror"):
+                    setattr(self, field, config.get(field))
+            except (OSError, ValueError, TypeError) as error:
+                logger.warning("Could not restore mirror configuration: %s", error)
+
     def get_config(self) -> Dict[str, Any]:
         return {
             "active_preset": self.active_preset,
@@ -559,6 +582,8 @@ class MirrorManager:
         custom_pypi_mirror: Optional[str] = None,
         custom_hf_mirror: Optional[str] = None,
     ) -> Dict[str, Any]:
+        if active_preset not in {"direct", "china_mainland", "custom"}:
+            raise ValueError("Unknown mirror preset")
         self.active_preset = active_preset
         if custom_git_mirror is not None:
             self.custom_git_mirror = custom_git_mirror
@@ -566,22 +591,36 @@ class MirrorManager:
             self.custom_pypi_mirror = custom_pypi_mirror
         if custom_hf_mirror is not None:
             self.custom_hf_mirror = custom_hf_mirror
+        write_json_atomic(self.config_file, {key: value for key, value in self.get_config().items() if key != "presets"})
         return self.get_config()
 
-    def transform_git_url(self, repo_url: str) -> str:
-        if self.active_preset == "china_mainland":
+    def transform_git_url(self, repo_url: str, preset: Optional[str] = None) -> str:
+        active = preset or self.active_preset
+        if active == "china_mainland":
             return f"https://mirror.ghproxy.com/{repo_url}"
-        if self.active_preset == "custom" and self.custom_git_mirror:
+        if active == "custom" and self.custom_git_mirror:
             prefix = self.custom_git_mirror.rstrip("/")
             return f"{prefix}/{repo_url}"
         return repo_url
 
-    def get_pip_index_url(self) -> Optional[str]:
-        if self.active_preset == "china_mainland":
+    def git_override_args(self) -> List[str]:
+        target = self.transform_git_url("https://github.com/")
+        return ["-c", f"url.{target}.insteadOf=https://github.com/"] if target != "https://github.com/" else []
+
+    def get_pip_index_url(self, preset: Optional[str] = None) -> str:
+        active = preset or self.active_preset
+        if active == "china_mainland":
             return "https://pypi.tuna.tsinghua.edu.cn/simple"
-        if self.active_preset == "custom" and self.custom_pypi_mirror:
+        if active == "custom" and self.custom_pypi_mirror:
             return self.custom_pypi_mirror
-        return None
+        return "https://pypi.org/simple"
+
+    def transform_model_url(self, url: str, preset: Optional[str] = None) -> str:
+        active = preset or self.active_preset
+        endpoint = "https://hf-mirror.com" if active == "china_mainland" else self.custom_hf_mirror if active == "custom" else None
+        if endpoint and url.startswith("https://huggingface.co/"):
+            return endpoint.rstrip("/") + url[len("https://huggingface.co"):]
+        return url
 
 
 installer = IsolatedEngineInstaller()

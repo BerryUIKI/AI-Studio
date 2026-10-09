@@ -1,6 +1,7 @@
 """FastAPI application entrypoint for Berry AI Studio."""
 
 import asyncio
+import hashlib
 from contextlib import asynccontextmanager
 import json
 import logging
@@ -75,6 +76,7 @@ from app.schemas.engine import (
     EngineConnection,
     EngineConnectRequest,
     EngineInstallManifest,
+    EngineInstallRequest,
     EngineOwnership,
     EngineType,
     EngineUpdateManifest,
@@ -481,10 +483,10 @@ async def get_engine_manifest(engine_type: EngineType) -> EngineInstallManifest:
 
 
 @app.post("/api/v1/runtime/{engine_type}/install", response_model=EngineInstallManifest)
-async def trigger_engine_install(engine_type: EngineType) -> EngineInstallManifest:
+async def trigger_engine_install(engine_type: EngineType, request: Optional[EngineInstallRequest] = None) -> EngineInstallManifest:
     """Start or check isolated installation of an engine without host pollution."""
     # Spawn in background task to avoid blocking HTTP call
-    asyncio.create_task(installer.install_engine(engine_type))
+    asyncio.create_task(installer.install_engine(engine_type, mirror_preset=request.mirror_preset if request else None))
     return installer.read_manifest(engine_type)
 
 
@@ -704,7 +706,7 @@ async def get_installer_mirrors() -> MirrorConfigResponse:
 @app.put("/api/v1/installer/mirrors", response_model=MirrorConfigResponse)
 async def update_installer_mirrors(request: UpdateMirrorConfigRequest) -> MirrorConfigResponse:
     """Update active mirror preset or custom mirror URLs."""
-    cfg = mirror_manager.update_config(
+    cfg = await asyncio.to_thread(mirror_manager.update_config,
         active_preset=request.active_preset,
         custom_git_mirror=request.custom_git_mirror,
         custom_pypi_mirror=request.custom_pypi_mirror,
@@ -753,7 +755,7 @@ async def trigger_model_scan() -> List[ModelRecord]:
 @app.get("/api/v1/models/roots", response_model=List[ModelRoot])
 async def list_model_roots() -> List[ModelRoot]:
     """List all configured model root directories."""
-    return model_store.list_roots()
+    return await asyncio.to_thread(model_store.list_roots)
 
 
 class AddModelRootRequest(BaseModel):
@@ -765,8 +767,9 @@ class AddModelRootRequest(BaseModel):
 @app.post("/api/v1/models/roots", response_model=ModelRoot)
 async def add_model_root(req: AddModelRootRequest) -> ModelRoot:
     """Register a new user-specified directory for model discovery."""
-    root_id = f"root_{abs(hash(req.path)) % 10000}"
-    return model_store.add_root(root_id, req.path, req.label, req.engine_type)
+    normalized_path = os.path.normcase(str(Path(req.path).resolve()))
+    root_id = f"root_{hashlib.sha256(normalized_path.encode()).hexdigest()[:16]}"
+    return await asyncio.to_thread(model_store.add_root, root_id, req.path, req.label, req.engine_type)
 
 
 @app.post("/api/v1/models/rescan", response_model=List[ModelRecord])
@@ -778,7 +781,7 @@ async def trigger_model_rescan() -> List[ModelRecord]:
 @app.delete("/api/v1/models/roots/{root_id}")
 async def remove_model_root(root_id: str) -> dict[str, Any]:
     """Remove a configured model root directory without deleting files (L10)."""
-    removed = model_store.remove_root(root_id)
+    removed = await asyncio.to_thread(model_store.remove_root, root_id)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Model root '{root_id}' not found")
     return {"status": "removed", "root_id": root_id}

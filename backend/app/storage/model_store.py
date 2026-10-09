@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from app.runtime.supervisor import get_default_engine_dir
+from app.storage.config_files import write_json_atomic
 from app.schemas.model import (
     ModelArchitecture,
     ModelCategory,
@@ -136,6 +137,22 @@ class ModelStore:
         self.roots: Dict[str, ModelRoot] = {}
         self._cached_records: Dict[str, Tuple[float, int, ModelRecord]] = {}  # path -> (mtime, size, record)
         self._init_default_roots()
+        self.config_file = self.engine_dir / "model_roots.json"
+        if self.config_file.is_file():
+            try:
+                items = json.loads(self.config_file.read_text(encoding="utf-8"))
+                if not isinstance(items, list):
+                    raise ValueError("Model roots must be a list")
+                restored = [ModelRoot.model_validate(item) for item in items]
+                self.roots = {}
+                for root in restored:
+                    root.exists = Path(root.path).is_dir()
+                    self.roots[root.id] = root
+            except (OSError, ValueError, TypeError) as error:
+                logger.warning("Could not restore model roots: %s", error)
+
+    def _save_roots(self) -> None:
+        write_json_atomic(self.config_file, [root.model_dump() for root in self.roots.values()])
 
     def _init_default_roots(self) -> None:
         """Register default model directories for ComfyUI and WebUI."""
@@ -160,6 +177,8 @@ class ModelStore:
             exists=p.is_dir(),
         )
         self.roots[root_id] = root
+        if hasattr(self, "config_file"):
+            self._save_roots()
         return root
 
     def list_roots(self) -> List[ModelRoot]:
@@ -266,6 +285,7 @@ class ModelStore:
         """Remove a registered model scan root without deleting files (L10)."""
         if root_id in self.roots:
             del self.roots[root_id]
+            self._save_roots()
             return True
         return False
 

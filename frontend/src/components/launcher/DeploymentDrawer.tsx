@@ -5,12 +5,14 @@ import { useEngineStore } from '../../stores/useEngineStore';
 interface DeploymentDrawerProps {
   isOpen: boolean;
   engineType: 'comfyui' | 'webui';
+  mirrorPreset?: string;
   onClose: () => void;
 }
 
 export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
   isOpen,
   engineType,
+  mirrorPreset,
   onClose,
 }) => {
   const [phase, setPhase] = useState<string>('checking');
@@ -33,7 +35,11 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
     setError(null);
 
     // Trigger installation
-    fetch(`/api/v1/runtime/${engineType}/install`, { method: 'POST' }).catch(() => {});
+    fetch(`/api/v1/runtime/${engineType}/install`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: mirrorPreset ? JSON.stringify({ mirror_preset: mirrorPreset }) : undefined,
+    }).then((response) => { if (!response.ok) throw new Error(`Installation request failed (${response.status})`); })
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not start installation'));
 
     // Poll installation manifest
     const pollInterval = setInterval(async () => {
@@ -85,7 +91,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
     }, 1500);
 
     return () => clearInterval(pollInterval);
-  }, [isOpen, engineType, fetchInstances]);
+  }, [isOpen, engineType, mirrorPreset, fetchInstances]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });

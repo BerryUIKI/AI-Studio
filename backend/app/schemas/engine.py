@@ -1,7 +1,7 @@
 """Engine connection and installation manifest schemas."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +36,8 @@ class InstallPhase(str, Enum):
 
 
 class EngineInstallManifest(BaseModel):
+    source_url: Optional[str] = None
+    pip_index_url: Optional[str] = None
     engine_type: EngineType
     phase: InstallPhase = InstallPhase.IDLE
     version: Optional[str] = None
@@ -205,10 +207,14 @@ class MirrorConfigResponse(BaseModel):
 
 
 class UpdateMirrorConfigRequest(BaseModel):
-    active_preset: str
+    active_preset: Literal["direct", "china_mainland", "custom"]
     custom_git_mirror: Optional[str] = None
     custom_pypi_mirror: Optional[str] = None
     custom_hf_mirror: Optional[str] = None
+
+
+class EngineInstallRequest(BaseModel):
+    mirror_preset: Optional[Literal["direct", "china_mainland", "custom"]] = None
 
 
 class EngineLogResponse(BaseModel):
