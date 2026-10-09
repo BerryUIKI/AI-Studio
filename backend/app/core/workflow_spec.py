@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.cache import cache_store, compute_semantic_node_hash
 from app.core.content_identity import hash_file, port_content_identity
+from app.core.workers import run_blocking
 from app.core.execution_contract import validate_output_contract
 from app.nodes.registry import registry
 from app.schemas.workflow import WorkflowGraph, WorkflowNodeInstance
@@ -25,11 +26,11 @@ class ResolvedWorkflowNode:
 
 
 async def local_model_identity(name: str) -> str:
-    records = await asyncio.to_thread(model_store.list_models)
+    records = await model_store.scan_all_roots_async()
     matches = [record for record in records if Path(record.file_path).name == name or record.file_path == name]
     if len(matches) != 1:
         return f"unverified:{name}"
-    return await asyncio.to_thread(hash_file, Path(matches[0].file_path))
+    return await run_blocking(hash_file, Path(matches[0].file_path))
 
 
 async def resolve_workflow_node(node: WorkflowNodeInstance, graph: WorkflowGraph,

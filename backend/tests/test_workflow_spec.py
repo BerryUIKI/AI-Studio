@@ -64,7 +64,7 @@ async def test_model_replacement_changes_identity_with_same_filename_and_size(tm
     model = tmp_path / "model.safetensors"
     model.write_bytes(b"first model")
     graph = WorkflowGraph(nodes=[{"id": "local", "type": "image.comfy.txt2img", "params": {"checkpoint": model.name}}])
-    with patch("app.core.workflow_spec.model_store.list_models", return_value=[SimpleNamespace(file_path=str(model))]), patch(
+    with patch("app.core.workflow_spec.model_store.scan_all_roots_async", new_callable=AsyncMock, return_value=[SimpleNamespace(file_path=str(model))]), patch(
         "app.core.workflow_spec.cache_store.get_async", new=AsyncMock(return_value=None)
     ):
         first = await resolve_workflow_node(graph.nodes[0], graph, {}, NODE_RUNNERS["image.comfy.txt2img"])
