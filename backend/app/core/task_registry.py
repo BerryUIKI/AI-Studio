@@ -30,13 +30,14 @@ class TaskLifecycleRegistry:
         task_type: str,
         cancel_event: Optional[asyncio.Event] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        status: str = "running",
     ) -> asyncio.Event:
         """Register a task with its cancellation event and optional metadata."""
         event = cancel_event or asyncio.Event()
         self._tasks[task_id] = {
             "id": task_id,
             "type": task_type,
-            "status": "running",
+            "status": status,
             "metadata": metadata or {},
         }
         self._cancellations[task_id] = event
@@ -57,7 +58,7 @@ class TaskLifecycleRegistry:
         if event:
             event.set()
             if task_id in self._tasks:
-                self._tasks[task_id]["status"] = "cancelling"
+                self._tasks[task_id]["status"] = "cancel-requested"
             return True
         return False
 
@@ -73,8 +74,7 @@ class TaskLifecycleRegistry:
         """List summary of all active tasks."""
         res = []
         for tid, t in self._tasks.items():
-            entry = {"id": tid, "type": t["type"], "status": t["status"]}
-            entry.update(t.get("metadata", {}))
+            entry = {**t.get("metadata", {}), "id": tid, "type": t["type"], "status": t["status"]}
             res.append(entry)
         return res
 

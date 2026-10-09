@@ -79,6 +79,18 @@ class TaskStore:
             outputs=json.loads(row["outputs_json"] or "{}"), error=row["error_msg"], metadata=json.loads(row["metadata_json"] or "{}"),
         ) for row in rows]
 
+    async def get_task(self, task_id: str) -> TaskRecord | None:
+        conn = await self.manager.get_connection()
+        async with conn.execute("SELECT tasks.*, runs.project_id FROM tasks JOIN runs ON tasks.run_id = runs.id WHERE tasks.id = ?", (task_id,)) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        return TaskRecord(
+            **{key: row[key] for key in ("id", "run_id", "node_id", "node_type", "status", "created_at", "finished_at", "project_id")},
+            params=json.loads(row["params_json"] or "{}"), inputs=json.loads(row["inputs_json"] or "{}"),
+            outputs=json.loads(row["outputs_json"] or "{}"), error=row["error_msg"], metadata=json.loads(row["metadata_json"] or "{}"),
+        )
+
     async def reconcile_interrupted(self) -> int:
         """Never automatically resubmit uncertain remote work at duplicate cost."""
         conn = await self.manager.get_connection()

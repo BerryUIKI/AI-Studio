@@ -330,42 +330,20 @@ class CreativeRunner:
         """Cancel an active creative task and signal cancellation to engines (Issue #127)."""
         cancel_event = self.active_cancellations.get(task_id)
         task_info = self.active_tasks.get(task_id, {})
-        connection_id = task_info.get("connection_id")
 
         if cancel_event:
             cancel_event.set()
 
-        interrupted = False
-        disclaimer = None
-
-        # Resolve connection for cancellation
-        if connection_id:
-            try:
-                connection = engine_manager.get_engine(connection_id)
-                if connection:
-                    # Create client for the specific connection
-                    if connection.engine_type == EngineType.COMFYUI:
-                        client = self._create_client(connection)
-                        interrupted = await client.interrupt()
-                    elif connection.engine_type == EngineType.WEBUI:
-                        runner = self._create_client(connection)
-                        interrupted = await runner.interrupt()
-            except Exception as e:
-                logger.warning(f"Failed to interrupt task {task_id} on connection {connection_id}: {e}")
-
         # Cloud task cancellation disclaimer
         engine_id = task_info.get("engine", "")
         is_cloud = "cloud" in engine_id or engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai")
-        if is_cloud:
-            disclaimer = (
-                "Cloud cancellation requested locally. Note: external cloud providers "
-                "may continue asynchronous inference or incur compute charges."
-            )
+        disclaimer = ("External cloud providers may continue work and incur charges; remote cancellation is not confirmed."
+                      if is_cloud else "This engine has no task-scoped active abort; awaiting the actual outcome to avoid interrupting other jobs.")
 
         return {
             "task_id": task_id,
-            "status": "cancelled",
-            "engine_interrupted": interrupted,
+            "status": "cancel-requested",
+            "engine_interrupted": False,
             "disclaimer": disclaimer,
         }
 
@@ -405,7 +383,7 @@ class CreativeRunner:
 
     async def _execute(self, req: CreativeActionRequest, task_id: str, persisted: TaskRecord) -> CreativeActionResult:
         start_time = time.monotonic()
-        cancel_event = asyncio.Event()
+        cancel_event = task_registry.get_cancel_event(task_id) or asyncio.Event()
         is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
 
         source_dependent_actions = (
@@ -598,13 +576,8 @@ class CreativeRunner:
                     out_h = rec_h
 
             if cancel_event.is_set():
-                return CreativeActionResult(
-                    success=False,
-                    task_id=task_id,
-                    error_message="Task cancelled by user.",
-                    width=req.width,
-                    height=req.height,
-                )
+                persisted.metadata["cancel_requested"] = True
+                persisted.metadata["cancellation_outcome"] = "Execution completed before cancellation could be confirmed."
 
             elapsed_ms = round((time.monotonic() - start_time) * 1000, 2)
 

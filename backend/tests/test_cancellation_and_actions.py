@@ -18,6 +18,7 @@ from app.runners.creative_runner import creative_runner
 from app.schemas.creative import CreativeActionRequest, CreativeActionType
 from app.runners.comfy_runner import comfy_client
 from app.runners.webui_runner import WebUIRunner
+from app.core.task_registry import task_registry
 
 
 @pytest.fixture
@@ -42,6 +43,8 @@ def test_list_active_tasks_and_cancel_endpoints(client, mock_engine_manager):
     }
     task_cancel_evt = asyncio.Event()
     creative_runner.active_cancellations[task_id] = task_cancel_evt
+    task_registry.register_task(run_id, "workflow_graph", cancel_evt)
+    task_registry.register_task(task_id, "creative_action", task_cancel_evt)
 
     try:
         # 1. Query active tasks
@@ -58,20 +61,23 @@ def test_list_active_tasks_and_cancel_endpoints(client, mock_engine_manager):
         assert resp_cancel_wf.status_code == 200
         assert cancel_evt.is_set()
 
-        # 3. Cancel creative action (ComfyUI interrupt)
+        # 3. Cancellation cannot interrupt another owner's active engine job.
         with patch("app.runners.creative_runner.ComfyUIClient") as MockClient:
             mock_comfy = MockClient.return_value
             mock_comfy.interrupt = AsyncMock(return_value=True)
             resp_cancel_cr = client.post(f"/api/v1/tasks/{task_id}/cancel")
             assert resp_cancel_cr.status_code == 200
             assert task_cancel_evt.is_set()
-            assert resp_cancel_cr.json()["engine_interrupted"] is True
-            mock_comfy.interrupt.assert_awaited_once()
+            assert resp_cancel_cr.json()["status"] == "cancel-requested"
+            assert resp_cancel_cr.json()["engine_interrupted"] is False
+            mock_comfy.interrupt.assert_not_awaited()
 
     finally:
         active_cancellations.pop(run_id, None)
         creative_runner.active_tasks.pop(task_id, None)
         creative_runner.active_cancellations.pop(task_id, None)
+        task_registry.unregister_task(run_id)
+        task_registry.unregister_task(task_id)
 
 
 def test_cloud_cancellation_discloses_remote_limitation(client):
@@ -85,15 +91,18 @@ def test_cloud_cancellation_discloses_remote_limitation(client):
     cancel_evt = asyncio.Event()
     creative_runner.active_cancellations[task_id] = cancel_evt
 
+    task_registry.register_task(task_id, "creative_action", cancel_evt)
+
     try:
         resp = client.post(f"/api/v1/tasks/{task_id}/cancel")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "cancelled"
+        assert data["status"] == "cancel-requested"
         assert cancel_evt.is_set()
         assert data["disclaimer"] is not None
         assert "cloud providers may continue" in data["disclaimer"].lower()
     finally:
+        task_registry.unregister_task(task_id)
         creative_runner.active_tasks.pop(task_id, None)
         creative_runner.active_cancellations.pop(task_id, None)
 
@@ -108,6 +117,7 @@ def test_manager_shutdown_guards_creative_tasks(client):
     }
     cancel_evt = asyncio.Event()
     creative_runner.active_cancellations[task_id] = cancel_evt
+    task_registry.register_task(task_id, "creative_action", cancel_evt)
 
     try:
         # Non-forced shutdown should fail with 409
@@ -124,6 +134,7 @@ def test_manager_shutdown_guards_creative_tasks(client):
             assert resp_force.json()["active_tasks_cancelled"] >= 1
             assert cancel_evt.is_set()
     finally:
+        task_registry.unregister_task(task_id)
         creative_runner.active_tasks.pop(task_id, None)
         creative_runner.active_cancellations.pop(task_id, None)
 
