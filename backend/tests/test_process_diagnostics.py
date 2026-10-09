@@ -53,3 +53,14 @@ def test_engine_catalog_returns_actual_logs_or_empty(tmp_path: Path) -> None:
     assert manager.get_logs("external-missing") == []
     with patch("app.runtime.engine_manager.comfy_supervisor.get_recent_logs", return_value=["ERROR: fixture failure"]):
         assert manager.get_logs("managed_comfyui") == ["ERROR: fixture failure"]
+
+
+def test_capture_file_failure_does_not_leave_process_pipe_undrained(tmp_path: Path) -> None:
+    logs = ProcessDiagnostics(tmp_path / "engine.log")
+    process = subprocess.Popen([sys.executable, "-c", "print('x'*100000)"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0)
+    with patch("app.runtime.process_diagnostics.RotatingFileHandler", side_effect=OSError("fixture disk failure")):
+        logs.attach(process)
+    assert process.wait(timeout=5) == 0
+    logs.reader.join(timeout=5)
+    assert "fixture disk failure" in logs.recent()[0]

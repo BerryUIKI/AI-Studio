@@ -29,14 +29,20 @@ class ProcessDiagnostics:
         self.path = path
         self.max_bytes = max_bytes
         self.reader: threading.Thread | None = None
+        self.error: str | None = None
 
     def attach(self, process: subprocess.Popen[bytes]) -> None:
         stream = process.stdout
         if not isinstance(stream, io.IOBase):
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        handler = RotatingFileHandler(self.path, maxBytes=self.max_bytes, backupCount=2, encoding="utf-8")
-        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler = None
+        self.error = None
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            handler = RotatingFileHandler(self.path, maxBytes=self.max_bytes, backupCount=2, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(message)s"))
+        except OSError as error:
+            self.error = redact_log(f"Engine output could not be retained: {error}")
 
         def consume() -> None:
             try:
@@ -45,18 +51,22 @@ class ProcessDiagnostics:
                     if not data:
                         break
                     line = redact_log(data.decode("utf-8", errors="replace").rstrip())
-                    handler.handle(logging.LogRecord("engine", logging.INFO, "", 0, line, (), None))
+                    if handler is not None:
+                        handler.handle(logging.LogRecord("engine", logging.INFO, "", 0, line, (), None))
             finally:
                 stream.close()
-                handler.close()
+                if handler is not None:
+                    handler.close()
 
         self.reader = threading.Thread(target=consume, name="engine-diagnostics", daemon=True)
         self.reader.start()
 
     def recent(self, lines: int = 100) -> list[str]:
         lines = min(max(lines, 0), 1000)
-        if not lines or not self.path.is_file():
+        if not lines:
             return []
+        if not self.path.is_file():
+            return [self.error] if self.error else []
         try:
             with self.path.open("rb") as source:
                 source.seek(0, 2)
@@ -65,6 +75,7 @@ class ProcessDiagnostics:
                 if offset:
                     source.readline(4096)
                 text = source.read(self.max_bytes).decode("utf-8", errors="replace")
-            return [redact_log(line) for line in text.splitlines()[-lines:]]
+            result = [redact_log(line) for line in text.splitlines()[-lines:]]
+            return (result + [self.error])[-lines:] if self.error else result
         except OSError:
             return []
