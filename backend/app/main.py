@@ -39,6 +39,7 @@ from app.schemas.workflow_analysis import (
 )
 from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
+from app.runtime.open_directory import open_directory
 from app.core.workflow_runs import WorkflowEventSink, workflow_runs
 from app.core.execution_contract import ExecutionContractError, validate_execution_contract, validate_output_contract
 from app.core.workflow_spec import resolve_workflow_node
@@ -657,6 +658,18 @@ async def get_engine_config(instance_id: str) -> EngineConfig:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/v1/engines/{instance_id}/open-directory")
+async def open_engine_directory(instance_id: str) -> dict[str, str]:
+    try:
+        directory = await run_blocking(engine_manager.get_install_directory, instance_id)
+        await run_blocking(open_directory, directory)
+    except (KeyError, FileNotFoundError) as error:
+        raise HTTPException(status_code=404, detail=str(error))
+    except Exception as error:
+        raise HTTPException(status_code=500, detail=f"Could not open the installation directory: {error}")
+    return {"status": "opened", "path": str(directory)}
 
 
 @app.post("/api/v1/engines/{instance_id}/config", response_model=EngineConfigResponse)
