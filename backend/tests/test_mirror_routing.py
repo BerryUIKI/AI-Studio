@@ -1,6 +1,7 @@
 """Capture effective install/download sources without installing engines or packages."""
 
 from pathlib import Path
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -8,7 +9,7 @@ import pytest
 
 from app.runtime.installer import COMFYUI_GIT_REPO, IsolatedEngineInstaller, MirrorManager
 from app.runtime.model_downloader import ModelDownloader
-from app.schemas.engine import EngineType
+from app.schemas.engine import EngineInstallManifest, EngineInstallRequest, EngineType
 from app.storage.hub_catalog import HubCatalog
 
 
@@ -69,3 +70,16 @@ def test_model_download_restores_global_setting_and_honors_explicit_override(tmp
     assert mirrors.git_override_args() == []
     mirrors.update_config("custom", custom_git_mirror="https://git.test")
     assert mirrors.git_override_args() == ["-c", "url.https://git.test/https://github.com/.insteadOf=https://github.com/"]
+
+
+@pytest.mark.asyncio
+async def test_install_endpoint_passes_selected_preset_to_background_job(tmp_path: Path) -> None:
+    from app.main import trigger_engine_install
+    manifest = EngineInstallManifest(engine_type="comfyui", engine_dir=str(tmp_path / "engine"),
+                                     runtime_dir=str(tmp_path / "runtime"))
+    with patch("app.main.installer.install_engine", new=AsyncMock(return_value=manifest)) as install, patch(
+        "app.main.installer.read_manifest", return_value=manifest
+    ):
+        await trigger_engine_install(EngineType.COMFYUI, EngineInstallRequest(mirror_preset="china_mainland"))
+        await asyncio.sleep(0)
+        install.assert_awaited_once_with(EngineType.COMFYUI, mirror_preset="china_mainland")

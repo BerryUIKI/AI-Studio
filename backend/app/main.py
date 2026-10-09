@@ -2,7 +2,6 @@
 
 import asyncio
 import hashlib
-from app.schemas.engine import EngineInstallRequest
 from contextlib import asynccontextmanager
 import json
 import logging
@@ -77,6 +76,7 @@ from app.schemas.engine import (
     EngineConnection,
     EngineConnectRequest,
     EngineInstallManifest,
+    EngineInstallRequest,
     EngineOwnership,
     EngineType,
     EngineUpdateManifest,
