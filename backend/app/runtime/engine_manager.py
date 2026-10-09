@@ -7,6 +7,7 @@ ownership: never attempts to kill external processes or mutate user installation
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -26,6 +27,7 @@ from app.schemas.engine import (
     EngineType,
 )
 from app.storage.db import get_default_data_dir
+from app.storage.config_files import write_json_atomic
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +58,7 @@ class EngineManager:
     def _save_configs(self) -> None:
         """Persist engine configurations to disk."""
         try:
-            self.config_file.parent.mkdir(parents=True, exist_ok=True)
-            self.config_file.write_text(json.dumps(self._configs, indent=2), encoding="utf-8")
+            write_json_atomic(self.config_file, self._configs)
         except Exception as e:
             logger.error(f"Failed to save engine configs to {self.config_file}: {e}")
             raise
@@ -93,6 +94,17 @@ class EngineManager:
                 webui_supervisor.extra_args = [str(a) for a in extra_args]
 
         # Restore any persisted external engines
+        saved_connections = self._configs.get("_external_connections", [])
+        for item in saved_connections if isinstance(saved_connections, list) else []:
+            try:
+                connection = EngineConnection.model_validate(item)
+                connection.ownership = EngineOwnership.EXTERNAL
+                connection.status = EngineStatus.OFFLINE
+                connection.last_heartbeat = None
+                if connection.id not in self._connections:
+                    self._connections[connection.id] = connection
+            except (ValueError, TypeError) as error:
+                logger.warning("Could not restore external connection: %s", error)
         ext_list = self._configs.get("_external_engines", [])
         if isinstance(ext_list, list):
             for ext in ext_list:
@@ -339,6 +351,7 @@ class EngineManager:
                     if e.get("id") == norm_id:
                         e["port"] = port
                         e["extra_args"] = args_list
+        self._persist_external_connections()
         self._save_configs()
 
         return EngineConfig(instance_id=norm_id, port=port, extra_args=args_list), requires_restart
@@ -351,7 +364,10 @@ class EngineManager:
         Zero process ownership: does not touch process or write PID.
         """
         endpoint = endpoint_url.rstrip("/")
-        engine_id = f"external_{engine_type.value}_{abs(hash(endpoint)) % 10000}"
+        existing = next((connection for connection in self._connections.values()
+                         if connection.ownership == EngineOwnership.EXTERNAL and connection.endpoint_url == endpoint
+                         and connection.engine_type == engine_type), None)
+        engine_id = existing.id if existing else f"external_{engine_type.value}_{hashlib.sha256(endpoint.encode()).hexdigest()[:16]}"
         display_name = name or f"External {engine_type.value.capitalize()} ({endpoint})"
 
         connection = EngineConnection(
@@ -368,7 +384,13 @@ class EngineManager:
         # Validate external engine health immediately
         connection = await self.test_engine_connection(connection)
         self._connections[engine_id] = connection
+        self._persist_external_connections()
+        await asyncio.to_thread(self._save_configs)
         return connection
+
+    def _persist_external_connections(self) -> None:
+        self._configs["_external_connections"] = [connection.model_dump(mode="json")
+            for connection in self._connections.values() if connection.ownership == EngineOwnership.EXTERNAL]
 
     async def test_engine_connection(self, connection: EngineConnection) -> EngineConnection:
         """Probe engine endpoint and update status and capabilities."""
@@ -674,18 +696,21 @@ class EngineManager:
             "extra_args": list(extra_args) if extra_args else [],
         })
         self._configs["_external_engines"] = ext_engines
+        self._persist_external_connections()
         self._save_configs()
         return conn
 
     def unbind_external_engine(self, instance_id: str) -> bool:
         """Unbind external engine connection without deleting any files from disk."""
-        if instance_id in self._connections:
+        connection = self._connections.get(instance_id)
+        if connection and connection.ownership == EngineOwnership.EXTERNAL:
             del self._connections[instance_id]
             if instance_id in self._configs:
                 del self._configs[instance_id]
             ext_engines = self._configs.get("_external_engines", [])
             if isinstance(ext_engines, list):
                 self._configs["_external_engines"] = [e for e in ext_engines if e.get("id") != instance_id]
+            self._persist_external_connections()
             self._save_configs()
             return True
         return False

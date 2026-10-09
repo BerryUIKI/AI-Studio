@@ -20,6 +20,8 @@ from typing import Any, Callable, Dict, Optional
 
 from app.core.task_registry import task_registry
 from app.runtime.supervisor import get_default_engine_dir
+from app.storage.db import get_default_data_dir
+from app.storage.config_files import write_json_atomic
 from app.schemas.engine import (
     EngineInstallManifest,
     EngineType,
@@ -513,7 +515,8 @@ class IsolatedEngineInstaller:
 class MirrorManager:
     """Manages active network mirror presets for high-speed download in China Mainland or restricted networks."""
 
-    def __init__(self) -> None:
+    def __init__(self, config_file: Optional[Path] = None) -> None:
+        self.config_file = config_file or get_default_data_dir() / "mirror_config.json"
         self.active_preset: str = "direct"
         self.custom_git_mirror: Optional[str] = None
         self.custom_pypi_mirror: Optional[str] = None
@@ -543,6 +546,18 @@ class MirrorManager:
             },
         ]
 
+        if self.config_file.is_file():
+            try:
+                config = json.loads(self.config_file.read_text(encoding="utf-8"))
+                if not isinstance(config, dict):
+                    raise ValueError("Mirror configuration must be an object")
+                preset = config.get("active_preset", "direct")
+                self.active_preset = preset if preset in {"direct", "china_mainland", "custom"} else "direct"
+                for field in ("custom_git_mirror", "custom_pypi_mirror", "custom_hf_mirror"):
+                    setattr(self, field, config.get(field))
+            except (OSError, ValueError, TypeError) as error:
+                logger.warning("Could not restore mirror configuration: %s", error)
+
     def get_config(self) -> Dict[str, Any]:
         return {
             "active_preset": self.active_preset,
@@ -559,6 +574,8 @@ class MirrorManager:
         custom_pypi_mirror: Optional[str] = None,
         custom_hf_mirror: Optional[str] = None,
     ) -> Dict[str, Any]:
+        if active_preset not in {"direct", "china_mainland", "custom"}:
+            raise ValueError("Unknown mirror preset")
         self.active_preset = active_preset
         if custom_git_mirror is not None:
             self.custom_git_mirror = custom_git_mirror
@@ -566,6 +583,7 @@ class MirrorManager:
             self.custom_pypi_mirror = custom_pypi_mirror
         if custom_hf_mirror is not None:
             self.custom_hf_mirror = custom_hf_mirror
+        write_json_atomic(self.config_file, {key: value for key, value in self.get_config().items() if key != "presets"})
         return self.get_config()
 
     def transform_git_url(self, repo_url: str) -> str:

@@ -1,7 +1,7 @@
 """Engine connection and installation manifest schemas."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -205,7 +205,7 @@ class MirrorConfigResponse(BaseModel):
 
 
 class UpdateMirrorConfigRequest(BaseModel):
-    active_preset: str
+    active_preset: Literal["direct", "china_mainland", "custom"]
     custom_git_mirror: Optional[str] = None
     custom_pypi_mirror: Optional[str] = None
     custom_hf_mirror: Optional[str] = None
