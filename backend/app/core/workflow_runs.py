@@ -28,9 +28,11 @@ class WorkflowEventSink:
         for task in self.tasks.values():
             await self.store.save_task(task)
 
-    async def bind_inputs(self, node_id: str, inputs: dict[str, Any]) -> None:
+    async def bind_inputs(self, node_id: str, inputs: dict[str, Any], params: dict[str, Any] | None = None) -> None:
         task = self.tasks[node_id]
         task.inputs = inputs
+        if params is not None:
+            task.params = params
         execution_task.set((self.store, task))
         await self.store.save_task(task)
 

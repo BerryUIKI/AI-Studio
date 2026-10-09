@@ -149,25 +149,30 @@ class CacheStore:
             rec = await asset_mgr.get_asset(asset_id)
             if not rec:
                 return False
-            path = asset_mgr.get_absolute_path(rec)
-            if not path.is_file():
+            from app.core.content_identity import managed_asset_identity
+            try:
+                await managed_asset_identity(asset_id, asset_mgr)
+            except ValueError:
                 return False
 
         # Check image_url / video_url if pointing to local asset endpoint
-        for url_key in ("image_url", "video_url", "image", "video"):
+        for url_key in ("image_url", "video_url", "image", "video", "audio", "media"):
             url_val = output.get(url_key)
             if url_val and isinstance(url_val, str):
-                if "/api/v1/assets/" in url_val:
+                if url_val.startswith("/api/v1/assets/"):
                     # Extract asset id between /api/v1/assets/ and /content
                     parts = url_val.split("/api/v1/assets/")
                     if len(parts) > 1:
                         target_id = parts[1].split("/")[0]
-                        rec = await asset_mgr.get_asset(target_id)
-                        if not rec:
+                        from app.core.content_identity import managed_asset_identity
+                        try:
+                            await managed_asset_identity(target_id, asset_mgr)
+                        except ValueError:
                             return False
-                        path = asset_mgr.get_absolute_path(rec)
-                        if not path.is_file():
-                            return False
+                elif url_val.startswith(("https://", "http://")):
+                    # Unmanaged output URLs can expire or change. Reuse requires
+                    # a verified local asset, not merely a successful past download.
+                    return False
 
         return True
 

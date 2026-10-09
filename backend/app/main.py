@@ -15,12 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
-from app.core.cache import (
-    cache_store,
-    compute_content_hash,
-    compute_node_hash,
-    compute_semantic_node_hash,
-)
+from app.core.cache import cache_store
 from app.core.dag import CyclicDependencyError, DAGResolver
 from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
@@ -44,7 +39,8 @@ from app.schemas.workflow_analysis import (
 from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
 from app.core.workflow_runs import WorkflowEventSink, workflow_runs
-from app.core.execution_contract import ExecutionContractError, validate_execution_contract
+from app.core.execution_contract import ExecutionContractError, validate_execution_contract, validate_output_contract
+from app.core.workflow_spec import resolve_workflow_node
 from app.core.media_validator import (
     validate_and_inspect_media,
     sanitize_filename,
@@ -1240,38 +1236,31 @@ async def generate_plan(graph: WorkflowGraph, target_node: str | None = None) ->
         raise HTTPException(status_code=404, detail=str(err))
 
     steps: List[PlannedNodeStep] = []
-    node_hashes: dict[str, str] = {}
+    known_outputs: dict[str, dict[str, Any]] = {}
     cached_count = 0
 
     for node in sorted_nodes:
-        # Build deterministic port bindings from upstream edges
-        bindings: List[tuple[str, str, str]] = []
         parents = resolver.get_parent_ids(node.id)
-        parent_hashes = [node_hashes[pid] for pid in parents if pid in node_hashes]
-
-        for edge in graph.edges:
-            if edge.target == node.id and edge.source in node_hashes:
-                # Use source computation hash as upstream content proxy for planning
-                bindings.append((edge.target_handle, node_hashes[edge.source], edge.source_handle))
-
-        # Support both port-aware semantic hash and legacy hash
-        if bindings:
-            h = compute_semantic_node_hash(node.type, node.params, bindings)
-        else:
-            h = compute_node_hash(node.type, node.params, parent_hashes)
-
-        node_hashes[node.id] = h
-        is_cached = cache_store.has(h)
+        try:
+            spec = await resolve_workflow_node(node, graph, known_outputs, NODE_RUNNERS[node.type])
+        except (ValueError, OSError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        is_cached = spec.cached_output is not None
         if is_cached:
             cached_count += 1
+            known_outputs[node.id] = spec.cached_output
+        elif node.type == "input.text":
+            # Pure text inputs are known without invoking an inference runner.
+            known_outputs[node.id] = {"text": spec.params["value"]}
 
         steps.append(
             PlannedNodeStep(
                 node_id=node.id,
                 node_type=node.type,
-                node_hash=h,
+                node_hash=spec.node_hash or "",
                 is_cached=is_cached,
                 dependencies=parents,
+                cache_reason=spec.cache_reason,
             )
         )
 
@@ -1403,28 +1392,14 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
                 )
                 continue
 
-            # Resolve inputs and compute deterministic port bindings
-            inputs: Dict[str, Any] = {}
-            bindings: List[tuple[str, str, str]] = []
-
-            for edge in graph.edges:
-                if edge.target == node.id and edge.source in node_outputs:
-                    source_output = node_outputs[edge.source]
-                    if edge.source_handle in source_output:
-                        val = source_output[edge.source_handle]
-                        inputs[edge.target_handle] = val
-                        bindings.append((edge.target_handle, compute_content_hash(val), edge.source_handle))
-
-            await websocket.bind_inputs(node.id, inputs)
-
-            # Compute port-aware semantic hash
-            if bindings:
-                node_hash = compute_semantic_node_hash(node.type, node.params, bindings)
-            else:
-                node_hash = compute_node_hash(node.type, node.params, [])
-
+            spec = await resolve_workflow_node(node, graph, node_outputs, NODE_RUNNERS[node.type])
+            inputs = spec.inputs
+            await websocket.bind_inputs(node.id, inputs, spec.params)
+            node_hash = spec.node_hash
+            if node_hash is None:
+                raise ValueError(spec.cache_reason)
             # Check cache (memory or SQLite)
-            cached_output = await cache_store.get_async(node_hash)
+            cached_output = spec.cached_output
             if cached_output is not None:
                 await websocket.send_text(NodeStatusEvent(node_id=node.id, status="cached", run_id=run_id).model_dump_json())
                 await websocket.send_text(
@@ -1447,17 +1422,21 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
 
             try:
                 if node.type == "input.text":
-                    async for event in run_input_text_node(node.id, node.params):
+                    async for event in run_input_text_node(node.id, spec.params):
                         if cancel_event.is_set():
                             break
+                        if isinstance(event, NodeOutputEvent):
+                            validate_output_contract(node.type, event.output)
                         event.run_id = run_id
                         await websocket.send_text(event.model_dump_json())
                         if isinstance(event, NodeOutputEvent):
                             output = event.output
                 else:
-                    async for event in runner(node.id, inputs, node.params):
+                    async for event in runner(node.id, inputs, spec.params):
                         if cancel_event.is_set():
                             break
+                        if isinstance(event, NodeOutputEvent):
+                            validate_output_contract(node.type, event.output)
                         event.run_id = run_id
                         await websocket.send_text(event.model_dump_json())
                         if isinstance(event, NodeErrorEvent):
