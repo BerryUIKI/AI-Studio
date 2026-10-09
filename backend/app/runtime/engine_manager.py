@@ -717,15 +717,12 @@ class EngineManager:
 
     def get_logs(self, instance_id: str, lines: int = 100) -> List[str]:
         """Fetch recent diagnostic logs for an engine instance."""
+        instance_id = self._normalize_instance_id(instance_id)
         if instance_id == "comfyui-managed" and hasattr(comfy_supervisor, "get_recent_logs"):
             return comfy_supervisor.get_recent_logs(lines)
         if instance_id == "webui-managed" and hasattr(webui_supervisor, "get_recent_logs"):
             return webui_supervisor.get_recent_logs(lines)
-        return [
-            f"[{instance_id}] Engine initialized.",
-            f"[{instance_id}] Status: ready for generation requests.",
-            f"[{instance_id}] Zero host environment pollution invariant verified.",
-        ]
+        return []
 
 
 # Global engine manager singleton

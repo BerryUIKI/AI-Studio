@@ -3,8 +3,10 @@
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import patch
 
 from app.runtime.process_diagnostics import ProcessDiagnostics, redact_log
+from app.runtime.engine_manager import EngineManager
 
 
 def test_real_stdout_stderr_are_redacted_and_survive_reader_restart(tmp_path: Path) -> None:
@@ -41,3 +43,13 @@ def test_log_rotation_and_reads_are_bounded(tmp_path: Path) -> None:
 def test_missing_logs_do_not_claim_verification(tmp_path: Path) -> None:
     assert ProcessDiagnostics(tmp_path / "absent.log").recent() == []
     assert "fixture-token" not in redact_log('https://fixture.invalid/?token=fixture-token')
+    assert "fixture secret" not in redact_log('"password": "fixture secret"')
+    assert "fixture-secret" not in redact_log('"api_key": "fixture-secret"')
+    assert "fixture-basic" not in redact_log('Authorization: Basic fixture-basic')
+
+
+def test_engine_catalog_returns_actual_logs_or_empty(tmp_path: Path) -> None:
+    manager = EngineManager(tmp_path)
+    assert manager.get_logs("external-missing") == []
+    with patch("app.runtime.engine_manager.comfy_supervisor.get_recent_logs", return_value=["ERROR: fixture failure"]):
+        assert manager.get_logs("managed_comfyui") == ["ERROR: fixture failure"]

@@ -9,13 +9,16 @@ import subprocess
 import threading
 
 _SECRETS = re.compile(
-    r"(?i)((?:api[_-]?key|access[_-]?token|password|authorization|token)\s*[=:]\s*[\"']?)([^\s\"',;]+)"
+    r"(?i)((?:api[_-]?key|access[_-]?token|password|authorization|token)[\"']?\s*[=:]\s*)"
+    r"(\"[^\"\r\n]*\"|'[^'\r\n]*'|[^\s\"',;]+)"
 )
+_AUTHORIZATION = re.compile(r"(?i)(authorization[\"']?\s*[=:]\s*[\"']?)(?:Bearer|Basic)\s+[^\s\"',;]+")
 _BEARER = re.compile(r"(?i)\bBearer\s+[^\s\"',;]+")
 _PROVIDER_KEY = re.compile(r"\bsk-[A-Za-z0-9_-]{8,}")
 
 
 def redact_log(line: str) -> str:
+    line = _AUTHORIZATION.sub(r"\1[REDACTED]", line)
     line = _BEARER.sub("Bearer [REDACTED]", line)
     line = _SECRETS.sub(r"\1[REDACTED]", line)
     return _PROVIDER_KEY.sub("[REDACTED]", line)

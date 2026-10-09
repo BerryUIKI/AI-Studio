@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from app.runtime.process_diagnostics import ProcessDiagnostics
+
 
 from app.runtime.supervisor import get_default_engine_dir
 
@@ -38,6 +40,7 @@ class WebUISupervisor:
         self.models_dir = self.engine_dir / "models"
         self.pid_file = self.engine_dir / "webui.pid"
         self._process: Optional[subprocess.Popen] = None
+        self.diagnostics = ProcessDiagnostics(self.engine_dir / "logs" / "webui.log")
 
     def ensure_directories(self) -> None:
         """Ensure the isolated WebUI engine directory layout exists."""
@@ -254,10 +257,11 @@ class WebUISupervisor:
             self._process = subprocess.Popen(
                 cmd,
                 cwd=str(self.webui_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
+            self.diagnostics.attach(self._process)
             pid = self._process.pid
             self.pid_file.write_text(str(pid), encoding="utf-8")
             return {
@@ -270,6 +274,9 @@ class WebUISupervisor:
                 "success": False,
                 "message": f"Failed to launch WebUI: {err}",
             }
+
+    def get_recent_logs(self, lines: int = 100) -> List[str]:
+        return self.diagnostics.recent(lines)
 
     def stop(self) -> Dict[str, Any]:
         """Terminate the managed WebUI process with process identity verification."""
