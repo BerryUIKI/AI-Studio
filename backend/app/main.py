@@ -56,6 +56,7 @@ from app.runtime.llama_server.llama_supervisor import (
 )
 from app.runtime.engine_manager import engine_manager
 from app.runtime.hardware import check_hardware_readiness, get_gpu_stats
+from app.core.workers import mutate_process, run_blocking
 from app.runtime.installer import installer, mirror_manager
 from app.runtime.credentials import credentials_manager, redact_key
 from app.storage.model_store import model_store
@@ -175,19 +176,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             models = llama_server_supervisor.list_local_models()
             if models:
                 logger.info(f"Detected installed embedded llama-server, auto-starting with {models[0].name}...")
-                llama_server_supervisor.start(models[0].name)
+                await mutate_process("llama", llama_server_supervisor.start, models[0].name)
     except Exception as e:
         logger.warning(f"Failed to auto-start embedded llama-server: {e}")
 
+    inventory_warmup = asyncio.create_task(model_store.scan_all_roots_async())
     yield
 
     logger.info("Berry AI Studio API shutting down...")
     await workflow_runs.shutdown()
     await creative_tasks.shutdown()
+    await inventory_warmup
     try:
         if llama_server_supervisor.is_running():
             logger.info("Stopping embedded llama-server process...")
-            llama_server_supervisor.stop()
+            await mutate_process("llama", llama_server_supervisor.stop)
     except Exception as e:
         logger.debug(f"Error stopping llama-server on shutdown: {e}")
 
@@ -287,7 +290,7 @@ async def manager_status() -> ManagerStatusResponse:
     external_list = [e for e in engine_manager.list_engines() if e.ownership == EngineOwnership.EXTERNAL]
 
     configured_clouds = sum(1 for p in credentials_manager.list_providers() if p.is_configured)
-    models_count = len(model_store.list_models())
+    models_count = model_store.inventory_count()
 
     active_tasks_count = task_registry.active_tasks_count()
 
@@ -359,10 +362,10 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
     stopped_engines = []
     if stop_managed:
         if supervisor.is_running():
-            supervisor.stop()
+            await mutate_process("comfyui", supervisor.stop)
             stopped_engines.append("managed_comfyui")
         if webui_supervisor.is_running():
-            webui_supervisor.stop()
+            await mutate_process("webui", webui_supervisor.stop)
             stopped_engines.append("managed_webui")
 
     # Schedule self-termination
@@ -449,13 +452,13 @@ async def runtime_status() -> dict[str, Any]:
 @app.post("/api/v1/runtime/start", response_model=RuntimeStartResponse)
 async def runtime_start() -> dict[str, Any]:
     """Launch the isolated ComfyUI subprocess via supervisor."""
-    return supervisor.start()
+    return await mutate_process("comfyui", supervisor.start)
 
 
 @app.post("/api/v1/runtime/stop")
 async def runtime_stop() -> dict[str, Any]:
     """Stop the isolated ComfyUI subprocess via supervisor."""
-    return supervisor.stop()
+    return await mutate_process("comfyui", supervisor.stop)
 
 
 @app.get("/api/v1/runtime/webui/status")
@@ -467,13 +470,13 @@ async def runtime_webui_status() -> dict[str, Any]:
 @app.post("/api/v1/runtime/webui/start", response_model=RuntimeStartResponse)
 async def runtime_webui_start() -> dict[str, Any]:
     """Launch the isolated WebUI subprocess via supervisor."""
-    return webui_supervisor.start()
+    return await mutate_process("webui", webui_supervisor.start)
 
 
 @app.post("/api/v1/runtime/webui/stop")
 async def runtime_webui_stop() -> dict[str, Any]:
     """Stop the isolated WebUI subprocess via supervisor."""
-    return webui_supervisor.stop()
+    return await mutate_process("webui", webui_supervisor.stop)
 
 
 @app.get("/api/v1/runtime/{engine_type}/manifest", response_model=EngineInstallManifest)
@@ -596,7 +599,7 @@ async def get_hardware_readiness() -> HardwareReadiness:
 @app.get("/api/v1/hardware/gpu-stats", response_model=GpuStatsResponse)
 async def get_hardware_gpu_stats() -> GpuStatsResponse:
     """Retrieve real-time GPU utilization, VRAM usage, and active compute processes (LH-M4)."""
-    return get_gpu_stats()
+    return await run_blocking(get_gpu_stats)
 
 
 @app.get("/api/v1/engines", response_model=List[EngineConnection])
@@ -608,7 +611,7 @@ async def list_engines() -> List[EngineConnection]:
 @app.get("/api/v1/engines/instances", response_model=EngineInstancesResponse)
 async def list_engine_instances() -> EngineInstancesResponse:
     """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
-    instances = engine_manager.get_all_instances()
+    instances = await run_blocking(engine_manager.get_all_instances)
     return EngineInstancesResponse(instances=instances)
 
 
@@ -616,7 +619,7 @@ async def list_engine_instances() -> EngineInstancesResponse:
 async def detect_local_engines(paths: Optional[str] = None) -> EngineDetectResponse:
     """Scan candidate directories for existing ComfyUI or SD WebUI installations."""
     scan_paths = [p.strip() for p in paths.split(",")] if paths else None
-    detected = engine_manager.detect_engines(scan_paths)
+    detected = await run_blocking(engine_manager.detect_engines, scan_paths)
     return EngineDetectResponse(detected=detected)
 
 
@@ -624,7 +627,7 @@ async def detect_local_engines(paths: Optional[str] = None) -> EngineDetectRespo
 async def bind_external_engine(request: EngineBindRequest) -> EngineConnection:
     """Bind an external engine directory into the catalog without process mutation."""
     try:
-        return engine_manager.bind_external_engine(
+        return await run_blocking(engine_manager.bind_external_engine,
             engine_type_str=request.engine_type,
             name=request.name,
             path_str=request.path,
@@ -638,7 +641,7 @@ async def bind_external_engine(request: EngineBindRequest) -> EngineConnection:
 @app.delete("/api/v1/engines/unbind/{instance_id}")
 async def unbind_external_engine(instance_id: str) -> dict[str, Any]:
     """Unbind an external engine from the catalog. Non-destructive: preserves all files."""
-    success = engine_manager.unbind_external_engine(instance_id)
+    success = await run_blocking(engine_manager.unbind_external_engine, instance_id)
     if not success:
         raise HTTPException(status_code=404, detail=f"Engine instance '{instance_id}' not found")
     return {"success": True, "message": f"Engine instance '{instance_id}' unbound successfully"}
@@ -664,7 +667,7 @@ async def update_engine_config(instance_id: str, request: EngineConfigUpdateRequ
     and indicates whether a running engine requires a restart.
     """
     try:
-        cfg, requires_restart = engine_manager.save_engine_config(
+        cfg, requires_restart = await run_blocking(engine_manager.save_engine_config,
             instance_id=instance_id,
             port=request.port,
             extra_args=request.extra_args,
@@ -706,7 +709,7 @@ async def get_installer_mirrors() -> MirrorConfigResponse:
 @app.put("/api/v1/installer/mirrors", response_model=MirrorConfigResponse)
 async def update_installer_mirrors(request: UpdateMirrorConfigRequest) -> MirrorConfigResponse:
     """Update active mirror preset or custom mirror URLs."""
-    cfg = await asyncio.to_thread(mirror_manager.update_config,
+    cfg = await run_blocking(mirror_manager.update_config,
         active_preset=request.active_preset,
         custom_git_mirror=request.custom_git_mirror,
         custom_pypi_mirror=request.custom_pypi_mirror,
@@ -755,7 +758,7 @@ async def trigger_model_scan() -> List[ModelRecord]:
 @app.get("/api/v1/models/roots", response_model=List[ModelRoot])
 async def list_model_roots() -> List[ModelRoot]:
     """List all configured model root directories."""
-    return await asyncio.to_thread(model_store.list_roots)
+    return await run_blocking(model_store.list_roots)
 
 
 class AddModelRootRequest(BaseModel):
@@ -769,19 +772,19 @@ async def add_model_root(req: AddModelRootRequest) -> ModelRoot:
     """Register a new user-specified directory for model discovery."""
     normalized_path = os.path.normcase(str(Path(req.path).resolve()))
     root_id = f"root_{hashlib.sha256(normalized_path.encode()).hexdigest()[:16]}"
-    return await asyncio.to_thread(model_store.add_root, root_id, req.path, req.label, req.engine_type)
+    return await run_blocking(model_store.add_root, root_id, req.path, req.label, req.engine_type)
 
 
 @app.post("/api/v1/models/rescan", response_model=List[ModelRecord])
 async def trigger_model_rescan() -> List[ModelRecord]:
     """Force re-scan of all model root directories."""
-    return await model_store.scan_all_roots_async()
+    return await model_store.scan_all_roots_async(force=True)
 
 
 @app.delete("/api/v1/models/roots/{root_id}")
 async def remove_model_root(root_id: str) -> dict[str, Any]:
     """Remove a configured model root directory without deleting files (L10)."""
-    removed = await asyncio.to_thread(model_store.remove_root, root_id)
+    removed = await run_blocking(model_store.remove_root, root_id)
     if not removed:
         raise HTTPException(status_code=404, detail=f"Model root '{root_id}' not found")
     return {"status": "removed", "root_id": root_id}
@@ -810,7 +813,7 @@ async def evaluate_models_hardware(req: HardwareEvaluationRequest) -> HardwareEv
         filtered_models = [m for m in models if m is not None]
     else:
         filtered_models = HubCatalog.list_models()
-    return evaluate_hardware(filtered_models)
+    return await run_blocking(evaluate_hardware, filtered_models)
 
 
 @app.post("/api/v1/models/hub/download", response_model=DownloadTaskInfo, status_code=202)
@@ -1087,7 +1090,7 @@ async def start_llama_server_runtime(req: Optional[LlamaServerStartRequest] = No
     try:
         model_name = req.model_name if req else None
         gpu_layers = req.vram_gpu_layers if req else 99
-        result = llama_server_supervisor.start(model_name, vram_gpu_layers=gpu_layers)
+        result = await mutate_process("llama", llama_server_supervisor.start, model_name, vram_gpu_layers=gpu_layers)
         if not isinstance(result, dict):
             raise HTTPException(status_code=500, detail="Invalid response from llama-server supervisor")
         return result
@@ -1100,7 +1103,7 @@ async def start_llama_server_runtime(req: Optional[LlamaServerStartRequest] = No
 async def stop_llama_server_runtime() -> Dict[str, Any]:
     """Stop embedded llama-server process."""
     try:
-        result = llama_server_supervisor.stop()
+        result = await mutate_process("llama", llama_server_supervisor.stop)
         if not isinstance(result, dict):
             raise HTTPException(status_code=500, detail="Invalid response from llama-server supervisor")
         return result
