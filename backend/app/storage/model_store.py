@@ -11,6 +11,8 @@ import hashlib
 import json
 import logging
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -18,6 +20,7 @@ from app.core.content_identity import hash_file
 from app.core.model_validation import inspect_model
 from app.runtime.supervisor import get_default_engine_dir
 from app.storage.config_files import write_json_atomic
+from app.core.workers import run_blocking
 from app.schemas.model import (
     ModelArchitecture,
     ModelCategory,
@@ -124,7 +127,11 @@ class ModelStore:
     def __init__(self, engine_dir: Optional[Path] = None) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
         self.roots: Dict[str, ModelRoot] = {}
-        self._cached_records: Dict[str, Tuple[Tuple[int, int], int, ModelRecord]] = {}  # path -> (mtime, size, record)
+        self._cached_records: Dict[str, Tuple[Tuple[int, int], int, ModelRecord]] = {}  # path -> (times, size, record)
+        self._inventory: List[ModelRecord] = []
+        self._inventory_updated = 0.0
+        self._scan_lock = threading.RLock()
+        self._async_scan_locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
         self._init_default_roots()
         self.config_file = self.engine_dir / "model_roots.json"
         if self.config_file.is_file():
@@ -156,6 +163,10 @@ class ModelStore:
             self.add_root("webui_internal", str(webui_models), "SD WebUI Models", engine_type="webui")
 
     def add_root(self, root_id: str, path_str: str, label: str, engine_type: Optional[str] = None) -> ModelRoot:
+        with self._scan_lock:
+            return self._add_root(root_id, path_str, label, engine_type)
+
+    def _add_root(self, root_id: str, path_str: str, label: str, engine_type: Optional[str] = None) -> ModelRoot:
         """Register a directory to scan for models."""
         p = Path(path_str).resolve()
         root = ModelRoot(
@@ -166,6 +177,7 @@ class ModelStore:
             exists=p.is_dir(),
         )
         self.roots[root_id] = root
+        self._inventory_updated = 0.0
         if hasattr(self, "config_file"):
             self._save_roots()
         return root
@@ -236,6 +248,15 @@ class ModelStore:
 
     def scan_all_roots(self) -> List[ModelRecord]:
         """Scan all active root directories and return discovered models."""
+        with self._scan_lock:
+            records = self._scan_all_roots()
+            self._inventory = records
+            self._inventory_updated = time.monotonic()
+            seen = {record.file_path for record in records}
+            self._cached_records = {path: cached for path, cached in self._cached_records.items() if path in seen}
+            return records
+
+    def _scan_all_roots(self) -> List[ModelRecord]:
         discovered: List[ModelRecord] = []
         for root in self.roots.values():
             root_path = Path(root.path)
@@ -264,16 +285,33 @@ class ModelStore:
         return self.scan_all_roots()
 
     def remove_root(self, root_id: str) -> bool:
+        with self._scan_lock:
+            return self._remove_root(root_id)
+
+    def _remove_root(self, root_id: str) -> bool:
         """Remove a registered model scan root without deleting files (L10)."""
         if root_id in self.roots:
             del self.roots[root_id]
+            self._inventory_updated = 0.0
             self._save_roots()
             return True
         return False
 
-    async def scan_all_roots_async(self) -> List[ModelRecord]:
+    def inventory_count(self) -> int:
+        """Routine status uses the last completed inventory instead of scanning directories."""
+        return len(self._inventory)
+
+    async def scan_all_roots_async(self, force: bool = False) -> List[ModelRecord]:
         """Asynchronously scan all model roots."""
-        return await asyncio.to_thread(self.scan_all_roots)
+        loop = asyncio.get_running_loop()
+        lease = self._async_scan_locks.setdefault(loop, asyncio.Lock())
+        await lease.acquire()
+        if not force and time.monotonic() - self._inventory_updated < 5:
+            lease.release()
+            return list(self._inventory)
+        scan = asyncio.create_task(run_blocking(self.scan_all_roots))
+        scan.add_done_callback(lambda task: lease.release())
+        return await asyncio.shield(scan)
 
 
 # Global model store singleton
