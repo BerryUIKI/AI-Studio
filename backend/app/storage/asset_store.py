@@ -1,15 +1,33 @@
 """Content-addressable asset storage for durable generated media."""
 
+import asyncio
 import hashlib
+import json
 import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 import httpx
 
 from app.schemas.project import AssetRecord
 from app.storage.db import DatabaseManager, db_manager, get_default_data_dir
+from app.core.media_validator import inspect_media_metadata
+
+
+def _metadata_for_bytes(data: bytes) -> dict[str, Any]:
+    try:
+        return inspect_media_metadata(data)
+    except Exception:
+        # Legacy non-media records remain readable without fabricated MIME metadata.
+        return {}
+
+
+def _metadata_for_file(path: Path) -> dict[str, Any]:
+    try:
+        return _metadata_for_bytes(path.read_bytes())
+    except OSError:
+        return {}
 
 
 def _inspect_media_dimensions(data: bytes, filename: str) -> Tuple[Optional[int], Optional[int]]:
@@ -60,10 +78,14 @@ class AssetStore:
     ) -> AssetRecord:
         content_hash = hashlib.sha256(data).hexdigest()
         byte_size = len(data)
+        media_metadata = await asyncio.to_thread(_metadata_for_bytes, data)
 
         # Content-addressable subfolder structure: assets/{hash[:2]}/{hash}{ext}
         ext = Path(filename).suffix or (".mp4" if media_type == "video" else ".png")
-        if media_type == "video":
+        if media_metadata:
+            ext = str(media_metadata["extension"])
+            filename = f"{Path(filename).stem}{ext}"
+        elif media_type == "video":
             if data[:4] == b"\x1a\x45\xdf\xa3":
                 ext = ".webm"
             elif len(data) >= 8 and data[4:8] in (b"ftyp", b"moov", b"wide", b"mdat"):
@@ -78,11 +100,11 @@ class AssetStore:
         target_path = subdir / f"{content_hash}{ext}"
 
         if not target_path.exists():
-            target_path.write_bytes(data)
+            await asyncio.to_thread(target_path.write_bytes, data)
 
         # Decode actual dimensions if not provided
         if width is None or height is None or width <= 0 or height <= 0:
-            detected_w, detected_h = _inspect_media_dimensions(data, filename)
+            detected_w, detected_h = await asyncio.to_thread(_inspect_media_dimensions, data, filename)
             width = width or detected_w
             height = height or detected_h
 
@@ -93,14 +115,15 @@ class AssetStore:
         conn = await self.manager.get_connection()
         await conn.execute(
             """
-            INSERT INTO assets (id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO assets (id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at, media_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (asset_id, project_id, filename, rel_path, media_type, content_hash, byte_size, width, height, now),
+            (asset_id, project_id, filename, rel_path, media_type, content_hash, byte_size, width, height, now, json.dumps(media_metadata)),
         )
         await conn.commit()
 
         return AssetRecord(
+            **media_metadata,
             id=asset_id,
             project_id=project_id,
             filename=filename,
@@ -146,7 +169,7 @@ class AssetStore:
         conn = await self.manager.get_connection()
         async with conn.execute(
             """
-            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at
+            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at, media_json
             FROM assets WHERE id = ?
             """,
             (asset_id,),
@@ -168,8 +191,15 @@ class AssetStore:
 
             disk_file = self.assets_dir / row["file_path"]
             file_exists = disk_file.is_file()
+            metadata = json.loads(row["media_json"] or "{}")
+            if not metadata and file_exists:
+                metadata = await asyncio.to_thread(_metadata_for_file, disk_file)
+                if metadata:
+                    await conn.execute("UPDATE assets SET media_json = ? WHERE id = ?", (json.dumps(metadata), asset_id))
+                    await conn.commit()
 
             return AssetRecord(
+                **metadata,
                 id=row["id"],
                 project_id=row["project_id"],
                 filename=row["filename"],
@@ -187,7 +217,7 @@ class AssetStore:
         conn = await self.manager.get_connection()
         async with conn.execute(
             """
-            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at
+            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at, media_json
             FROM assets WHERE content_hash = ? ORDER BY created_at DESC LIMIT 1
             """,
             (content_hash,),
@@ -211,6 +241,7 @@ class AssetStore:
             file_exists = disk_file.is_file()
 
             return AssetRecord(
+                **json.loads(row["media_json"] or "{}"),
                 id=row["id"],
                 project_id=row["project_id"],
                 filename=row["filename"],
@@ -240,6 +271,7 @@ class AssetStore:
             rows = await cursor.fetchall()
             return [
                 AssetRecord(
+                    **json.loads(row["media_json"] or "{}"),
                     id=row["id"],
                     project_id=row["project_id"],
                     filename=row["filename"],

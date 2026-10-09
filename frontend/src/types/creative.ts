@@ -55,6 +55,10 @@ export interface CreativeActionRequest {
 }
 
 export interface CreativeActionResult {
+  mime_type?: string;
+  extension?: string;
+  is_animated?: boolean;
+  codec?: string;
   success: boolean;
   task_id: string;
   asset_id?: string;
@@ -70,6 +74,10 @@ export interface CreativeActionResult {
 }
 
 export interface ImageCardData extends Record<string, unknown> {
+  mimeType?: string;
+  extension?: string;
+  isAnimated?: boolean;
+  codec?: string;
   assetId?: string;
   imageUrl: string;
   videoUrl?: string;

@@ -98,6 +98,13 @@ def validate_and_inspect_media(
         return "image/webp", w, h
 
     # 4. MP4 check (ftyp box at byte 4)
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        if len(data) < 10:
+            raise HTTPException(status_code=400, detail="Malformed GIF header")
+        w, h = struct.unpack("<HH", data[6:10])
+        _validate_dimensions(w, h)
+        return "image/gif", w, h
+
     if len(data) >= 12 and data[4:8] in (b"ftyp", b"moov"):
         return "video/mp4", 0, 0
 
@@ -107,8 +114,41 @@ def validate_and_inspect_media(
 
     raise HTTPException(
         status_code=400,
-        detail="Unsupported or unrecognized media format. Allowed formats: PNG, JPEG, WebP, MP4, WebM.",
+        detail="Unsupported or unrecognized media format. Allowed formats: PNG, JPEG, WebP, GIF, MP4, WebM.",
     )
+
+
+def inspect_media_metadata(data: bytes) -> Dict[str, object]:
+    """Identify stored bytes; a file suffix or requested action never determines MIME."""
+    mime, _, _ = validate_and_inspect_media(data)
+    extensions = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
+                  "image/gif": ".gif", "video/mp4": ".mp4", "video/webm": ".webm"}
+    animated = False
+    if mime.startswith("image/"):
+        import io
+        from PIL import Image
+        with Image.open(io.BytesIO(data)) as image:
+            animated = bool(getattr(image, "is_animated", False))
+    return {"mime_type": mime, "extension": extensions[mime], "is_animated": animated,
+            "codec": None}  # Container signatures do not prove a video codec.
+
+
+def normalize_source_png(data: bytes) -> bytes:
+    """Encode a decoded source frame as PNG for adapters whose input contract is PNG."""
+    import io
+    from PIL import Image
+    mime, _, _ = validate_and_inspect_media(data)
+    if not mime.startswith("image/"):
+        raise ValueError("Cloud source must be an image")
+    with Image.open(io.BytesIO(data)) as source:
+        source.load()
+        normalized = source.convert("RGBA" if "A" in source.getbands() or "transparency" in source.info else "RGB")
+        try:
+            output = io.BytesIO()
+            normalized.save(output, format="PNG")
+            return output.getvalue()
+        finally:
+            normalized.close()
 
 
 def _validate_dimensions(w: int, h: int) -> None:

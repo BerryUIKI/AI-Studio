@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { NodeProps } from '@xyflow/react';
 import {
   Download,
@@ -17,6 +17,8 @@ import { ImageCardData } from '../../types/creative';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
+import { downloadOriginalMedia, mediaCardFields } from '../../utils/media';
+import { CardMedia } from './CardMedia';
 import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
@@ -32,7 +34,23 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const isGenerating = Boolean(cardData.isGenerating);
   const isVideo = cardData.mediaType === 'video' || Boolean(cardData.videoUrl);
   const targetMediaUrl = cardData.videoUrl || cardData.imageUrl || '';
-  const isVideoContainer = targetMediaUrl.toLowerCase().match(/\.(mp4|webm|mov)(\?|#|$)/) !== null;
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!cardData.assetId || cardData.mimeType) return;
+    const controller = new AbortController();
+    void fetch(`/api/v1/assets/${encodeURIComponent(cardData.assetId)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const asset = await response.json();
+        if (controller.signal.aborted || !asset.mime_type) return;
+        useCanvasStore.setState((state) => ({ nodes: state.nodes.map((node) =>
+          node.id === id ? { ...node, data: { ...node.data, ...mediaCardFields(asset) } } : node) }));
+        setIsMissingAsset(false);
+        useCanvasStore.getState().notifyCanvasChange();
+      }).catch(() => { /* Preview retains its existing missing-file recovery. */ });
+    return () => controller.abort();
+  }, [id, cardData.assetId, cardData.mimeType]);
 
   const handleReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,8 +66,11 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
       if (resp.ok) {
         const asset = await resp.json();
         useCanvasStore.getState().updateNodeData(id, {
+          ...mediaCardFields(asset),
           assetId: asset.id,
           imageUrl: `/api/v1/assets/${asset.id}/content`,
+          videoUrl: asset.mime_type?.startsWith('video/') ? `/api/v1/assets/${asset.id}/content` : undefined,
+          mediaType: asset.mime_type?.startsWith('video/') ? 'video' : 'image',
           width: asset.width || cardData.width,
           height: asset.height || cardData.height,
           label: asset.filename,
@@ -73,18 +94,9 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
 
   const handleExport = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!targetMediaUrl) return;
-    const link = document.createElement('a');
-    link.href = targetMediaUrl;
-    let ext = isVideo ? (isVideoContainer ? 'mp4' : 'webp') : 'png';
-    const match = targetMediaUrl.match(/\.([a-zA-Z0-9]+)(?:\?|#|$)/);
-    if (match && ['mp4', 'webm', 'mov', 'png', 'jpg', 'jpeg', 'webp', 'gif'].includes(match[1].toLowerCase())) {
-      ext = match[1].toLowerCase();
-    }
-    link.download = `${cardData.label || 'berry_asset'}.${ext}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    setExportError(null);
+    void downloadOriginalMedia(cardData).catch((error: unknown) =>
+      setExportError(error instanceof Error ? error.message : 'Could not export media'));
   };
 
   const handleRemove = (e: React.MouseEvent) => {
@@ -305,30 +317,14 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
           ) : (
             /* Media Render (Image or Video) */
             <>
-              {isVideo && (isVideoContainer || !targetMediaUrl.toLowerCase().match(/\.(webp|gif)(\?|#|$)/)) ? (
-                <video
-                  src={retryNonce ? `${targetMediaUrl}?t=${retryNonce}` : targetMediaUrl}
-                  controls
-                  loop
-                  playsInline
-                  className="w-full h-auto object-contain max-h-[360px]"
-                  onError={() => setIsMissingAsset(true)}
-                />
-              ) : (
-                <img
-                  src={retryNonce ? `${targetMediaUrl}?t=${retryNonce}` : (targetMediaUrl || cardData.imageUrl)}
-                  alt={cardData.label || 'Generated creative asset'}
-                  className="w-full h-auto object-contain select-none"
-                  loading="lazy"
-                  onError={() => setIsMissingAsset(true)}
-                />
-              )}
-
-              {isVideo && !isVideoContainer && (
-                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-purple-950/80 backdrop-blur text-[10px] font-medium text-purple-300 border border-purple-800/60">
-                  Animated WebP
+              <CardMedia data={cardData} url={retryNonce ? `${targetMediaUrl}?t=${retryNonce}` : targetMediaUrl}
+                onError={() => setIsMissingAsset(true)} />
+              {cardData.isAnimated && (
+                <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-purple-950/80 text-[10px] text-purple-300">
+                  Animated image
                 </div>
               )}
+              {exportError && <p role="alert" className="absolute bottom-2 right-2 text-xs text-red-300">{exportError}</p>}
 
               {p && (
                 <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/75 backdrop-blur text-[10px] font-mono text-slate-300 border border-slate-800">
