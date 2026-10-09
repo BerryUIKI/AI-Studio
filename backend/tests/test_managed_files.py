@@ -5,6 +5,7 @@ from unittest.mock import patch
 from types import SimpleNamespace
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.runtime.managed_files import managed_child, uninstall_managed_files
 from app.schemas.engine import EngineType
@@ -121,3 +122,15 @@ async def test_virtual_environment_target_cannot_escape_root(tmp_path: Path) -> 
     installer = IsolatedEngineInstaller(tmp_path / "managed")
     with pytest.raises(ValueError, match="outside"):
         await installer.create_isolated_venv(tmp_path / "external" / "runtime")
+
+
+def test_uninstall_endpoint_only_accepts_managed_engine_types(tmp_path: Path) -> None:
+    from app.main import app
+    target = SimpleNamespace(engine_dir=tmp_path, is_running=lambda: False, get_pid=lambda: None)
+    installer = IsolatedEngineInstaller(tmp_path)
+    with patch("app.main.supervisor", target), patch("app.main.installer", installer):
+        client = TestClient(app)
+        assert client.post("/api/v1/runtime/external-user-install/uninstall").status_code == 422
+        response = client.post("/api/v1/runtime/comfyui/uninstall")
+        assert response.status_code == 200
+        assert response.json()["status"] == "not-installed"

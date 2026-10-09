@@ -28,6 +28,8 @@ async def uninstall_managed(engine_type: EngineType, supervisor: Any, installer:
                     manifest = installer.read_manifest(engine_type)
                     from app.schemas.engine import InstallPhase
                     manifest.phase = InstallPhase.IDLE
+                    manifest.version = None
+                    manifest.python_bin = None
                     manifest.completed_at = None
                     manifest.error_message = None
                     manifest.last_log_line = "Uninstalled; engine files retained in " + str(result.get("retained_path"))
