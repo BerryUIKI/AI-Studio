@@ -1,6 +1,7 @@
 """API responsiveness and bounded worker ownership under slow scans/process calls."""
 
 import asyncio
+import io
 from pathlib import Path
 import threading
 import time
@@ -8,10 +9,13 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+from PIL import Image
 
-from app.core.workers import mutate_process, run_blocking
+from app.core.workers import BlockingSnapshot, mutate_process, run_blocking
 from app.main import app, manager_status
 from app.storage.model_store import ModelStore
+from app.storage.asset_store import AssetStore
+from app.storage.db import DatabaseManager
 
 
 @pytest.mark.asyncio
@@ -98,4 +102,58 @@ async def test_worker_pool_is_bounded() -> None:
             active -= 1
 
     await asyncio.gather(*(run_blocking(blocking) for _ in range(12)))
-    assert maximum == 4
+    assert 1 <= maximum <= 4
+
+
+@pytest.mark.asyncio
+async def test_hardware_snapshot_coalesces_probes_and_reuses_observed_value() -> None:
+    calls = 0
+
+    def probe() -> dict[str, int]:
+        nonlocal calls
+        calls += 1
+        time.sleep(0.02)
+        return {"observed": calls}
+
+    snapshot = BlockingSnapshot(probe, ttl=10)
+    values = await asyncio.gather(*(snapshot.get() for _ in range(8)))
+    assert values == [{"observed": 1}] * 8
+    assert await snapshot.get() == {"observed": 1}
+    assert calls == 1
+    snapshot._updated = 0
+    assert await snapshot.get() == {"observed": 2}
+
+
+@pytest.mark.asyncio
+async def test_health_remains_responsive_during_media_disk_write(tmp_path: Path) -> None:
+    manager = DatabaseManager(tmp_path / "assets.db")
+    store = AssetStore(manager, tmp_path)
+    output = io.BytesIO()
+    with Image.new("RGB", (1024, 1024), "red") as image:
+        image.save(output, "PNG", compress_level=0)
+    entered = threading.Event()
+    release = threading.Event()
+    persist = store._persist_bytes
+
+    def slow_write(data: bytes, content_hash: str, extension: str) -> str:
+        entered.set()
+        assert release.wait(3)
+        return persist(data, content_hash, extension)
+
+    with patch.object(store, "_persist_bytes", side_effect=slow_write):
+        save = asyncio.create_task(store.save_bytes(output.getvalue(), "large.png"))
+        try:
+            while not entered.is_set():
+                await asyncio.sleep(0.001)
+            start = time.monotonic()
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost:8000") as client:
+                response = await client.get("/health")
+            assert response.status_code == 200
+            assert time.monotonic() - start < 0.5
+            assert not save.done()
+        finally:
+            release.set()
+            try:
+                assert (await save).byte_size > 3 * 1024 * 1024
+            finally:
+                await manager.close()

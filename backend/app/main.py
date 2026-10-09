@@ -56,7 +56,7 @@ from app.runtime.llama_server.llama_supervisor import (
 )
 from app.runtime.engine_manager import engine_manager
 from app.runtime.hardware import check_hardware_readiness, get_gpu_stats
-from app.core.workers import mutate_process, run_blocking
+from app.core.workers import BlockingSnapshot, mutate_process, run_blocking
 from app.runtime.installer import installer, mirror_manager
 from app.runtime.credentials import credentials_manager, redact_key
 from app.storage.model_store import model_store
@@ -273,6 +273,7 @@ async def system_info() -> dict[str, object]:
 
 app_start_time = time.time()
 launcher_config = LauncherConfig(port=int(os.environ.get("BERRY_PORT", "8000")))
+gpu_stats_snapshot = BlockingSnapshot(lambda: get_gpu_stats(), ttl=2.0)
 
 
 # ---------------------------------------------------------------------------
@@ -599,7 +600,7 @@ async def get_hardware_readiness() -> HardwareReadiness:
 @app.get("/api/v1/hardware/gpu-stats", response_model=GpuStatsResponse)
 async def get_hardware_gpu_stats() -> GpuStatsResponse:
     """Retrieve real-time GPU utilization, VRAM usage, and active compute processes (LH-M4)."""
-    return await run_blocking(get_gpu_stats)
+    return await gpu_stats_snapshot.get()
 
 
 @app.get("/api/v1/engines", response_model=List[EngineConnection])
@@ -892,7 +893,7 @@ async def upload_creative_asset(file: UploadFile = File(...)) -> AssetRecord:
     """Upload user image asset directly onto the creative canvas."""
     data = await file.read()
     filename = sanitize_filename(file.filename)
-    validated_mime, w, h = validate_and_inspect_media(data, filename)
+    validated_mime, w, h = await run_blocking(validate_and_inspect_media, data, filename)
     category = "video" if validated_mime.startswith("video/") else "image"
     return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
 
@@ -913,7 +914,7 @@ async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRe
     except (binascii.Error, ValueError) as exc:
         raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}")
     filename = sanitize_filename(req.filename)
-    validated_mime, w, h = validate_and_inspect_media(data, filename)
+    validated_mime, w, h = await run_blocking(validate_and_inspect_media, data, filename)
     category = "video" if validated_mime.startswith("video/") else "image"
     return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
 
