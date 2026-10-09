@@ -2,12 +2,12 @@
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.core.creative_identity import creative_execution_identity
-from app.runners.creative_runner import compute_creative_cache_hash, resolve_execution_plan
+from app.runners.creative_runner import CreativeRunner, compute_creative_cache_hash, resolve_execution_plan
 from app.schemas.creative import CreativeActionRequest
 from app.schemas.engine import EngineConnection
 
@@ -58,3 +58,23 @@ async def test_cloud_identity_describes_adapter_target_without_invented_weight_r
     assert identity["model"] == "stabilityai/stable-diffusion-xl-base-1.0"
     assert identity["model_revision"] is None
     assert len(identity["adapter_revision"]) == 64
+
+
+@pytest.mark.asyncio
+async def test_unverified_local_model_never_reads_or_writes_cache() -> None:
+    connection = EngineConnection(id="fixture", name="Fixture", engine_type="comfyui",
+                                  ownership="external", endpoint_url="http://fixture:8188", status="running")
+    request = CreativeActionRequest(action="txt2img", prompt="fixture", model="unknown.safetensors",
+                                    connection_id=connection.id, seed=42)
+    with patch("app.runners.creative_runner.engine_manager.get_engine", return_value=connection), patch(
+        "app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="unverified:unknown.safetensors")
+    ), patch("app.runners.creative_runner.cache_store") as cache, patch(
+        "app.runners.creative_runner.asset_store.get_asset", new=AsyncMock(return_value=None)
+    ), patch.object(CreativeRunner, "_run_comfy", new=AsyncMock(return_value={
+        "asset_id": "fixture-output", "image_url": "/api/v1/assets/fixture-output/content"
+    })) as dispatch:
+        result = await CreativeRunner().execute(request)
+        assert result.success
+        dispatch.assert_awaited_once()
+        cache.get_async.assert_not_called()
+        cache.set_async.assert_not_called()
