@@ -6,7 +6,6 @@ and Apple Silicon (Metal) discrete GPUs without heavy dependencies (no PyTorch, 
 Formulates vendor-optimized engine launch flags and classification.
 """
 
-import asyncio
 import os
 import re
 import shutil
@@ -15,6 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, List, Optional
 
+from app.core.workers import run_blocking
 from app.runtime.supervisor import get_default_engine_dir
 from app.schemas.hardware import GpuInfo, HardwareReadiness, StorageInfo
 
@@ -277,9 +277,9 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
     root_dir = engine_dir or get_default_engine_dir()
     models_dir = root_dir / "models"
 
-    gpus = await asyncio.to_thread(detect_all_gpus)
-    engine_storage = await asyncio.to_thread(get_storage_readiness, root_dir, 10.0)
-    model_storage = await asyncio.to_thread(get_storage_readiness, models_dir, 15.0)
+    gpus = await run_blocking(detect_all_gpus)
+    engine_storage = await run_blocking(get_storage_readiness, root_dir, 10.0)
+    model_storage = await run_blocking(get_storage_readiness, models_dir, 15.0)
 
     guidance: List[str] = []
     has_nvidia = any(g.vendor == "nvidia" for g in gpus)
@@ -348,7 +348,7 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
         guidance.append(f"Low model storage space: {model_storage.free_gb}GB available on {model_storage.path} (15GB recommended).")
 
     from app.runtime.hardware_evaluator import get_system_ram_mb
-    ram_total_mb, ram_avail_mb = await asyncio.to_thread(get_system_ram_mb)
+    ram_total_mb, ram_avail_mb = await run_blocking(get_system_ram_mb)
 
     rec_llms: List[str] = []
     primary_vram = gpus[0].vram_total_mb if gpus else 0

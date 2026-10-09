@@ -209,10 +209,12 @@ class LlamaServerSupervisor:
         return models
 
     async def get_status(self) -> LlamaServerRuntimeStatus:
-        bin_path = self.get_binary_path()
-        installed = self.is_installed()
-        running = self.is_running()
-        models = self.list_local_models()
+        from app.core.workers import run_blocking
+
+        bin_path = await run_blocking(self.get_binary_path)
+        installed = await run_blocking(self.is_installed)
+        running = await run_blocking(self.is_running)
+        models = await run_blocking(self.list_local_models)
 
         healthy = await self.check_health()
         if healthy:
@@ -222,7 +224,7 @@ class LlamaServerSupervisor:
             installed=installed,
             binary_path=str(bin_path) if bin_path else None,
             running=running,
-            pid=self.get_pid(),
+            pid=await run_blocking(self.get_pid),
             port=self.port,
             endpoint=f"http://127.0.0.1:{self.port}/v1",
             active_model=str(self._active_model_path.name) if self._active_model_path else (models[0].name if models else None),

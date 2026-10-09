@@ -1,6 +1,5 @@
 """Content-addressable asset storage for durable generated media."""
 
-import asyncio
 import hashlib
 import json
 import os
@@ -13,6 +12,7 @@ import httpx
 from app.schemas.project import AssetRecord
 from app.storage.db import DatabaseManager, db_manager, get_default_data_dir
 from app.core.media_validator import inspect_media_metadata
+from app.core.workers import run_blocking
 
 
 def _metadata_for_bytes(data: bytes) -> dict[str, Any]:
@@ -28,6 +28,10 @@ def _metadata_for_file(path: Path) -> dict[str, Any]:
         return _metadata_for_bytes(path.read_bytes())
     except OSError:
         return {}
+
+
+def _dimensions_for_file(path: Path, filename: str) -> Tuple[Optional[int], Optional[int]]:
+    return _inspect_media_dimensions(path.read_bytes(), filename)
 
 
 def _inspect_media_dimensions(data: bytes, filename: str) -> Tuple[Optional[int], Optional[int]]:
@@ -64,8 +68,14 @@ class AssetStore:
             d = self._base_dir / "assets"
         else:
             d = get_default_data_dir() / "assets"
-        d.mkdir(parents=True, exist_ok=True)
         return d
+
+    def _persist_bytes(self, data: bytes, content_hash: str, extension: str) -> str:
+        target_path = self.assets_dir / content_hash[:2] / f"{content_hash}{extension}"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if not target_path.exists():
+            target_path.write_bytes(data)
+        return str(target_path.relative_to(self.assets_dir))
 
     async def save_bytes(
         self,
@@ -76,9 +86,9 @@ class AssetStore:
         width: Optional[int] = None,
         height: Optional[int] = None,
     ) -> AssetRecord:
-        content_hash = hashlib.sha256(data).hexdigest()
+        content_hash = await run_blocking(lambda: hashlib.sha256(data).hexdigest())
         byte_size = len(data)
-        media_metadata = await asyncio.to_thread(_metadata_for_bytes, data)
+        media_metadata = await run_blocking(_metadata_for_bytes, data)
 
         # Content-addressable subfolder structure: assets/{hash[:2]}/{hash}{ext}
         ext = Path(filename).suffix or (".mp4" if media_type == "video" else ".png")
@@ -95,22 +105,16 @@ class AssetStore:
             if Path(filename).suffix != ext:
                 filename = f"{Path(filename).stem}{ext}"
 
-        subdir = self.assets_dir / content_hash[:2]
-        subdir.mkdir(parents=True, exist_ok=True)
-        target_path = subdir / f"{content_hash}{ext}"
-
-        if not target_path.exists():
-            await asyncio.to_thread(target_path.write_bytes, data)
+        rel_path = await run_blocking(self._persist_bytes, data, content_hash, ext)
 
         # Decode actual dimensions if not provided
         if width is None or height is None or width <= 0 or height <= 0:
-            detected_w, detected_h = await asyncio.to_thread(_inspect_media_dimensions, data, filename)
+            detected_w, detected_h = await run_blocking(_inspect_media_dimensions, data, filename)
             width = width or detected_w
             height = height or detected_h
 
         asset_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
-        rel_path = str(target_path.relative_to(self.assets_dir))
 
         conn = await self.manager.get_connection()
         await conn.execute(
@@ -183,7 +187,7 @@ class AssetStore:
             if (w is None or h is None) and row["media_type"] == "image":
                 disk_file = self.assets_dir / row["file_path"]
                 if disk_file.is_file():
-                    det_w, det_h = _inspect_media_dimensions(disk_file.read_bytes(), row["filename"])
+                    det_w, det_h = await run_blocking(_dimensions_for_file, disk_file, row["filename"])
                     if det_w and det_h:
                         w, h = det_w, det_h
                         await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
@@ -193,7 +197,7 @@ class AssetStore:
             file_exists = disk_file.is_file()
             metadata = json.loads(row["media_json"] or "{}")
             if not metadata and file_exists:
-                metadata = await asyncio.to_thread(_metadata_for_file, disk_file)
+                metadata = await run_blocking(_metadata_for_file, disk_file)
                 if metadata:
                     await conn.execute("UPDATE assets SET media_json = ? WHERE id = ?", (json.dumps(metadata), asset_id))
                     await conn.commit()
@@ -231,7 +235,7 @@ class AssetStore:
             if (w is None or h is None) and row["media_type"] == "image":
                 disk_file = self.assets_dir / row["file_path"]
                 if disk_file.is_file():
-                    det_w, det_h = _inspect_media_dimensions(disk_file.read_bytes(), row["filename"])
+                    det_w, det_h = await run_blocking(_dimensions_for_file, disk_file, row["filename"])
                     if det_w and det_h:
                         w, h = det_w, det_h
                         await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
