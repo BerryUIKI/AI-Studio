@@ -39,7 +39,7 @@ from app.schemas.workflow_analysis import (
 from app.core.session import session_manager, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
 from app.core.workflow_runs import WorkflowEventSink, workflow_runs
-from app.core.execution_contract import ExecutionContractError, validate_execution_contract
+from app.core.execution_contract import ExecutionContractError, validate_execution_contract, validate_output_contract
 from app.core.workflow_spec import resolve_workflow_node
 from app.core.media_validator import (
     validate_and_inspect_media,
@@ -1425,6 +1425,8 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
                     async for event in run_input_text_node(node.id, spec.params):
                         if cancel_event.is_set():
                             break
+                        if isinstance(event, NodeOutputEvent):
+                            validate_output_contract(node.type, event.output)
                         event.run_id = run_id
                         await websocket.send_text(event.model_dump_json())
                         if isinstance(event, NodeOutputEvent):
@@ -1433,6 +1435,8 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
                     async for event in runner(node.id, inputs, spec.params):
                         if cancel_event.is_set():
                             break
+                        if isinstance(event, NodeOutputEvent):
+                            validate_output_contract(node.type, event.output)
                         event.run_id = run_id
                         await websocket.send_text(event.model_dump_json())
                         if isinstance(event, NodeErrorEvent):

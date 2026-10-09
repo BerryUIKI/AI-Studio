@@ -80,10 +80,11 @@ async def test_effective_endpoint_defaults_and_runner_revision_participate(tmp_p
     graph = WorkflowGraph(nodes=[{"id": "llm", "type": "text.llm", "params": {"model": "gpt-4o"}}])
     node = graph.nodes[0]
     try:
-        with patch("app.core.workflow_spec.cache_store", cache), patch.dict("os.environ", {"OPENAI_API_BASE": "https://one.test"}):
+        with patch("app.core.workflow_spec.cache_store", cache), patch.dict("os.environ", {"OPENAI_API_BASE": "https://one.test", "OPENAI_API_KEY": "fixture-key", "LLM_API_KEY": ""}):
             first = await resolve_workflow_node(node, graph, {}, NODE_RUNNERS[node.type])
             assert first.params["temperature"] == 0.7
             assert first.params["base_url"] == "https://one.test"
+            assert first.params["api_key"] == "fixture-key"
             node.params["temperature"] = 0.7
             assert (await resolve_workflow_node(node, graph, {}, NODE_RUNNERS[node.type])).node_hash == first.node_hash
             runner_file = tmp_path / "runner.py"
@@ -94,5 +95,21 @@ async def test_effective_endpoint_defaults_and_runner_revision_participate(tmp_p
                 assert (await resolve_workflow_node(node, graph, {}, NODE_RUNNERS[node.type])).node_hash != original.node_hash
         with patch("app.core.workflow_spec.cache_store", cache), patch.dict("os.environ", {"OPENAI_API_BASE": "https://two.test"}):
             assert (await resolve_workflow_node(node, graph, {}, NODE_RUNNERS[node.type])).node_hash != first.node_hash
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_cached_output_with_wrong_declared_type_is_not_reused(tmp_path: Path) -> None:
+    manager = DatabaseManager(tmp_path / "cache.db")
+    cache = CacheStore(manager)
+    graph = WorkflowGraph(nodes=[{"id": "text", "type": "input.text", "params": {"value": "text"}}])
+    try:
+        with patch("app.core.workflow_spec.cache_store", cache):
+            spec = await resolve_workflow_node(graph.nodes[0], graph, {}, NODE_RUNNERS["input.text"])
+            await cache.set_async(spec.node_hash, {"text": 42})
+            spec = await resolve_workflow_node(graph.nodes[0], graph, {}, NODE_RUNNERS["input.text"])
+            assert spec.cached_output is None
+            assert await cache.get_async(spec.node_hash) is None
     finally:
         await manager.close()

@@ -1,9 +1,11 @@
 """Validate execution contracts before any workflow inference is submitted."""
 
 from collections.abc import Mapping, Sequence
+from typing import Any
 
 from app.nodes.registry import registry
 from app.schemas.workflow import WorkflowGraph, WorkflowNodeInstance
+from app.schemas.node import DataType
 
 
 class ExecutionContractError(ValueError):
@@ -12,6 +14,21 @@ class ExecutionContractError(ValueError):
     def __init__(self, node_id: str, message: str) -> None:
         super().__init__(message)
         self.node_id = node_id
+
+
+def validate_output_contract(node_type: str, output: dict[str, Any]) -> None:
+    """Cached and fresh results obey the same declared port contract."""
+    definition = registry.get(node_type)
+    for port in definition.outputs:
+        if port.id not in output:
+            raise ValueError(f"Runner did not return declared output '{port.id}'")
+        value = output[port.id]
+        if port.type == DataType.STRING and not isinstance(value, str):
+            raise ValueError(f"Output '{port.id}' must be a string")
+        if port.type in {DataType.IMAGE, DataType.AUDIO, DataType.VIDEO} and not (
+            isinstance(value, str) and value or isinstance(value, dict) and isinstance(value.get("asset_id"), str)
+        ):
+            raise ValueError(f"Output '{port.id}' must reference {port.type.value} media")
 
 
 def validate_execution_contract(

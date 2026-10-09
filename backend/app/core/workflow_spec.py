@@ -9,6 +9,7 @@ from typing import Any
 
 from app.core.cache import cache_store, compute_semantic_node_hash
 from app.core.content_identity import hash_file, port_content_identity
+from app.core.execution_contract import validate_output_contract
 from app.nodes.registry import registry
 from app.schemas.workflow import WorkflowGraph, WorkflowNodeInstance
 from app.storage.model_store import model_store
@@ -42,6 +43,7 @@ async def resolve_workflow_node(node: WorkflowNodeInstance, graph: WorkflowGraph
         endpoint = params.get("base_url") or os.environ.get("LLM_BASE_URL", "https://api.deepseek.com")
         if not params.get("base_url") and model.startswith(("gpt-", "o1")):
             endpoint = os.environ.get("OPENAI_API_BASE", "https://api.openai.com")
+            params["api_key"] = params.get("api_key") or os.environ.get("LLM_API_KEY") or os.environ.get("OPENAI_API_KEY", "")
         params["base_url"] = endpoint.rstrip("/")
         identity = {"endpoint": params["base_url"], "model": model, "revision": params.get("model_revision")}
     elif node.type == "image.generate":
@@ -75,4 +77,10 @@ async def resolve_workflow_node(node: WorkflowNodeInstance, graph: WorkflowGraph
     node_hash = compute_semantic_node_hash(node.type, {**params, "__execution_identity": identity}, bindings,
                                            runner_version=runner_version)
     cached = await cache_store.get_async(node_hash)
+    if cached is not None:
+        try:
+            validate_output_contract(node.type, cached)
+        except ValueError:
+            await cache_store.invalidate_async(node_hash)
+            cached = None
     return ResolvedWorkflowNode(params, inputs, node_hash, cached)
