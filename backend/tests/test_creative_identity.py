@@ -30,7 +30,7 @@ async def test_local_model_bytes_endpoint_and_runtime_change_cache_identity(tmp_
     request = CreativeActionRequest(action="txt2img", prompt="fixture", model=model.name,
                                     connection_id=connection.id, seed=42)
     with patch("app.runners.creative_runner.engine_manager.get_engine", return_value=connection), patch(
-        "app.core.workflow_spec.model_store.list_models", return_value=[SimpleNamespace(file_path=str(model))]
+        "app.core.workflow_spec.model_store.scan_all_roots_async", new_callable=AsyncMock, return_value=[SimpleNamespace(file_path=str(model))]
     ):
         plan = resolve_execution_plan(request)
 
