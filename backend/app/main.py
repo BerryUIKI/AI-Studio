@@ -723,7 +723,7 @@ async def update_engine_config(instance_id: str, request: EngineConfigUpdateRequ
 @app.get("/api/v1/runtime/{instance_id}/logs", response_model=EngineLogResponse)
 async def get_engine_logs(instance_id: str, lines: int = 100) -> EngineLogResponse:
     """Fetch recent diagnostic logs for an engine instance."""
-    logs = engine_manager.get_logs(instance_id, lines)
+    logs = await run_blocking(engine_manager.get_logs, instance_id, min(max(lines, 0), 1000))
     return EngineLogResponse(instance_id=instance_id, total_lines=len(logs), logs=logs)
 
 

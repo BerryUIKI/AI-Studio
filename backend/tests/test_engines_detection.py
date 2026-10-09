@@ -101,7 +101,7 @@ def test_bind_and_unbind_external_engine(tmp_path: Path):
     assert logs_resp.status_code == 200
     logs_data = logs_resp.json()
     assert logs_data["instance_id"] == instance_id
-    assert len(logs_data["logs"]) > 0
+    assert logs_data["logs"] == []  # External output is not captured by the app.
 
     # 4. Unbind external engine
     unbind_resp = client.delete(f"/api/v1/engines/unbind/{instance_id}")

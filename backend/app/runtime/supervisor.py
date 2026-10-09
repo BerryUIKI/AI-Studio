@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from app.runtime.process_diagnostics import ProcessDiagnostics
+
 
 
 def get_default_engine_dir() -> Path:
@@ -44,6 +46,7 @@ class ComfySupervisor:
         self.models_dir = self.engine_dir / "models"
         self.pid_file = self.engine_dir / "comfy.pid"
         self._process: Optional[subprocess.Popen] = None
+        self.diagnostics = ProcessDiagnostics(self.engine_dir / "logs" / "comfyui.log")
 
     def ensure_directories(self) -> None:
         """Ensure the isolated engine directory layout exists."""
@@ -240,10 +243,11 @@ berry_shared:
             self._process = subprocess.Popen(
                 cmd,
                 cwd=str(self.comfy_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
+            self.diagnostics.attach(self._process)
             pid = self._process.pid
             self.pid_file.write_text(str(pid), encoding="utf-8")
             return {
@@ -256,6 +260,9 @@ berry_shared:
                 "success": False,
                 "message": f"Failed to launch ComfyUI: {err}",
             }
+
+    def get_recent_logs(self, lines: int = 100) -> List[str]:
+        return self.diagnostics.recent(lines)
 
     def stop(self) -> Dict[str, Any]:
         """Terminate the managed ComfyUI process with process identity verification."""
