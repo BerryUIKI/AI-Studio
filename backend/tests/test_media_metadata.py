@@ -1,7 +1,10 @@
 """Managed media retain their real format even at extensionless content URLs."""
 
 import io
+import base64
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from PIL import Image
@@ -9,6 +12,8 @@ from PIL import Image
 from app.core.media_validator import normalize_source_png
 from app.storage.asset_store import AssetStore
 from app.storage.db import DatabaseManager
+from app.runners.creative_runner import CreativeRunner, resolve_execution_plan
+from app.schemas.creative import CreativeActionRequest
 
 
 def image_bytes(format: str, animated: bool = False) -> bytes:
@@ -54,3 +59,19 @@ def test_cloud_source_conversion_matches_declared_png_mime(format: str) -> None:
     with Image.open(io.BytesIO(normalized)) as image:
         assert image.format == "PNG"
         assert image.size == (8, 6)
+
+
+@pytest.mark.asyncio
+async def test_jpeg_source_dispatched_to_png_adapter_is_actually_png(tmp_path: Path) -> None:
+    source = tmp_path / "source.jpg"
+    source.write_bytes(image_bytes("JPEG"))
+    request = CreativeActionRequest(action="img2img", connection_id="fal_ai", prompt="fixture")
+    with patch("app.runners.creative_runner.credentials_manager.get_key", return_value="fixture-key"), patch(
+        "app.runners.creative_runner._call_fal_ai_action", new=AsyncMock(return_value="https://fixture/output")
+    ) as dispatch, patch("app.runners.creative_runner.asset_store.save_image_from_url", new=AsyncMock(
+        return_value=SimpleNamespace(id="fixture", width=8, height=6)
+    )):
+        await CreativeRunner()._run_cloud(request, resolve_execution_plan(request), source)
+        payload = base64.b64decode(dispatch.call_args.kwargs["image_b64"])
+        with Image.open(io.BytesIO(payload)) as image:
+            assert image.format == "PNG"
