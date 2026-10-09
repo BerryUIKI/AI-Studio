@@ -125,8 +125,8 @@ async def test_creative_runner_cloud_txt2img_adoption():
         assert res.asset_id == "asset_cloud_nebula"
         assert res.image_url == "/api/v1/assets/asset_cloud_nebula/content"
         assert res.provenance is not None
-        assert res.provenance.model == "flux-schnell"
-        assert res.provenance.engine_id == "cloud_fal"
+        assert res.provenance.model == "fal-ai/flux/schnell"
+        assert res.provenance.engine_id == "fal_ai"
 
         # Verify asset adoption was called with remote URL
         mock_save.assert_called_once_with("https://fal.media/files/sample_nebula.png", filename="cloud_output.png")

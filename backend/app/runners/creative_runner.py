@@ -26,6 +26,8 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from app.core.cache import cache_store
+from app.core.creative_identity import creative_execution_identity
+from app.core.content_identity import managed_asset_identity
 from app.core.task_registry import task_registry
 from app.runtime.engine_manager import engine_manager
 from app.schemas.engine import EngineConnection, EngineType, EngineOwnership
@@ -81,6 +83,14 @@ def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
     3. Provenance and UI disclosure
     """
     engine_id = (req.engine_id or "").lower()
+    if req.connection_id:
+        if req.connection_id in {"cloud", "fal_ai", "siliconflow", "openai"}:
+            engine_id = req.connection_id
+        else:
+            selected = engine_manager.get_engine(req.connection_id)
+            if selected is None:
+                raise ValueError(f"Engine connection '{req.connection_id}' not found")
+            engine_id = selected.engine_type.value
     model = (req.model or "").lower()
     action = req.action
 
@@ -194,6 +204,7 @@ def compute_creative_cache_hash(
     input_hash: str = "",
     mask_hash: str = "",
     provider_id: Optional[str] = None,
+    execution_identity: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Compute deterministic semantic cache hash for a creative action (Invariant #5).
 
@@ -205,9 +216,10 @@ def compute_creative_cache_hash(
         "action": req.action.value,
         "prompt": req.prompt.strip(),
         "negative_prompt": req.negative_prompt.strip(),
-        "model": req.model,
+        "model": execution_identity.get("model", req.model) if execution_identity else req.model,
         "connection_id": connection_id,  # Isolate by connection
         "provider_id": effective_provider,
+        "execution_identity": execution_identity or {},
         "runner_version": "0.4.0",  # Explicit grayscale cloud masks and dimension validation
         "width": req.width,
         "height": req.height,
@@ -417,7 +429,10 @@ class CreativeRunner:
         if req.input_image_id:
             rec = await asset_store.get_asset(req.input_image_id)
             if rec:
-                input_hash = rec.content_hash
+                try:
+                    input_hash = await managed_asset_identity(req.input_image_id, asset_store)
+                except ValueError as error:
+                    return CreativeActionResult(success=False, task_id=task_id, error_message=str(error))
                 input_file_path = asset_store.get_absolute_path(rec)
                 source_width = rec.width
                 source_height = rec.height
@@ -443,7 +458,10 @@ class CreativeRunner:
         if req.mask_image_id:
             m_rec = await asset_store.get_asset(req.mask_image_id)
             if m_rec:
-                mask_hash = m_rec.content_hash
+                try:
+                    mask_hash = await managed_asset_identity(req.mask_image_id, asset_store)
+                except ValueError as error:
+                    return CreativeActionResult(success=False, task_id=task_id, error_message=str(error))
                 mask_file_path = asset_store.get_absolute_path(m_rec)
 
         # Validate required source assets for asset-dependent actions
@@ -491,6 +509,9 @@ class CreativeRunner:
             else:
                 # Cloud execution - use provider_id as connection_id
                 connection_id = plan.provider_id
+            identity = await creative_execution_identity(plan, connection)
+            persisted.metadata.update({"connection_id": connection_id, "execution_identity": identity})
+            await task_store.save_task(persisted)
 
         except Exception as e:
             return CreativeActionResult(
@@ -502,8 +523,9 @@ class CreativeRunner:
             )
 
         # Check deterministic cache with connection_id (Issue #127)
-        cache_key = compute_creative_cache_hash(req, connection_id, input_hash, mask_hash, provider_id=plan.provider_id)
-        cached_result = await cache_store.get_async(cache_key)
+        cache_key = compute_creative_cache_hash(req, connection_id, input_hash, mask_hash, provider_id=plan.provider_id, execution_identity=identity)
+        cacheable = not str(identity.get("model_revision", "")).startswith("unverified:")
+        cached_result = await cache_store.get_async(cache_key) if cacheable else None
 
         if cached_result:
             return CreativeActionResult(
@@ -584,8 +606,11 @@ class CreativeRunner:
 
             elapsed_ms = round((time.monotonic() - start_time) * 1000, 2)
 
-            effective_model = action_data.get("effective_model") or plan.target_model
-            model_hash = action_data.get("model_hash") or action_data.get("model_revision")
+            effective_model = action_data.get("effective_model") or identity["model"]
+            verified_revision = identity.get("model_revision")
+            if verified_revision and verified_revision.startswith("unverified:"):
+                verified_revision = None
+            model_hash = action_data.get("model_hash") or action_data.get("model_revision") or verified_revision
 
             provenance = GenerationProvenance(
                 action=req.action,
@@ -595,7 +620,7 @@ class CreativeRunner:
                 model_revision=model_hash,
                 model_hash=model_hash,
                 connection_id=connection_id,  # Issue #127
-                engine_id=req.engine_id,  # Legacy field
+                engine_id=plan.provider_id if plan.engine == "cloud" else plan.engine,
                 provider_id=plan.provider_id,
                 seed=req.seed,
                 steps=req.steps,
@@ -609,6 +634,7 @@ class CreativeRunner:
                 num_frames=req.num_frames if is_video else None,
                 duration_seconds=req.duration_seconds if is_video else None,
                 motion_bucket_id=req.motion_bucket_id if is_video else None,
+                parameters=req.model_dump(),
             )
 
             result = CreativeActionResult(
@@ -636,7 +662,8 @@ class CreativeRunner:
                 "fps": req.fps if is_video else None,
                 "provenance": provenance.model_dump(),
             }
-            await cache_store.set_async(cache_key, cache_payload)
+            if cacheable:
+                await cache_store.set_async(cache_key, cache_payload)
 
             return result
 

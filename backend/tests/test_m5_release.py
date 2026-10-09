@@ -113,7 +113,7 @@ async def test_scenario_3_cloud_only_creation():
         assert res.success is True
         assert res.asset_id == "asset_dalle_crystal"
         assert res.provenance.model == "dall-e-3"
-        assert res.provenance.engine_id == "cloud_openai"
+        assert res.provenance.engine_id == "openai"
 
 
 def test_scenario_4_failure_recovery_actionable_states():
@@ -152,6 +152,7 @@ async def test_scenario_5_persistence_and_caching_across_restarts(mock_engine_ma
     b64_dummy = base64.b64encode(DUMMY_PNG).decode("utf-8")
 
     with (
+        patch("app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="verified-fixture-model")),
         patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post,
         patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get,
     ):
