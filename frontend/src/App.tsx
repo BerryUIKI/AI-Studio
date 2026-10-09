@@ -17,6 +17,8 @@ import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
 import { EngineConfigModal } from './components/launcher/EngineConfigModal';
 import { EngineLogViewer } from './components/launcher/EngineLogViewer';
 import { EngineNotInstalledModal } from './components/launcher/EngineNotInstalledModal';
+import { EngineRemovalDialog } from './components/launcher/EngineRemovalDialog';
+import { openEngineDirectory } from './api/engineLifecycle';
 import { SetupWizardModal } from './components/launcher/SetupWizardModal';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
@@ -52,6 +54,8 @@ export default function App() {
   const [deploymentMirror, setDeploymentMirror] = useState<string | undefined>();
   const [selectedConfigInstance, setSelectedConfigInstance] = useState<EngineInstance | null>(null);
   const [selectedLogInstance, setSelectedLogInstance] = useState<EngineInstance | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<EngineInstance | null>(null);
+  const [engineNotice, setEngineNotice] = useState<string | null>(null);
   const [notInstalledTarget, setNotInstalledTarget] = useState<EngineInstance | null>(null);
   const [notInstalledError, setNotInstalledError] = useState<string | null>(null);
   const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
@@ -103,13 +107,13 @@ export default function App() {
     setShowAddEngineModal(true);
   };
 
-  const handleUninstallEngine = async (instance: EngineInstance) => {
-    if (!instance.is_managed) {
-      await fetch(`/api/v1/engines/unbind/${instance.id}`, { method: 'DELETE' });
-    } else {
-      await fetch(`/api/v1/runtime/${instance.type}/stop`, { method: 'POST' }).catch(() => {});
+  const handleOpenEngineDirectory = async (instanceId: string) => {
+    try {
+      const path = await openEngineDirectory(instanceId);
+      setEngineNotice(`Opened directory: ${path}`);
+    } catch (error) {
+      setEngineNotice(error instanceof Error ? error.message : 'Could not open the engine directory');
     }
-    fetchInstances();
   };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -392,7 +396,8 @@ export default function App() {
                 }}
                 onConfigureEngine={(inst) => setSelectedConfigInstance(inst)}
                 onViewLogs={(inst) => setSelectedLogInstance(inst)}
-                onUninstallEngine={handleUninstallEngine}
+                onUninstallEngine={setRemovalTarget}
+                onOpenDirectory={(instance) => void handleOpenEngineDirectory(instance.id)}
                 onOpenAgent={() => setShowAgentPanel(true)}
                 onDeployEngine={(inst) => handlePromptDeployment(inst)}
                 onLaunchFailed={(inst, err) => handlePromptDeployment(inst, err)}
@@ -432,7 +437,7 @@ export default function App() {
                     )}
                     onStartEngine={toggleRuntime}
                     onDeployEngine={() => handleStartDeployment('comfyui')}
-                    onOpenDirectory={() => setShowManagerModal(true)}
+                    onOpenDirectory={() => void handleOpenEngineDirectory(comfyInst?.id ?? 'comfyui-managed')}
                   />
                 </ErrorBoundary>
               );
@@ -450,7 +455,7 @@ export default function App() {
                     isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
                     onStartEngine={toggleRuntime}
                     onDeployEngine={() => handleStartDeployment('webui')}
-                    onOpenDirectory={() => setShowManagerModal(true)}
+                    onOpenDirectory={() => void handleOpenEngineDirectory(webuiInst?.id ?? 'webui-managed')}
                   />
                 </ErrorBoundary>
               );
@@ -477,6 +482,12 @@ export default function App() {
       </div>
 
       {/* Contextual Action Modals */}
+      {engineNotice && <div role="status" className="fixed bottom-5 left-20 z-50 max-w-lg rounded-xl border border-slate-600 bg-slate-900 p-4 text-sm text-slate-100 shadow-xl">
+        <p className="break-all">{engineNotice}</p>
+        <button onClick={() => setEngineNotice(null)} className="mt-2 rounded bg-slate-700 px-3 py-1">Dismiss</button>
+      </div>}
+      {removalTarget && <EngineRemovalDialog key={removalTarget.id} instance={instances.find((instance) => instance.id === removalTarget.id) ?? removalTarget}
+        onClose={() => setRemovalTarget(null)} onCompleted={() => { void fetchInstances(); refreshStatus(); }} />}
       <InpaintModal />
       <UpscaleModal />
       <VideoModal />
