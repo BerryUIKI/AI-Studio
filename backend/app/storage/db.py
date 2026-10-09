@@ -128,7 +128,7 @@ class DatabaseManager:
             """
         )
         # Migrate existing schema if needed
-        for table, column in (("runs", "request_json"), ("tasks", "metadata_json")):
+        for table, column in (("runs", "request_json"), ("tasks", "metadata_json"), ("assets", "media_json")):
             async with conn.execute(f"PRAGMA table_info({table});") as cursor:
                 columns = [row["name"] for row in await cursor.fetchall()]
             if column not in columns:

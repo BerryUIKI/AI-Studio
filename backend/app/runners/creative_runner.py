@@ -70,6 +70,8 @@ from app.schemas.creative import (
 from app.storage.asset_store import asset_store
 from app.storage.task_store import execution_task, task_store
 from app.schemas.task import RunRecord, TaskRecord
+from app.schemas.project import AssetRecord
+from app.core.media_validator import normalize_source_png
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +531,7 @@ class CreativeRunner:
 
         if cached_result:
             return CreativeActionResult(
+                **{key: cached_result[key] for key in ("mime_type", "extension", "is_animated", "codec") if key in cached_result},
                 success=True,
                 task_id=task_id,
                 asset_id=cached_result.get("asset_id"),
@@ -593,6 +596,7 @@ class CreativeRunner:
 
             # Derive result dimensions from decoded output file if available
             asset_record = await asset_store.get_asset(asset_id)
+            media_metadata = {key: getattr(asset_record, key) for key in ("mime_type", "extension", "is_animated", "codec")} if isinstance(asset_record, AssetRecord) else {}
             if asset_record:
                 rec_w = getattr(asset_record, "width", None)
                 rec_h = getattr(asset_record, "height", None)
@@ -638,6 +642,7 @@ class CreativeRunner:
             )
 
             result = CreativeActionResult(
+                **media_metadata,
                 success=True,
                 task_id=task_id,
                 asset_id=asset_id,
@@ -653,6 +658,7 @@ class CreativeRunner:
 
             # Store in cache
             cache_payload = {
+                **media_metadata,
                 "asset_id": asset_id,
                 "image_url": image_url if not is_video else None,
                 "video_url": image_url if is_video else None,
@@ -851,11 +857,12 @@ class CreativeRunner:
         mask_bytes: Optional[bytes] = None
 
         if input_file and input_file.is_file():
-            image_bytes = input_file.read_bytes()
+            image_bytes = await asyncio.to_thread(input_file.read_bytes)
+            image_bytes = await asyncio.to_thread(normalize_source_png, image_bytes)
             image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
         if mask_file and mask_file.is_file():
-            mask_bytes = mask_file.read_bytes()
+            mask_bytes = await asyncio.to_thread(mask_file.read_bytes)
             mask_b64 = base64.b64encode(mask_bytes).decode("utf-8")
 
         out_w = req.width

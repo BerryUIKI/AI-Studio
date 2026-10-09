@@ -74,6 +74,10 @@ class CreativeExecutionPlan(BaseModel):
 
 
 class CreativeActionResult(BaseModel):
+    mime_type: Optional[str] = None
+    extension: Optional[str] = None
+    is_animated: bool = False
+    codec: Optional[str] = None
     success: bool
     task_id: str
     asset_id: Optional[str] = None

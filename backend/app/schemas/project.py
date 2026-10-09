@@ -38,6 +38,10 @@ class Project(ProjectBase):
 
 
 class AssetRecord(BaseModel):
+    mime_type: Optional[str] = None
+    extension: Optional[str] = None
+    is_animated: bool = False
+    codec: Optional[str] = None
     id: str = Field(..., description="Unique asset identifier")
     project_id: Optional[str] = Field(default=None, description="Associated project ID if any")
     filename: str = Field(..., description="Original filename")

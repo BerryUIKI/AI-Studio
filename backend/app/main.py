@@ -1190,10 +1190,11 @@ async def get_asset_content(asset_id: str) -> FileResponse:
         ".jpg": "image/jpeg",
         ".jpeg": "image/jpeg",
         ".webp": "image/webp",
+        ".gif": "image/gif",
         ".mp4": "video/mp4",
         ".webm": "video/webm",
     }
-    content_type = safe_types.get(ext)
+    content_type = rec.mime_type or safe_types.get(ext)
     disposition = "inline"
     if not content_type:
         content_type = "application/octet-stream"
@@ -1202,7 +1203,7 @@ async def get_asset_content(asset_id: str) -> FileResponse:
     return FileResponse(
         abs_path,
         media_type=content_type,
-        filename=sanitize_filename(rec.filename),
+        filename=sanitize_filename(f"{Path(rec.filename).stem}{rec.extension}" if rec.extension else rec.filename),
         content_disposition_type=disposition,
         headers=MEDIA_SECURITY_HEADERS,
     )
