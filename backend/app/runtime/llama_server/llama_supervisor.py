@@ -23,6 +23,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 from app.runtime.supervisor import get_default_engine_dir
+from app.runtime.process_diagnostics import ProcessDiagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class LlamaServerSupervisor:
         self.models_dir = self.engine_dir / "models" / "llm"
         self.pid_file = self.llama_dir / "llama_server.pid"
         self._process: Optional[subprocess.Popen] = None
+        self.diagnostics = ProcessDiagnostics(self.engine_dir / "logs" / "llama-server.log")
         self._active_model_path: Optional[Path] = None
 
     def get_binary_path(self) -> Optional[Path]:
@@ -288,10 +290,11 @@ class LlamaServerSupervisor:
         try:
             self._process = subprocess.Popen(
                 cmd,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
+            self.diagnostics.attach(self._process)
             pid = self._process.pid
             self.pid_file.write_text(str(pid), encoding="utf-8")
             return {
@@ -305,6 +308,9 @@ class LlamaServerSupervisor:
                 "success": False,
                 "message": f"Failed to start llama-server: {err}",
             }
+
+    def get_recent_logs(self, lines: int = 100) -> List[str]:
+        return self.diagnostics.recent(lines)
 
     def stop(self) -> Dict[str, Any]:
         """Terminate managed llama-server process."""
