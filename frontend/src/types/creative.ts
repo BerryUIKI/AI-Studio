@@ -5,6 +5,7 @@ export type CreativeActionType = 'txt2img' | 'img2img' | 'inpaint' | 'upscale' |
 export type CanvasNodeData = CustomNodeData | ImageCardData | WorkspaceFrameData;
 
 export interface GenerationProvenance {
+  parameters?: Partial<CreativeActionRequest>;
   action: CreativeActionType;
   prompt: string;
   negative_prompt?: string;
