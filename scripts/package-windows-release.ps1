@@ -4,13 +4,19 @@
 param (
     [string]$Version = "0.1.0",
     [string]$OutputDir = "$PSScriptRoot\..\dist",
+    [string]$PythonRuntimeDir = "$PSScriptRoot\..\runtime\python-standalone",
     [switch]$SkipPythonBuild = $false
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$') { throw "Invalid package version." }
+$OutputDir = [IO.Path]::GetFullPath($OutputDir)
 $DistName = "Berry-AI-Studio-v$Version-windows-x64"
 $TargetDir = Join-Path $OutputDir $DistName
+if (-not $TargetDir.StartsWith("$OutputDir\", [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Package staging must remain inside the explicitly selected output directory."
+}
 $ZipFile = Join-Path $OutputDir "$DistName.zip"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -28,11 +34,11 @@ function Assert-FileExists {
 
 # Step 0: Prepare standalone Python runtime (if not already done)
 Write-Host "`n[0/6] Preparing standalone Python runtime..." -ForegroundColor Yellow
-$StandalonePython = "$RepoRoot\runtime\python-standalone"
+$StandalonePython = [IO.Path]::GetFullPath($PythonRuntimeDir)
 if ($SkipPythonBuild -and (Test-Path "$StandalonePython\python.exe")) {
     Write-Host "  -> Skipping Python build (using existing runtime at $StandalonePython)" -ForegroundColor Gray
 } else {
-    & "$PSScriptRoot\prepare-standalone-python.ps1"
+    & "$PSScriptRoot\prepare-standalone-python.ps1" -TargetDir $StandalonePython
     if ($LASTEXITCODE -ne 0) {
         throw "Standalone Python preparation failed"
     }
@@ -40,10 +46,7 @@ if ($SkipPythonBuild -and (Test-Path "$StandalonePython\python.exe")) {
 
 # Verify standalone Python exists and is complete
 Assert-FileExists "$StandalonePython\python.exe" "Standalone Python executable"
-$PyTest = & "$StandalonePython\python.exe" -c "import fastapi; print('OK')" 2>&1
-if ($LASTEXITCODE -ne 0 -or $PyTest -notmatch "OK") {
-    throw "PACKAGING FAILED: Standalone Python runtime is incomplete or missing dependencies"
-}
+& "$PSScriptRoot\test-standalone-python.ps1" -PythonDir $StandalonePython
 Write-Host "  -> Standalone Python runtime verified" -ForegroundColor Green
 
 # Step 1: Build Frontend assets FIRST (required before Tauri can embed them)
@@ -99,10 +102,10 @@ Write-Host "  -> Rust launcher built successfully" -ForegroundColor Green
 # Step 4: Clean and prepare staging directory
 Write-Host "`n[4/6] Staging distribution directory at: $TargetDir" -ForegroundColor Yellow
 if (Test-Path $TargetDir) {
-    Remove-Item -Recurse -Force $TargetDir
+    Remove-Item -LiteralPath $TargetDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
-New-Item -ItemType Directory -Path "$TargetDir\runtime" -Force | Out-Null
+New-Item -ItemType Directory -Path "$TargetDir\runtime\python" -Force | Out-Null
 New-Item -ItemType Directory -Path "$TargetDir\backend" -Force | Out-Null
 New-Item -ItemType Directory -Path "$TargetDir\frontend\dist" -Force | Out-Null
 Write-Host "  -> Staging directories created" -ForegroundColor Green
@@ -137,22 +140,22 @@ Copy-Item -Recurse "$StandalonePython\*" -Destination "$TargetDir\runtime\python
 Assert-FileExists "$TargetDir\runtime\python\python.exe" "Bundled Python executable"
 
 # Verify bundled Python is self-contained (no external base_prefix references)
-$BundledPyTest = & "$TargetDir\runtime\python\python.exe" -c "import sys, fastapi; print(f'Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro} OK')" 2>&1
-if ($LASTEXITCODE -ne 0) {
-    throw "PACKAGING FAILED: Bundled Python runtime cannot execute independently"
-}
-Write-Host "  -> $BundledPyTest" -ForegroundColor Green
+& "$PSScriptRoot\test-standalone-python.ps1" -PythonDir "$TargetDir\runtime\python" -BackendDir "$TargetDir\backend"
 
-# Bundle portable Git (PortableGit-2.47.1-64-bit.7z.exe self-extractor)
+# Bundle pinned portable Git, verified before executing the self-extractor.
 # This enables engine installation without requiring system Git
-$PortableGitUrl = "https://github.com/git-for-windows/git/releases/download/v2.47.1.windows.1/PortableGit-2.47.1-64-bit.7z.exe"
+$PortableGitUrl = "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/PortableGit-2.56.0.2-64-bit.7z.exe"
+$PortableGitSha256 = "075e158ef8e1f0ab80b347e245405d3eca735c2dc88fd8e032e137d0ca61f61b"
 $PortableGitPath = "$TargetDir\runtime\git"
-$PortableGitExe = Join-Path $env:TEMP "PortableGit.exe"
+$PortableGitExe = Join-Path $TargetDir "PortableGit.exe"
 
 Write-Host "  -> Downloading portable Git..." -ForegroundColor Yellow
 try {
     $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $PortableGitUrl -OutFile $PortableGitExe -UseBasicParsing
+    Invoke-WebRequest -Uri $PortableGitUrl -OutFile $PortableGitExe -UseBasicParsing -TimeoutSec 180
+    if ((Get-FileHash -LiteralPath $PortableGitExe -Algorithm SHA256).Hash -ne $PortableGitSha256) {
+        throw "Portable Git checksum mismatch."
+    }
 
     # Extract portable Git (self-extracting 7z)
     New-Item -ItemType Directory -Path $PortableGitPath -Force | Out-Null
@@ -162,19 +165,19 @@ try {
     $7z = Get-Command 7z -ErrorAction SilentlyContinue
     if ($7z) {
         & 7z x $PortableGitExe "-o$PortableGitPath" -y | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Portable Git extraction failed." }
     } else {
-        Start-Process -FilePath $PortableGitExe -ArgumentList "-o`"$PortableGitPath`"","-y" -Wait -NoNewWindow
+        $Extractor = Start-Process -FilePath $PortableGitExe -ArgumentList "-o`"$PortableGitPath`"","-y" -Wait -WindowStyle Hidden -PassThru
+        if ($Extractor.ExitCode -ne 0) { throw "Portable Git extraction failed: $($Extractor.ExitCode)" }
     }
 
     Remove-Item $PortableGitExe -Force
 
-    if (Test-Path "$PortableGitPath\cmd\git.exe") {
-        Write-Host "  -> Portable Git bundled successfully" -ForegroundColor Green
-    } else {
-        Write-Warning "Portable Git extraction may have failed; engine installation might require system Git"
-    }
+    Assert-FileExists "$PortableGitPath\cmd\git.exe" "Portable Git executable"
+    & "$PortableGitPath\cmd\git.exe" --version
+    if ($LASTEXITCODE -ne 0) { throw "Bundled Git cannot execute." }
 } catch {
-    Write-Warning "Failed to bundle portable Git: $_. Engine installation will require system Git."
+    throw "PACKAGING FAILED: Portable Git is required for isolated engine installation: $_"
 }
 
 # Copy embedded llama-server runtime if present
@@ -253,6 +256,7 @@ $CriticalFiles = @(
     "$TargetDir\Berry.bat",
     "$TargetDir\README.txt",
     "$TargetDir\runtime\python\python.exe",
+    "$TargetDir\runtime\git\cmd\git.exe",
     "$TargetDir\frontend\dist\index.html",
     "$TargetDir\backend\app\main.py"
 )
@@ -263,16 +267,10 @@ foreach ($file in $CriticalFiles) {
     }
 }
 
-# Verify no developer machine paths leaked into the package
+# A copied host venv is invalid; do not hide it by deleting its configuration.
 $PyvenvCfg = Get-ChildItem -Path "$TargetDir\runtime\python" -Filter "pyvenv.cfg" -ErrorAction SilentlyContinue
 if ($PyvenvCfg) {
-    $PyvenvContent = Get-Content $PyvenvCfg.FullName -Raw
-    if ($PyvenvContent -match "home\s*=\s*[A-Za-z]:\\") {
-        Write-Warning "pyvenv.cfg contains absolute path reference. This may cause issues on other machines."
-        # Remove pyvenv.cfg for embeddable package (it's not needed)
-        Remove-Item $PyvenvCfg.FullName -Force
-        Write-Host "  -> Removed pyvenv.cfg to ensure portability" -ForegroundColor Yellow
-    }
+    throw "PACKAGING FAILED: runtime/python must be a full standalone interpreter, not a venv."
 }
 
 # Report validation results

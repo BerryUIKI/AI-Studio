@@ -31,6 +31,10 @@ jobs:
           cd backend
           pytest -v
 
+      - name: Verify standalone Python relocation and engine bootstrap
+        shell: pwsh
+        run: ./scripts/prepare-standalone-python.ps1 -TargetDir "$pwd/.review-runtime/ci-python"
+
   frontend-build:
     name: Frontend Build & Typecheck
     runs-on: ubuntu-latest
