@@ -12,7 +12,7 @@ const focusable = (root: HTMLElement) => Array.from(root.querySelectorAll<HTMLEl
   'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
 )).filter((element) => !element.closest('[hidden], [inert]') && getComputedStyle(element).display !== 'none');
 
-export function Dialog({ title, onClose, children, ...attributes }: DialogProps) {
+export function Dialog({ title, onClose, children, role = 'dialog', ...attributes }: DialogProps) {
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -54,6 +54,6 @@ export function Dialog({ title, onClose, children, ...attributes }: DialogProps)
     };
   }, []);
 
-  const content = <div {...attributes} ref={ref} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1}>{children}</div>;
+  const content = <div {...attributes} ref={ref} role={role} aria-modal="true" aria-label={title} tabIndex={-1}>{children}</div>;
   return typeof document === 'undefined' ? content : createPortal(content, document.body);
 }
