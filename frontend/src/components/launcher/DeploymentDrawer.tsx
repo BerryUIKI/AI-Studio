@@ -1,3 +1,4 @@
+import { ProgressBar } from '../ui/ProgressBar';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Terminal, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useEngineStore } from '../../stores/useEngineStore';
@@ -16,7 +17,6 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
   onClose,
 }) => {
   const [phase, setPhase] = useState<string>('checking');
-  const [progressPercent, setProgressPercent] = useState<number>(10);
   const [logs, setLogs] = useState<string[]>([]);
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,8 +29,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
 
     // Reset state
     setPhase('checking');
-    setProgressPercent(10);
-    setLogs([`[INFO] Starting deployment of sandboxed ${engineType}...`]);
+    setLogs([]);
     setIsCompleted(false);
     setError(null);
 
@@ -52,28 +51,15 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
           if (manifest.last_log_line) {
             setLogs((prev) => {
               if (prev[prev.length - 1] !== manifest.last_log_line) {
-                return [...prev, manifest.last_log_line];
+                return [...prev.slice(-199), manifest.last_log_line];
               }
               return prev;
             });
           }
 
-          // Calculate percentage based on phase
+          // Observed phase changes do not imply a measured percentage.
           switch (manifest.phase) {
-            case 'checking':
-              setProgressPercent(15);
-              break;
-            case 'creating_venv':
-              setProgressPercent(35);
-              break;
-            case 'downloading':
-              setProgressPercent(60);
-              break;
-            case 'installing_deps':
-              setProgressPercent(85);
-              break;
             case 'completed':
-              setProgressPercent(100);
               setIsCompleted(true);
               clearInterval(pollInterval);
               fetchInstances();
@@ -128,17 +114,13 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
           <span className="font-semibold text-slate-300 capitalize">
             Phase: {phase.replace('_', ' ')}
           </span>
-          <span className="font-mono text-indigo-400 font-bold">{progressPercent}%</span>
+          <span className="font-mono text-indigo-400 font-bold">{isCompleted ? 'Complete' : 'Waiting for observed progress'}</span>
         </div>
 
         {/* Progress Bar */}
         <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-          <div
-            className={`h-full transition-all duration-300 ${
-              error ? 'bg-red-500' : isCompleted ? 'bg-emerald-500' : 'bg-indigo-600'
-            }`}
-            style={{ width: `${progressPercent}%` }}
-          />
+          <ProgressBar label="Engine installation" value={isCompleted ? 100 : undefined}
+            className={error ? 'text-red-500' : isCompleted ? 'text-emerald-500' : 'text-indigo-500'} />
         </div>
 
         {error && (
