@@ -84,6 +84,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Verify release evidence source boundary
+        run: node --test scripts/tests/release-evidence-source.test.cjs
+
       - name: Build frontend
         run: pnpm build
 
