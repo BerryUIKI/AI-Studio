@@ -116,3 +116,14 @@ async def test_escaped_credentials_are_rejected_before_query_dispatch() -> None:
             {"params": {"token": 'fixture-密钥"quote'}}
         )
     client.stream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_created_response_is_a_successful_broker_submission() -> None:
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(201, json={"id": "created-fixture"})
+        )
+    ) as client:
+        response = await ProviderBroker(spec(), "fixture-auth-secret", client=client).request({})
+    assert response == {"id": "created-fixture"}

@@ -160,7 +160,7 @@ class ProviderBroker:
                 params=operation.get("params"),
                 follow_redirects=False,
             ) as response:
-                if response.status_code != 200:
+                if not 200 <= response.status_code < 300:
                     raise AdapterError(
                         f"Custom platform request failed (HTTP {response.status_code}); no automatic retry was sent"
                     )
