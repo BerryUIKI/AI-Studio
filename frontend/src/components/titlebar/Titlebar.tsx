@@ -198,10 +198,10 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           <Sparkles className="w-3.5 h-3.5" />
         </div>
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-xs tracking-wide text-slate-100">
+          <span className="hidden md:inline font-semibold text-xs tracking-wide text-slate-100">
             Berry AI Studio
           </span>
-          <span className="text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+          <span className="hidden xl:inline text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
             v0.1.0
           </span>
         </div>
@@ -278,23 +278,29 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         {/* Cloud BYOK Settings Button */}
         <button
           onClick={onOpenCloud}
+          aria-label="Cloud BYOK"
           title="Configure BYOK Cloud Providers (OpenAI, Fal.ai, SiliconFlow)"
           className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
         >
           <Cloud className="w-3 h-3 text-sky-400" />
-          <span>Cloud BYOK</span>
+          <span className="hidden xl:inline">Cloud BYOK</span>
         </button>
 
         {/* Environment Manager Button */}
         <button
           onClick={onOpenManager}
+          aria-label="Environment"
           title="Open Environment Manager (Engines, Models, Updates, Core)"
           className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
         >
           <Server className="w-3 h-3 text-purple-400" />
-          <span>Environment</span>
+          <span className="hidden xl:inline">Environment</span>
         </button>
 
+        <details className="relative" data-no-drag>
+          <summary aria-label="Advanced tools" className="cursor-pointer rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs">Advanced</summary>
+          <div className="absolute right-0 top-full mt-2 flex w-56 flex-col gap-2 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl z-50">
+            <p className="text-xs text-amber-200">Experimental workflows and Agent</p>
         {/* Toggle Node Palette for Power Users */}
         <button
           onClick={onToggleNodePalette}
@@ -321,6 +327,26 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           </button>
         )}
 
+        {/* AI Agent Sidebar Toggle Button (Persistent Right Sidebar Anchor) */}
+        <div className="flex items-center ml-1 border-l border-white/[0.06] pl-1.5" data-no-drag>
+          <button
+            onClick={onToggleAgent}
+            title="Toggle AI Creative Agent (Natural language workflows & Comfy assistant)"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 shadow-sm ${
+              showAgentPanel
+                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-indigo-500/20 ring-1 ring-indigo-500/30'
+                : 'bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 hover:text-white border-slate-700/60'
+            }`}
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${showAgentPanel ? 'text-amber-400 animate-spin-slow' : 'text-amber-400'}`} />
+            <span>Agent</span>
+            <PanelRight className={`w-3 h-3 ml-0.5 transition-transform duration-150 ${showAgentPanel ? 'text-indigo-300 rotate-180' : 'text-slate-400'}`} />
+          </button>
+        </div>
+
+          </div>
+        </details>
+
         {/* Clear Canvas */}
         <button
           onClick={onClearCanvas}
@@ -346,7 +372,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
                 backendOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-rose-400 animate-pulse'
               }`}
             />
-            <span className="text-slate-300 font-medium">Backend</span>
+            <span className="hidden lg:inline text-slate-300 font-medium">Backend</span>
           </div>
 
           {/* ComfyUI Indicator */}
@@ -355,7 +381,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             title={`ComfyUI Engine: ${comfyStatus?.online ? 'Online' : 'Standby'}`}
           >
             <Cpu className={`w-3 h-3 ${comfyStatus?.online ? 'text-emerald-400' : 'text-slate-400'}`} />
-            <span className="text-slate-300">
+            <span className="hidden lg:inline text-slate-300">
               {comfyStatus?.online ? 'Engine Active' : 'Standby'}
             </span>
             {comfyStatus?.online && (
@@ -382,23 +408,6 @@ export const Titlebar: React.FC<TitlebarProps> = ({
 
           {/* Real-Time GPU Status & Telemetry (LH-M4) */}
           <GpuStatusIndicator />
-        </div>
-
-        {/* AI Agent Sidebar Toggle Button (Persistent Right Sidebar Anchor) */}
-        <div className="flex items-center ml-1 border-l border-white/[0.06] pl-1.5" data-no-drag>
-          <button
-            onClick={onToggleAgent}
-            title="Toggle AI Creative Agent (Natural language workflows & Comfy assistant)"
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 shadow-sm ${
-              showAgentPanel
-                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-indigo-500/20 ring-1 ring-indigo-500/30'
-                : 'bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 hover:text-white border-slate-700/60'
-            }`}
-          >
-            <Sparkles className={`w-3.5 h-3.5 ${showAgentPanel ? 'text-amber-400 animate-spin-slow' : 'text-amber-400'}`} />
-            <span>Agent</span>
-            <PanelRight className={`w-3 h-3 ml-0.5 transition-transform duration-150 ${showAgentPanel ? 'text-indigo-300 rotate-180' : 'text-slate-400'}`} />
-          </button>
         </div>
 
         {/* Windows / Desktop Native Window Control Buttons */}
@@ -435,11 +444,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-        ) : (
-          <div className="px-2 py-0.5 rounded bg-slate-800/40 text-[10px] text-slate-500 font-mono">
-            Web Mode
-          </div>
-        )}
+        ) : null}
       </div>
     </header>
   );

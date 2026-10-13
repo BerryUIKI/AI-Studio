@@ -13,9 +13,9 @@ interface NavigationState {
 }
 
 export const useNavigationStore = create<NavigationState>((set, get) => ({
-  activeView: 'launcher',
+  activeView: 'canvas',
   isRailCollapsed: true,
-  viewHistory: ['launcher'],
+  viewHistory: ['canvas'],
 
   setActiveView: (view: ViewType) => {
     const current = get().activeView;

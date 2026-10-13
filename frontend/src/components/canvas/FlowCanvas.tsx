@@ -20,6 +20,8 @@ import { useCreativeStore } from '../../stores/useCreativeStore';
 import { NodeDefinition } from '../../types/workflow';
 import { ImageCardData } from '../../types/creative';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { useShallow } from 'zustand/react/shallow';
+import { acceptsCanvasShortcut } from '../../utils/canvasShortcuts';
 
 const nodeTypes: NodeTypes = {
   workflowNode: WorkflowNode,
@@ -49,9 +51,14 @@ function FlowCanvasInner() {
     undo,
     redo,
     setSelectedNodeId,
-  } = useCanvasStore();
+  } = useCanvasStore(useShallow((state) => ({
+    nodes: state.nodes, edges: state.edges, viewport: state.viewport, selectedNodeId: state.selectedNodeId,
+    setViewport: state.setViewport, onNodesChange: state.onNodesChange, onEdgesChange: state.onEdgesChange,
+    onConnect: state.onConnect, addNode: state.addNode, removeNode: state.removeNode,
+    duplicateNode: state.duplicateNode, undo: state.undo, redo: state.redo, setSelectedNodeId: state.setSelectedNodeId,
+  })));
 
-  const { uploadCanvasImage } = useCreativeStore();
+  const uploadCanvasImage = useCreativeStore((state) => state.uploadCanvasImage);
   const { screenToFlowPosition, setViewport } = useReactFlow();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
 
@@ -65,6 +72,7 @@ function FlowCanvasInner() {
   // Global Ctrl+S shortcut to save project
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!acceptsCanvasShortcut(e.target)) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         useProjectStore.getState().saveProject();
@@ -249,8 +257,7 @@ function FlowCanvasInner() {
   // 4. Native Clipboard Paste (Ctrl+V) & Power-User Shortcuts (Issue #36 & Issue #38)
   useEffect(() => {
     const handlePaste = (e: ClipboardEvent) => {
-      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (targetTag === 'input' || targetTag === 'textarea') return;
+      if (!acceptsCanvasShortcut(e.target)) return;
 
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -270,8 +277,7 @@ function FlowCanvasInner() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (targetTag === 'input' || targetTag === 'textarea') return;
+      if (!acceptsCanvasShortcut(e.target)) return;
 
       // Delete / Backspace: Remove selected node
       if (e.key === 'Delete' || e.key === 'Backspace') {

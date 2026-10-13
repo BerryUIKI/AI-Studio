@@ -55,8 +55,6 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
 
   useEffect(() => {
     fetchInstances();
-    const interval = setInterval(fetchInstances, 6000);
-    return () => clearInterval(interval);
   }, [fetchInstances]);
 
   const filteredInstances = instances.filter((inst) => {

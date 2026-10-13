@@ -61,7 +61,7 @@ interface CanvasState {
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
   addNode: (definition: NodeDefinition, position?: { x: number; y: number }) => void;
-  updateNodeData: (nodeId: string, data: Record<string, any>) => void;
+  updateNodeData: (nodeId: string, data: Record<string, unknown>) => void;
   updateNodeParam: (nodeId: string, paramName: string, value: NodeParamValue) => void;
   setNodeStatus: (nodeId: string, status: ExecutionStatus) => void;
   setNodeOutput: (nodeId: string, output: Record<string, NodeOutputValue>) => void;
@@ -186,7 +186,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (!target) return;
 
     const clonedId = `${target.type || 'node'}_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const clonedNode: Node<any> = {
+    const clonedNode: Node<CanvasNodeData> = {
       ...structuredClone(target),
       id: clonedId,
       position: {
@@ -253,9 +253,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     let currentYByDepth: Record<number, number> = { 0: rootY };
 
-    const layoutSubtree = (node: Node<any>, depth: number) => {
+    const layoutSubtree = (node: Node<CanvasNodeData>, depth: number) => {
       const assetId = node.data?.assetId;
-      if (!assetId) return;
+      if (typeof assetId !== 'string' || !assetId) return;
       const childrenIds = parentToChildren.get(assetId) || [];
       if (childrenIds.length === 0) return;
 
@@ -293,7 +293,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const pos = position || { x: 80, y: 80 };
     const dimensions = size || { width: 800, height: 500 };
 
-    const newFrame: Node<any> = {
+    const newFrame: Node<CanvasNodeData> = {
       id: frameId,
       type: 'workspaceFrame',
       position: pos,
@@ -365,9 +365,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   addNode: (definition, position) => {
     get().pushSnapshot();
-    const defaultParams: Record<string, any> = {};
+    const defaultParams: Record<string, NodeParamValue> = {};
     definition.parameters.forEach((param) => {
-      defaultParams[param.name] = param.default;
+      if (param.default !== undefined) defaultParams[param.name] = param.default;
     });
 
     const newNodeId = `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;

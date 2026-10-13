@@ -25,6 +25,10 @@ export interface HubModel {
   sha256?: string | null;
   is_installed: boolean;
   installed_path?: string | null;
+  installed_model_id?: string | null;
+  is_ready?: boolean;
+  engine_compatibility?: string[];
+  guidance?: string | null;
 }
 
 export type CompatibilityTier = 'optimal' | 'playable_offload' | 'heavy_paging' | 'unsupported';

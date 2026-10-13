@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { Titlebar, type ComfyStatus, type RuntimeStatus } from './components/titlebar/Titlebar';
 import { NodePalette } from './components/canvas/NodePalette';
 import { FlowCanvas } from './components/canvas/FlowCanvas';
@@ -6,12 +7,10 @@ import { CreationDock } from './components/canvas/CreationDock';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { VideoModal } from './components/canvas/VideoModal';
-import { AgentPanel } from './components/agent/AgentPanel';
 import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
 import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
 import { GlobalNavRail } from './components/navigation/GlobalNavRail';
 import { ViewContainer } from './components/navigation/ViewContainer';
-import { LauncherHub } from './components/launcher/LauncherHub';
 import { AddEngineModal } from './components/launcher/AddEngineModal';
 import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
 import { EngineConfigModal } from './components/launcher/EngineConfigModal';
@@ -21,11 +20,8 @@ import { EngineRemovalDialog } from './components/launcher/EngineRemovalDialog';
 import { openEngineDirectory } from './api/engineLifecycle';
 import { SetupWizardModal } from './components/launcher/SetupWizardModal';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
-import { EmbeddedEngineView } from './components/engine/EmbeddedEngineView';
-import { ModelHubView } from './components/hub/ModelHubView';
 import { FloatingDownloadWidget } from './components/hub/FloatingDownloadWidget';
 import { DownloadManagerDrawer } from './components/hub/DownloadManagerDrawer';
-import { SettingsView } from './components/settings/SettingsView';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { ProjectManagerModal } from './components/project/ProjectManagerModal';
 import { TaskHistory } from './components/project/TaskHistory';
@@ -37,6 +33,12 @@ import { useNavigationStore } from './stores/useNavigationStore';
 import { useProjectStore } from './stores/useProjectStore';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+
+const AgentPanel = lazy(() => import('./components/agent/AgentPanel').then((module) => ({ default: module.AgentPanel })));
+const LauncherHub = lazy(() => import('./components/launcher/LauncherHub').then((module) => ({ default: module.LauncherHub })));
+const EmbeddedEngineView = lazy(() => import('./components/engine/EmbeddedEngineView').then((module) => ({ default: module.EmbeddedEngineView })));
+const ModelHubView = lazy(() => import('./components/hub/ModelHubView').then((module) => ({ default: module.ModelHubView })));
+const SettingsView = lazy(() => import('./components/settings/SettingsView').then((module) => ({ default: module.SettingsView })));
 
 export default function App() {
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
@@ -62,10 +64,16 @@ export default function App() {
   const [showSetupWizard, setShowSetupWizard] = useState<boolean>(false);
   const [showProjectModal, setShowProjectModal] = useState<boolean>(false);
 
-  const { instances, fetchInstances, saveEngineConfig } = useEngineStore();
-  const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore();
-  const { setActiveView } = useNavigationStore();
-  const { initProject, flushPendingSave } = useProjectStore();
+  const { instances, fetchInstances, saveEngineConfig } = useEngineStore(useShallow((state) => ({
+    instances: state.instances, fetchInstances: state.fetchInstances, saveEngineConfig: state.saveEngineConfig,
+  })));
+  const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore(useShallow((state) => ({
+    exitPolicy: state.exitPolicy, setExitPolicy: state.setExitPolicy, defaultLandingView: state.defaultLandingView,
+  })));
+  const setActiveView = useNavigationStore((state) => state.setActiveView);
+  const { initProject, flushPendingSave } = useProjectStore(useShallow((state) => ({
+    initProject: state.initProject, flushPendingSave: state.flushPendingSave,
+  })));
 
   // Initialize active/default durable project on startup
   useEffect(() => {
@@ -85,9 +93,7 @@ export default function App() {
 
   // Apply default landing view on initial mount
   useEffect(() => {
-    if (defaultLandingView === 'canvas') {
-      setActiveView('canvas');
-    }
+    setActiveView(defaultLandingView);
   }, [defaultLandingView, setActiveView]);
 
   const handleStartDeployment = (type: 'comfyui' | 'webui', mirrorPreset?: string) => {
@@ -117,10 +123,13 @@ export default function App() {
   };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const { nodes, clearCanvas, runWorkflow, isExecuting } = useCanvasStore();
-  const { uploadCanvasImage } = useCreativeStore();
+  const { nodeCount, clearCanvas, runWorkflow, isExecuting } = useCanvasStore(useShallow((state) => ({
+    nodeCount: state.nodes.length, clearCanvas: state.clearCanvas, runWorkflow: state.runWorkflow, isExecuting: state.isExecuting,
+  })));
+  const uploadCanvasImage = useCreativeStore((state) => state.uploadCanvasImage);
 
   const refreshStatus = () => {
+    void fetchInstances();
     fetch('/health')
       .then((res) => setBackendOnline(res.ok))
       .catch(() => setBackendOnline(false));
@@ -365,7 +374,7 @@ export default function App() {
         onToggleNodePalette={() => setShowNodePalette(!showNodePalette)}
         onRunWorkflow={runWorkflow}
         isExecuting={isExecuting}
-        hasNodes={nodes.length > 0}
+        hasNodes={nodeCount > 0}
         onClearCanvas={clearCanvas}
         onMaximizeChange={setIsMaximized}
         onCloseRequested={handleCloseRequested}
@@ -380,6 +389,7 @@ export default function App() {
           webuiRunning={false}
           isGenerating={isExecuting}
         />
+        <Suspense fallback={<div role="status" className="flex flex-1 items-center justify-center text-slate-300">Loading workspace…</div>}>
         <ViewContainer>
           {{
             launcher: (
@@ -411,7 +421,7 @@ export default function App() {
                   <main className="flex-1 relative w-full h-full">
                     <FlowCanvas />
                     <TaskHistory />
-                    <CreationDock />
+                    <CreationDock onCloudSetup={() => setShowCloudModal(true)} onLocalSetup={() => setShowManagerModal(true)} />
                   </main>
                 </div>
               </ErrorBoundary>
@@ -468,15 +478,16 @@ export default function App() {
             ),
           }}
         </ViewContainer>
+        </Suspense>
 
         {/* Persistent Collapsible Right Sidebar AI Agent */}
         {showAgentPanel && (
           <aside className="w-96 flex-shrink-0 h-full border-l border-slate-800 bg-slate-900 shadow-2xl z-30 transition-all duration-200">
-            <AgentPanel
+            <Suspense fallback={<p role="status" className="p-4">Loading assistant…</p>}><AgentPanel
               isOpen={showAgentPanel}
               onClose={() => setShowAgentPanel(false)}
               inline={true}
-            />
+            /></Suspense>
           </aside>
         )}
       </div>

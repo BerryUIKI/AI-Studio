@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow';
 import React, { useState } from 'react';
 import {
   Dices,
@@ -10,6 +11,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
+import { CreationSetup, useCreationReadiness } from './CreationSetup';
 
 type CreativeTaskStatusProps = Pick<ReturnType<typeof useCreativeStore.getState>,
   'isGenerating' | 'generationNotice' | 'generationStage' | 'activeTaskId' | 'cancellationRequested' | 'cancelGeneration'>;
@@ -35,7 +37,7 @@ export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationS
   </>
 );
 
-export const CreationDock = () => {
+export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = () => undefined }: { onCloudSetup?: () => void; onLocalSetup?: () => void }) => {
   const {
     prompt,
     setPrompt,
@@ -49,10 +51,6 @@ export const CreationDock = () => {
     setCfgScale,
     denoise,
     setDenoise,
-    connectionId,
-    setConnectionId,
-    model,
-    setModel,
     referenceImage,
     setReferenceImage,
     seed,
@@ -66,9 +64,36 @@ export const CreationDock = () => {
     cancelGeneration,
     error,
     executeCreativeAction,
-  } = useCreativeStore();
+  } = useCreativeStore(useShallow((state) => ({
+    prompt: state.prompt,
+    setPrompt: state.setPrompt,
+    negativePrompt: state.negativePrompt,
+    setNegativePrompt: state.setNegativePrompt,
+    aspectRatio: state.aspectRatio,
+    setAspectRatio: state.setAspectRatio,
+    steps: state.steps,
+    setSteps: state.setSteps,
+    cfgScale: state.cfgScale,
+    setCfgScale: state.setCfgScale,
+    denoise: state.denoise,
+    setDenoise: state.setDenoise,
+    referenceImage: state.referenceImage,
+    setReferenceImage: state.setReferenceImage,
+    seed: state.seed,
+    setSeed: state.setSeed,
+    randomizeSeed: state.randomizeSeed,
+    isGenerating: state.isGenerating,
+    generationStage: state.generationStage,
+    activeTaskId: state.activeTaskId,
+    cancellationRequested: state.cancellationRequested,
+    generationNotice: state.generationNotice,
+    cancelGeneration: state.cancelGeneration,
+    error: state.error,
+    executeCreativeAction: state.executeCreativeAction,
+  })));
 
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const { ready, provider } = useCreationReadiness();
 
   const aspectRatios = ['1:1', '16:9', '9:16', '4:3'];
 
@@ -80,12 +105,12 @@ export const CreationDock = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!prompt.trim() || isGenerating) return;
+    if (!prompt.trim() || isGenerating || !ready) return;
     executeCreativeAction();
   };
 
   return (
-    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 w-full max-w-3xl px-4 pointer-events-none">
+    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-full max-w-3xl max-h-[70vh] overflow-y-auto px-4 pointer-events-none">
       <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-800/90 rounded-2xl p-3 shadow-2xl shadow-slate-950/80 pointer-events-auto flex flex-col gap-2.5">
         {/* Error message if any */}
         {error && (
@@ -101,6 +126,7 @@ export const CreationDock = () => {
         )}
 
         <CreativeTaskStatus {...{ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }} />
+        <CreationSetup onCloudSetup={onCloudSetup} onLocalSetup={onLocalSetup} />
 
         {/* Reference Image Badge (Img2Img Mode) */}
         {referenceImage && (
@@ -131,6 +157,7 @@ export const CreationDock = () => {
           <div className="relative flex-1">
             <input
               type="text"
+              aria-label="Image prompt"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={
@@ -146,7 +173,7 @@ export const CreationDock = () => {
           <div className="flex items-center gap-1.5">
             <button
               type="submit"
-              disabled={!prompt.trim() || isGenerating}
+              disabled={!prompt.trim() || isGenerating || !ready}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium shadow-lg shadow-indigo-600/25 transition whitespace-nowrap"
             >
               {isGenerating ? (
@@ -162,18 +189,18 @@ export const CreationDock = () => {
               )}
             </button>
 
-            <button
+            {showAdvanced && <button
               type="button"
               onClick={() =>
                 executeCreativeAction({ action: referenceImage ? 'img2video' : 'txt2video' })
               }
               disabled={!prompt.trim() || isGenerating}
               className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-600/90 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium shadow-lg shadow-purple-600/25 transition whitespace-nowrap"
-              title="Generate Video (Text-to-Video or Image-to-Video)"
+              title="Experimental video generation — integration unverified"
             >
               <Video className="w-4 h-4" />
-              <span>Video</span>
-            </button>
+              <span>Experimental video</span>
+            </button>}
           </div>
         </form>
 
@@ -200,16 +227,6 @@ export const CreationDock = () => {
 
           {/* Quick Engine, Seed, and Advanced Toggle */}
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-[11px]">Engine:</span>
-            <select
-              value={connectionId}
-              onChange={(e) => setConnectionId(e.target.value)}
-              className="bg-slate-800/90 border border-slate-700 rounded-md px-2 py-0.5 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="comfyui-managed">ComfyUI (Local)</option>
-              <option value="webui-managed">SD WebUI (Local)</option>
-              <option value="cloud">Cloud API (Zero GPU)</option>
-            </select>
 
             {/* Quick Models Inventory Link */}
             <button
@@ -257,7 +274,7 @@ export const CreationDock = () => {
         </div>
 
         {/* Progressive Disclosure Advanced Controls Drawer (Issue #34) */}
-        {showAdvanced && (
+        {showAdvanced && !provider && (
           <div className="pt-2.5 pb-1 border-t border-slate-800/70 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs animate-in slide-in-from-top-2 duration-150">
             {/* Negative Prompt */}
             <div className="flex flex-col gap-1 md:col-span-2">
@@ -335,17 +352,6 @@ export const CreationDock = () => {
               </div>
             )}
 
-            {/* Model Name Override */}
-            <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
-              <label className="text-[11px] font-medium text-slate-300">Target Checkpoint / Model:</label>
-              <input
-                type="text"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="v1-5-pruned-emaonly.safetensors"
-                className="w-full bg-slate-950 border border-slate-700 rounded-md px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
 
             {/* Seed Configuration */}
             <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">

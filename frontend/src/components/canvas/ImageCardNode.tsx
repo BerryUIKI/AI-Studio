@@ -23,8 +23,13 @@ import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const cardData = data as unknown as ImageCardData;
-  const { setReferenceImage, openInpaint, openUpscale, openImg2Video, executeCreativeAction } = useCreativeStore();
-  const { removeNode, arrangeBranchTree } = useCanvasStore();
+  const setReferenceImage = useCreativeStore((state) => state.setReferenceImage);
+  const openInpaint = useCreativeStore((state) => state.openInpaint);
+  const openUpscale = useCreativeStore((state) => state.openUpscale);
+  const openImg2Video = useCreativeStore((state) => state.openImg2Video);
+  const executeCreativeAction = useCreativeStore((state) => state.executeCreativeAction);
+  const removeNode = useCanvasStore((state) => state.removeNode);
+  const arrangeBranchTree = useCanvasStore((state) => state.arrangeBranchTree);
 
   const [isMissingAsset, setIsMissingAsset] = useState<boolean>(Boolean(cardData.isMissing));
   const [retryNonce, setRetryNonce] = useState<number>(0);

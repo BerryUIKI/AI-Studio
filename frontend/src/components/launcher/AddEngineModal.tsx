@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -152,7 +153,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
+    <Dialog title="Add engine" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
       <div className="relative w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl text-slate-100 overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
@@ -162,6 +163,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -464,6 +466,6 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

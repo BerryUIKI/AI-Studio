@@ -19,9 +19,9 @@ interface NavItem {
 }
 
 const mainNavItems: NavItem[] = [
-  { id: 'launcher', label: 'Launcher Hub', icon: Home },
   { id: 'canvas', label: 'Infinite Canvas', icon: Palette },
   { id: 'models', label: 'Model Hub', icon: Package },
+  { id: 'launcher', label: 'Engines & Setup', icon: Home },
   { id: 'comfyui', label: 'ComfyUI', icon: Puzzle, isEngine: true },
   { id: 'webui', label: 'SD WebUI', icon: ImageIcon, isEngine: true },
 ];
@@ -66,6 +66,8 @@ export const GlobalNavRail: React.FC<GlobalNavRailProps> = ({
       <button
         key={item.id}
         onClick={() => setActiveView(item.id)}
+        aria-label={item.label}
+        aria-current={isActive ? 'page' : undefined}
         title={isRailCollapsed ? item.label : undefined}
         className={`group relative flex items-center w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
           isActive
@@ -136,7 +138,11 @@ export const GlobalNavRail: React.FC<GlobalNavRailProps> = ({
 
         {/* Main Workspace Navigation */}
         <nav className="flex flex-col space-y-1">
-          {mainNavItems.map(renderNavItem)}
+          {mainNavItems.filter((item) => !item.isEngine).map(renderNavItem)}
+          <details className="rounded border-t border-slate-800 pt-2">
+            <summary className="cursor-pointer px-1 py-2 text-xs text-slate-400" aria-label="Advanced native engines">{isRailCollapsed ? 'More' : 'Native engines'}</summary>
+            {mainNavItems.filter((item) => item.isEngine).map(renderNavItem)}
+          </details>
         </nav>
       </div>
 

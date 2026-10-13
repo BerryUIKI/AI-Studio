@@ -3,6 +3,10 @@ import { Package, Search, Filter, ShieldCheck, RefreshCw, AlertCircle } from 'lu
 import { useModelHubStore, HubModel } from '../../stores/useModelHubStore';
 import { useDownloadStore } from '../../stores/useDownloadStore';
 import { HubModelCard } from './HubModelCard';
+import { useCreativeStore } from '../../stores/useCreativeStore';
+import { useCreationSetupStore, localModelAvailable, localModelFilename, modelsForProvider, providerConnection } from '../../stores/useCreationSetupStore';
+import { useEngineStore } from '../../stores/useEngineStore';
+import { useNavigationStore } from '../../stores/useNavigationStore';
 
 interface ModelHubViewProps {
   onInstallModel?: (model: HubModel) => void;
@@ -40,6 +44,7 @@ export const ModelHubView: React.FC<ModelHubViewProps> = ({
     { id: 'controlnet', label: 'ControlNet' },
     { id: 'upscaler', label: 'Upscalers' },
     { id: 'vae', label: 'VAEs' },
+    { id: 'llm', label: 'Language Models' },
   ];
 
   // Client-side filtering for search query & compatible only
@@ -78,12 +83,40 @@ export const ModelHubView: React.FC<ModelHubViewProps> = ({
     }
   };
 
-  const handleUseCloud = (model: HubModel) => {
+  const handleUseCloud = async (model: HubModel) => {
     if (onUseCloudModel) {
       onUseCloudModel(model);
     } else {
-      console.log('Switch to cloud mode for model:', model.id);
+      await useCreationSetupStore.getState().refresh();
+      const providers = useCreationSetupStore.getState().providers;
+      const family = model.architecture.toLowerCase().includes('flux') ? 'flux'
+        : model.architecture.toLowerCase().includes('sdxl') ? 'sdxl' : '';
+      const provider = providers.find((item) => item.is_configured && modelsForProvider(item, 'txt2img').some((name) => family && name.toLowerCase().includes(family)));
+      const targetModel = provider && modelsForProvider(provider, 'txt2img').find((name) => name.toLowerCase().includes(family));
+      if (!provider || !targetModel) {
+        useModelHubStore.setState({ error: 'No configured image provider offers this model family. Configure a supported provider in Settings → Cloud, then refresh.' });
+        return;
+      }
+      useCreativeStore.getState().setConnectionId(providerConnection(provider.id));
+      useCreativeStore.getState().setModel(targetModel);
+      useCreativeStore.getState().setReferenceImage(null);
+      useNavigationStore.getState().setActiveView('canvas');
     }
+  };
+
+  const handleUseModel = async (model: HubModel) => {
+    await useCreationSetupStore.getState().refresh();
+    await useEngineStore.getState().fetchInstances();
+    const record = useCreationSetupStore.getState().models.find((item) => item.id === model.installed_model_id);
+    const engine = record && useEngineStore.getState().instances.find((item) => item.status === 'running' && localModelAvailable(record, item.type));
+    if (!record || !engine) {
+      useModelHubStore.setState({ error: model.guidance || 'Start a compatible engine and validate this model in Models before use. Component models and language models need their own supported workflow.' });
+      return;
+    }
+    useCreativeStore.getState().setConnectionId(engine.connection_id || engine.id);
+    useCreativeStore.getState().setModel(localModelFilename(record));
+    useCreativeStore.getState().setReferenceImage(null);
+    useNavigationStore.getState().setActiveView('canvas');
   };
 
   return (
@@ -202,6 +235,7 @@ export const ModelHubView: React.FC<ModelHubViewProps> = ({
                 hardwareSummary={hardwareSummary}
                 onInstall={handleInstall}
                 onUseCloud={handleUseCloud}
+                onUseModel={handleUseModel}
               />
             ))}
           </div>

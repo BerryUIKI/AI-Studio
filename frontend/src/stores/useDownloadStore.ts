@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useModelHubStore } from './useModelHubStore';
 
 export type DownloadTaskStatus = 'pending' | 'downloading' | 'paused' | 'completed' | 'failed' | 'cancelled';
 
@@ -53,7 +54,10 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
       if (res.ok) {
         const data = await res.json();
         const tasks: DownloadTask[] = data.tasks || [];
+        const newlyCompleted = tasks.some((task) => task.status === 'completed'
+          && get().tasks.find((previous) => previous.task_id === task.task_id)?.status !== 'completed');
         set({ tasks });
+        if (newlyCompleted) void useModelHubStore.getState().fetchCatalog();
 
         // Auto manage polling based on active tasks
         const hasActive = tasks.some((t) => t.status === 'downloading' || t.status === 'pending');

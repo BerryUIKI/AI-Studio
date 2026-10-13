@@ -30,6 +30,10 @@ export default [
     },
   },
   {
+    files: ["src/api/**/*.{ts,tsx}", "src/types/**/*.ts", "src/stores/useCanvasStore.ts", "src/stores/useAgentStore.ts", "src/stores/useCreationSetupStore.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "error" },
+  },
+  {
     ignores: ["dist/**", "src-tauri/**", "node_modules/**"],
   },
 ];
