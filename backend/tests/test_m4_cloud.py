@@ -24,6 +24,16 @@ from app.storage.asset_store import asset_store
 
 client = TestClient(app)
 
+
+def test_provider_catalog_exposes_only_image_adapter_models(tmp_path: Path) -> None:
+    providers = {provider.id.value: provider for provider in CredentialManager(tmp_path).list_providers()}
+    assert providers['openai'].capabilities == ['txt2img']
+    assert providers['openai'].action_models['txt2img'] == ['dall-e-3']
+    assert providers['siliconflow'].supported_models == ['stabilityai/stable-diffusion-xl-base-1.0']
+    fal = providers['fal']
+    assert set(fal.action_models) == set(fal.capabilities)
+    assert fal.action_models['inpaint'] == ['fal-ai/flux-general/inpainting']
+
 DUMMY_PNG_BYTES = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
     b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4"
