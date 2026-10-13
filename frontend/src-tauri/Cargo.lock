@@ -121,12 +121,21 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 name = "berry-ai-studio"
 version = "0.1.0"
 dependencies = [
+ "berry-runtime",
  "log",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "ureq",
+]
+
+[[package]]
+name = "berry-runtime"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
  "ureq",
 ]
 
