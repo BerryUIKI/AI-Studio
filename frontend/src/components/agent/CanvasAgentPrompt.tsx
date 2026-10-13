@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { useState } from 'react';
 import { Bot, X, CornerDownLeft } from 'lucide-react';
 import { useCanvasStore } from '../../stores/useCanvasStore';
@@ -16,6 +17,7 @@ export const CanvasAgentPrompt: React.FC<CanvasAgentPromptProps> = ({
   flowPosition,
   onClose,
 }) => {
+  const ui = useUiText();
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<'workspace' | 'generate'>('workspace');
   const { addWorkspaceFrame } = useCanvasStore();
@@ -58,7 +60,7 @@ export const CanvasAgentPrompt: React.FC<CanvasAgentPromptProps> = ({
         <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-800">
           <div className="flex items-center gap-1.5 text-indigo-300 font-medium">
             <Bot className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Spatial Agent Quick Assist</span>
+            <span>{ui("ui_spatial_agent_quick_assist")}</span>
           </div>
           <button
             onClick={onClose}
@@ -75,7 +77,7 @@ export const CanvasAgentPrompt: React.FC<CanvasAgentPromptProps> = ({
               autoFocus
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              placeholder="What creative concepts should the agent explore?..."
+              placeholder={ui("ui_what_creative_concepts_should_the_agent_explore")}
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition pr-8"
             />
             <button
@@ -97,10 +99,10 @@ export const CanvasAgentPrompt: React.FC<CanvasAgentPromptProps> = ({
                   onChange={() => setMode('workspace')}
                   className="accent-indigo-500"
                 />
-                <span className="text-slate-300">Create Workspace Frame</span>
+                <span className="text-slate-300">{ui("ui_create_workspace_frame")}</span>
               </label>
             </div>
-            <span className="text-[10px] text-slate-500 font-mono">Press Enter ↵</span>
+            <span className="text-[10px] text-slate-500 font-mono">{ui("ui_press_enter")}</span>
           </div>
         </form>
       </div>

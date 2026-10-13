@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Dialog } from '../ui/Dialog';
 import React from 'react';
@@ -14,6 +15,7 @@ import {
 import { useDownloadStore, DownloadTask } from '../../stores/useDownloadStore';
 
 export const DownloadManagerDrawer: React.FC = () => {
+  const ui = useUiText();
   const isDrawerOpen = useDownloadStore((state) => state.isDrawerOpen);
   const setDrawerOpen = useDownloadStore((state) => state.setDrawerOpen);
   const tasks = useDownloadStore((state) => state.tasks);
@@ -49,7 +51,7 @@ export const DownloadManagerDrawer: React.FC = () => {
   };
 
   return (
-    <Dialog title="Downloads" onClose={() => setDrawerOpen(false)} className="fixed inset-0 z-50 flex justify-end">
+    <Dialog title={ui("ui_downloads")} onClose={() => setDrawerOpen(false)} className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
@@ -62,14 +64,13 @@ export const DownloadManagerDrawer: React.FC = () => {
         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-900/80">
           <div className="flex items-center gap-2">
             <Download className="w-5 h-5 text-blue-400" />
-            <h2 className="text-base font-semibold text-neutral-100">Downloads</h2>
+            <h2 className="text-base font-semibold text-neutral-100">{ui("ui_downloads")}</h2>
             <span className="text-xs text-neutral-400 bg-neutral-800 px-2 py-0.5 rounded-full border border-neutral-700">
-              {activeCount} Active · {completedCount} Completed
-            </span>
+              {activeCount} {ui("ui_active_2")}{completedCount} {ui("ui_completed")}</span>
           </div>
           <button
             onClick={() => setDrawerOpen(false)}
-            aria-label="Close downloads"
+            aria-label={ui("ui_close_downloads")}
             className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-md transition-colors"
           >
             <X className="w-4 h-4" />
@@ -81,7 +82,7 @@ export const DownloadManagerDrawer: React.FC = () => {
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-neutral-500 gap-2">
               <Download className="w-8 h-8 opacity-40" />
-              <p className="text-sm">No download tasks yet</p>
+              <p className="text-sm">{ui("ui_no_download_tasks_yet")}</p>
             </div>
           ) : (
             tasks.map((task: DownloadTask) => {
@@ -108,7 +109,7 @@ export const DownloadManagerDrawer: React.FC = () => {
                       <div className="flex items-center gap-2 text-xs text-neutral-400 mt-1">
                         <HardDrive className="w-3 h-3 text-neutral-500" />
                         <span className="truncate">
-                          Target: {task.target_engine.toUpperCase()} ({task.target_path})
+                          {ui("ui_target")}{task.target_engine.toUpperCase()} ({task.target_path})
                         </span>
                       </div>
                     </div>
@@ -118,7 +119,7 @@ export const DownloadManagerDrawer: React.FC = () => {
                       {isDownloading && (
                         <button
                           onClick={() => pauseTask(task.task_id)}
-                          title="Pause"
+                          title={ui("ui_pause")}
                           className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-700 rounded-lg transition-colors"
                         >
                           <Pause className="w-4 h-4" />
@@ -127,7 +128,7 @@ export const DownloadManagerDrawer: React.FC = () => {
                       {isPaused && (
                         <button
                           onClick={() => resumeTask(task.task_id)}
-                          title="Resume"
+                          title={ui("ui_resume")}
                           className="p-1.5 text-neutral-400 hover:text-emerald-400 hover:bg-neutral-700 rounded-lg transition-colors"
                         >
                           <Play className="w-4 h-4" />
@@ -136,7 +137,7 @@ export const DownloadManagerDrawer: React.FC = () => {
                       {!isFinished && (
                         <button
                           onClick={() => cancelTask(task.task_id)}
-                          title="Cancel"
+                          title={ui("ui_cancel")}
                           className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-700 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -148,7 +149,7 @@ export const DownloadManagerDrawer: React.FC = () => {
                   {/* Progress Bar */}
                   <div className="space-y-1.5">
                     <div className="w-full bg-neutral-900 rounded-full h-1.5 overflow-hidden">
-                      <ProgressBar label="Observed progress" value={task.progress_pct} className={`h-full transition-all duration-300 ${
+                      <ProgressBar label={ui("ui_observed_progress")} value={task.progress_pct} className={`h-full transition-all duration-300 ${
                           isFinished
                             ? 'text-emerald-500'
                             : isFailed
@@ -173,9 +174,9 @@ export const DownloadManagerDrawer: React.FC = () => {
                             )}
                           </>
                         )}
-                        {isPaused && <span className="text-amber-400 font-medium">Paused</span>}
-                        {isFinished && <span className="text-emerald-400 font-medium">Installed</span>}
-                        {isFailed && <span className="text-rose-400 font-medium">Failed</span>}
+                        {isPaused && <span className="text-amber-400 font-medium">{ui("ui_paused")}</span>}
+                        {isFinished && <span className="text-emerald-400 font-medium">{ui("ui_installed")}</span>}
+                        {isFailed && <span className="text-rose-400 font-medium">{ui("ui_failed")}</span>}
                       </div>
                     </div>
                   </div>

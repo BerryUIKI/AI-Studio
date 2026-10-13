@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import React, { useState } from 'react';
 import { HubModel, ModelEvaluation, HardwareSummary } from '../../stores/useModelHubStore';
 import { CompatibilityBadge } from './CompatibilityBadge';
@@ -20,6 +21,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
   onUseCloud,
   onUseModel,
 }) => {
+  const ui = useUiText();
   const [previewFailed, setPreviewFailed] = useState(false);
   const sizeGb = (model.size_bytes / (1024 * 1024 * 1024)).toFixed(1);
   const isUnsupported = evaluation?.tier === 'unsupported';
@@ -32,7 +34,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
           <div className="flex h-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-indigo-950 to-slate-900 p-5 text-center text-slate-300">
             <HardDrive aria-hidden="true" className="h-8 w-8 text-indigo-300" />
             <span className="text-sm font-medium">{model.name}</span>
-            <span className="text-xs">{model.category} · Preview unavailable</span>
+            <span className="text-xs">{model.category} {ui("ui_preview_unavailable")}</span>
           </div>
         ) : <img
           src={model.preview_image_url}
@@ -51,7 +53,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
           </span>
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono bg-black/60 backdrop-blur-md text-slate-300 border border-white/10">
             <HardDrive className="w-3 h-3 text-slate-400" />
-            <span>{sizeGb} GB</span>
+            <span>{sizeGb} {ui("ui_gb")}</span>
           </span>
         </div>
 
@@ -73,7 +75,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
             <h3 className="text-sm font-bold text-slate-100 group-hover:text-indigo-300 transition-colors truncate">
               {model.name}
             </h3>
-            <p className="text-[11px] text-slate-500">by {model.author}</p>
+            <p className="text-[11px] text-slate-500">{ui("ui_by")}{model.author}</p>
           </div>
 
           {/* Description */}
@@ -105,7 +107,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
               modelName={model.name}
             />
             <span className="text-[11px] font-mono text-slate-500">
-              {model.recommended_resolution[0]}x{model.recommended_resolution[1]}
+              {model.recommended_resolution[0]}{ui("ui_x")}{model.recommended_resolution[1]}
             </span>
           </div>
 
@@ -116,16 +118,16 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
               className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold bg-slate-800/80 text-emerald-400 border border-emerald-500/20 cursor-default"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>{model.is_ready ? 'Use Model' : 'Check Model Readiness'}</span>
+              <span>{model.is_ready ? ui("ui_use_model") : ui("ui_check_model_readiness")}</span>
             </button>
           ) : isUnsupported ? (
             <button
               onClick={() => onUseCloud?.(model)}
               className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-              title="Check whether a configured cloud provider offers this model family"
+              title={ui("ui_check_whether_a_configured_cloud_provider_offers_this")}
             >
               <Cloud className="w-3.5 h-3.5 text-purple-200" />
-              <span>Use Cloud Mode</span>
+              <span>{ui("ui_use_cloud_mode")}</span>
             </button>
           ) : (
             <button
@@ -133,7 +135,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
               className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Install to Engine</span>
+              <span>{ui("ui_install_to_engine")}</span>
             </button>
           )}
         </div>
