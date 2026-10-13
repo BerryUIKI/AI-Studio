@@ -50,3 +50,50 @@ it('saves an undo made while the deletion snapshot is still in flight', async ()
   expect(useProjectStore.getState().currentProject?.canvas.nodes[0].id).toBe('image');
   expect(useProjectStore.getState().autosaveStatus).toBe('saved');
 });
+
+it('waits for both the active save and the restored snapshot before switching projects', async () => {
+  const other: Project = { ...project, id: 'other', name: 'Other project' };
+  let finishFirst!: (response: Response) => void;
+  const first = new Promise<Response>((resolve) => { finishFirst = resolve; });
+  const requests: string[] = [];
+  const payloads: { canvas: ProjectCanvasData; version: number; name: string }[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    requests.push(`${init?.method || 'GET'} ${url}`);
+    if (init?.method === 'PUT') {
+      const payload = JSON.parse(String(init.body)) as (typeof payloads)[number];
+      payloads.push(payload);
+      if (payloads.length === 1) return first;
+      return Promise.resolve(new Response(JSON.stringify({ ...project, ...payload }), { status: 200 }));
+    }
+    return Promise.resolve(new Response(JSON.stringify(url === '/api/v1/projects' ? [other] : other), { status: 200 }));
+  }));
+  useCanvasStore.getState().removeNode('image');
+  const saving = useProjectStore.getState().saveProject();
+  useCanvasStore.getState().undo();
+  const opening = useProjectStore.getState().openProject('other');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(requests).toEqual(['PUT /api/v1/projects/race']);
+  finishFirst(new Response(JSON.stringify({ ...project, ...payloads[0] }), { status: 200 }));
+  await Promise.all([saving, opening]);
+  expect(payloads).toHaveLength(2);
+  expect(payloads[1].canvas.nodes[0].id).toBe('image');
+  expect(requests.slice(0, 3)).toEqual(['PUT /api/v1/projects/race', 'PUT /api/v1/projects/race', 'GET /api/v1/projects/other']);
+  expect(useProjectStore.getState().currentProject?.id).toBe('other');
+});
+
+it.each(['open', 'create'])('retains the current canvas when its save fails before %s', async (operation) => {
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+    requests.push(`${init?.method || 'GET'} ${url}`);
+    return Promise.resolve(init?.method === 'PUT'
+      ? new Response('Save failed', { status: 500 })
+      : new Response(JSON.stringify({ ...project, id: 'other' }), { status: 200 }));
+  }));
+  useProjectStore.getState().markDirty();
+  const result = operation === 'open' ? await useProjectStore.getState().openProject('other')
+    : await useProjectStore.getState().createProject('Other');
+  expect(result).toBe(operation === 'open' ? false : null);
+  expect(requests).toEqual(['PUT /api/v1/projects/race']);
+  expect(useProjectStore.getState().currentProject?.id).toBe('race');
+  expect(useCanvasStore.getState().nodes[0].id).toBe('image');
+});
