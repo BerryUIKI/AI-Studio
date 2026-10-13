@@ -22,6 +22,7 @@ from app.schemas.engine import (
     EngineConfig,
     EngineConnection,
     EngineInstanceInfo,
+    DetectedEngineInfo,
     EngineOwnership,
     EngineStatus,
     EngineType,
@@ -443,7 +444,7 @@ class EngineManager:
             return None
         return await self.test_engine_connection(conn)
 
-    def get_all_instances(self) -> List[Any]:
+    def get_all_instances(self) -> List[EngineInstanceInfo]:
         """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
         from app.schemas.engine import EngineInstanceInfo
 
@@ -555,7 +556,7 @@ class EngineManager:
 
         return instances
 
-    def detect_engines(self, scan_paths: Optional[List[str]] = None) -> List[Any]:
+    def detect_engines(self, scan_paths: Optional[List[str]] = None) -> List[DetectedEngineInfo]:
         """Scan candidate directories for existing ComfyUI or SD WebUI installations."""
         from pathlib import Path
         import os
@@ -671,7 +672,7 @@ class EngineManager:
             raise FileNotFoundError(f"Installation directory does not exist: {directory}")
         return directory.resolve()
 
-    def bind_external_engine(self, engine_type_str: str, name: str, path_str: str, port: Optional[int] = None, extra_args: Optional[List[str]] = None) -> Any:
+    def bind_external_engine(self, engine_type_str: str, name: str, path_str: str, port: Optional[int] = None, extra_args: Optional[List[str]] = None) -> EngineConnection:
         """Bind an external engine path as a connection. Strictly non-destructive."""
         from pathlib import Path
         from app.schemas.engine import EngineConnection, EngineOwnership, EngineStatus, EngineType

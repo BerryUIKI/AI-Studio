@@ -24,6 +24,8 @@ from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
 from app.runners.creative_runner import creative_runner
 from app.core.creative_tasks import creative_tasks
 from app.core.creation_services import CreationServices
+from app.core.asset_service import AssetService
+from app.core.engine_service import EngineService
 from app.core.workflow_service import WorkflowExecutionService, WorkflowPlanError
 from app.api.creative import create_creative_router
 from app.core.hub_inventory import reconcile_hub_inventory
@@ -369,10 +371,10 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
     stopped_engines = []
     if stop_managed:
         if await run_blocking(supervisor.is_running):
-            await mutate_process("comfyui", supervisor.stop)
+            await _engine_service().stop(EngineType.COMFYUI)
             stopped_engines.append("managed_comfyui")
         if await run_blocking(webui_supervisor.is_running):
-            await mutate_process("webui", webui_supervisor.stop)
+            await _engine_service().stop(EngineType.WEBUI)
             stopped_engines.append("managed_webui")
 
     # Schedule self-termination
@@ -450,40 +452,44 @@ async def comfy_models() -> dict[str, List[str]]:
     return await comfy_client.get_models()
 
 
+def _engine_service() -> EngineService:
+    return EngineService(engine_manager, {EngineType.COMFYUI: supervisor, EngineType.WEBUI: webui_supervisor})
+
+
 @app.get("/api/v1/runtime/status")
 async def runtime_status() -> dict[str, Any]:
     """Check the status of the sandboxed ComfyUI runtime and process supervisor."""
-    return await run_blocking(supervisor.get_status)
+    return await _engine_service().status(EngineType.COMFYUI)
 
 
 @app.post("/api/v1/runtime/start", response_model=RuntimeStartResponse)
 async def runtime_start() -> dict[str, Any]:
     """Launch the isolated ComfyUI subprocess via supervisor."""
-    return await mutate_process("comfyui", supervisor.start)
+    return await _engine_service().start(EngineType.COMFYUI)
 
 
 @app.post("/api/v1/runtime/stop")
 async def runtime_stop() -> dict[str, Any]:
     """Stop the isolated ComfyUI subprocess via supervisor."""
-    return await mutate_process("comfyui", supervisor.stop)
+    return await _engine_service().stop(EngineType.COMFYUI)
 
 
 @app.get("/api/v1/runtime/webui/status")
 async def runtime_webui_status() -> dict[str, Any]:
     """Check the status of the sandboxed WebUI runtime and supervisor."""
-    return await run_blocking(webui_supervisor.get_status)
+    return await _engine_service().status(EngineType.WEBUI)
 
 
 @app.post("/api/v1/runtime/webui/start", response_model=RuntimeStartResponse)
 async def runtime_webui_start() -> dict[str, Any]:
     """Launch the isolated WebUI subprocess via supervisor."""
-    return await mutate_process("webui", webui_supervisor.start)
+    return await _engine_service().start(EngineType.WEBUI)
 
 
 @app.post("/api/v1/runtime/webui/stop")
 async def runtime_webui_stop() -> dict[str, Any]:
     """Stop the isolated WebUI subprocess via supervisor."""
-    return await mutate_process("webui", webui_supervisor.stop)
+    return await _engine_service().stop(EngineType.WEBUI)
 
 
 @app.get("/api/v1/runtime/{engine_type}/manifest", response_model=EngineInstallManifest)
@@ -631,15 +637,14 @@ async def list_engines() -> List[EngineConnection]:
 @app.get("/api/v1/engines/instances", response_model=EngineInstancesResponse)
 async def list_engine_instances() -> EngineInstancesResponse:
     """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
-    instances = await run_blocking(engine_manager.get_all_instances)
+    instances = await _engine_service().instances()
     return EngineInstancesResponse(instances=instances)
 
 
 @app.get("/api/v1/engines/detect", response_model=EngineDetectResponse)
 async def detect_local_engines(paths: Optional[str] = None) -> EngineDetectResponse:
     """Scan candidate directories for existing ComfyUI or SD WebUI installations."""
-    scan_paths = [p.strip() for p in paths.split(",")] if paths else None
-    detected = await run_blocking(engine_manager.detect_engines, scan_paths)
+    detected = await _engine_service().detect(paths)
     return EngineDetectResponse(detected=detected)
 
 
@@ -699,11 +704,7 @@ async def update_engine_config(instance_id: str, request: EngineConfigUpdateRequ
     and indicates whether a running engine requires a restart.
     """
     try:
-        cfg, requires_restart = await run_blocking(engine_manager.save_engine_config,
-            instance_id=instance_id,
-            port=request.port,
-            extra_args=request.extra_args,
-        )
+        cfg, requires_restart = await _engine_service().save_config(instance_id, request)
         msg = "Configuration saved successfully."
         if requires_restart:
             msg = "Configuration saved. Engine restart is required for changes to take effect."
@@ -905,12 +906,7 @@ app.include_router(create_creative_router(lambda: CreationServices(task_store, c
 
 @app.post("/api/v1/creative/upload", response_model=AssetRecord)
 async def upload_creative_asset(file: UploadFile = File(...)) -> AssetRecord:
-    """Upload user image asset directly onto the creative canvas."""
-    data = await file.read()
-    filename = sanitize_filename(file.filename)
-    validated_mime, w, h = await run_blocking(validate_and_inspect_media, data, filename)
-    category = "video" if validated_mime.startswith("video/") else "image"
-    return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
+    return await AssetService(asset_store).upload(await file.read(), file.filename)
 
 
 class AssetUploadBase64Request(BaseModel):
@@ -921,17 +917,10 @@ class AssetUploadBase64Request(BaseModel):
 
 @app.post("/api/v1/creative/upload-base64", response_model=AssetRecord)
 async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRecord:
-    """Upload asset encoded in base64 (used by CLI and programmatic API clients)."""
-    import base64
-    import binascii
     try:
-        data = base64.b64decode(req.content_base64, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}")
-    filename = sanitize_filename(req.filename)
-    validated_mime, w, h = await run_blocking(validate_and_inspect_media, data, filename)
-    category = "video" if validated_mime.startswith("video/") else "image"
-    return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
+        return await AssetService(asset_store).upload_base64(req.content_base64, req.filename)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 agent_service = AgentService(
@@ -1199,44 +1188,20 @@ async def list_assets(project_id: Optional[str] = None) -> List[AssetRecord]:
 
 @app.get("/api/v1/assets/{asset_id}", response_model=AssetRecord)
 async def get_asset(asset_id: str) -> AssetRecord:
-    rec = await asset_store.get_asset(asset_id)
-    if not rec:
-        raise HTTPException(status_code=404, detail="Asset not found")
-    return rec
+    try:
+        return await AssetService(asset_store).get(asset_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/v1/assets/{asset_id}/content")
 async def get_asset_content(asset_id: str) -> FileResponse:
-    rec = await asset_store.get_asset(asset_id)
-    if not rec:
-        raise HTTPException(status_code=404, detail="Asset not found")
-    abs_path = asset_store.get_absolute_path(rec)
-    if not abs_path.is_file():
-        raise HTTPException(status_code=404, detail="Asset file missing on disk")
-
-    ext = abs_path.suffix.lower()
-    safe_types = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".mp4": "video/mp4",
-        ".webm": "video/webm",
-    }
-    content_type = rec.mime_type or safe_types.get(ext)
-    disposition = "inline"
-    if not content_type:
-        content_type = "application/octet-stream"
-        disposition = "attachment"
-
-    return FileResponse(
-        abs_path,
-        media_type=content_type,
-        filename=sanitize_filename(f"{Path(rec.filename).stem}{rec.extension}" if rec.extension else rec.filename),
-        content_disposition_type=disposition,
-        headers=MEDIA_SECURITY_HEADERS,
-    )
+    try:
+        content = await AssetService(asset_store).content(asset_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return FileResponse(content.path, media_type=content.mime_type, filename=content.filename,
+                        content_disposition_type=content.disposition, headers=MEDIA_SECURITY_HEADERS)
 
 
 @app.post("/api/v1/workflow/cancel/{run_id}")
