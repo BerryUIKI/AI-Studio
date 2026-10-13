@@ -7,6 +7,7 @@ const AUTOSAVE_DEBOUNCE_MS = 1500;
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let hasPendingChangesWhileSaving = false;
+let saveCompletion: Promise<void> | null = null;
 
 export interface ProjectState {
   currentProject: Project | null;
@@ -122,8 +123,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   createProject: async (name = 'Untitled Project') => {
     // If current project has unsaved changes, flush them before switching
-    if (get().isDirty && get().currentProject) {
-      await get().flushPendingSave();
+    if ((get().isDirty || get().isSaving) && get().currentProject) {
+      if (!await get().flushPendingSave()) return null;
     }
 
     if (autosaveTimer) {
@@ -175,8 +176,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   openProject: async (projectId: string) => {
     // Flush current project save if dirty
-    if (get().isDirty && get().currentProject && get().currentProject?.id !== projectId) {
-      await get().flushPendingSave();
+    if ((get().isDirty || get().isSaving) && get().currentProject) {
+      if (!await get().flushPendingSave()) return false;
     }
 
     if (autosaveTimer) {
@@ -234,6 +235,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     set({ isSaving: true, autosaveStatus: 'saving', saveError: null });
+    hasPendingChangesWhileSaving = false;
+    let finishSave!: () => void;
+    const completion = new Promise<void>((resolve) => { finishSave = resolve; });
+    saveCompletion = completion;
 
     try {
       const canvasState = useCanvasStore.getState();
@@ -290,6 +295,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         saveError: msg,
       });
       return false;
+    } finally {
+      if (saveCompletion === completion) saveCompletion = null;
+      finishSave();
     }
   },
 
@@ -337,6 +345,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   markDirty: () => {
+    // An older save response must not acknowledge edits made after its snapshot.
+    if (get().isSaving) hasPendingChangesWhileSaving = true;
     // If not dirty, mark dirty and schedule debounced autosave
     set({ isDirty: true, autosaveStatus: 'dirty' });
     get().triggerAutosave();
@@ -366,9 +376,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       autosaveTimer = null;
     }
     const currentId = get().currentProject?.id;
-    if (currentId && get().isDirty) {
-      return await get().saveProject(currentId);
+    if (!currentId) return true;
+    while (get().currentProject?.id === currentId && (get().isSaving || get().isDirty)) {
+      if (saveCompletion) {
+        await saveCompletion;
+        if (get().saveError) return false;
+      } else if (get().isSaving || !await get().saveProject(currentId)) {
+        return false;
+      }
     }
-    return true;
+    return get().currentProject?.id === currentId;
   },
 }));
