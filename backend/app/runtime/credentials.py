@@ -280,7 +280,10 @@ class CredentialManager:
         from app.runtime.custom_providers import CustomProviderRegistry
         for record in CustomProviderRegistry(self.data_dir).list():
             spec = record.spec
-            available = spec.mode in ("rest", "javascript") or record.execution_trusted
+            available = spec.mode == "rest" or record.execution_trusted
+            if spec.mode == "python_sdk":
+                from app.runtime.sdk_environment import sdk_ready
+                available = available and sdk_ready(spec, self.data_dir)
             providers.append(CloudProviderInfo(id=spec.id, name=spec.name, description=f"Custom platform ({spec.mode}).",
                 is_configured=available and (spec.auth == "none" or bool(self.get_key(spec.id))),
                 redacted_key=redact_key(self.get_key(spec.id) or ""), supported_models=spec.models,
