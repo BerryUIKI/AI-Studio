@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import { listDownloadTasks } from '../../api/modelDownloads';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
@@ -132,6 +133,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
   onClose,
   onNavigateToAgent,
 }) => {
+  const ui = useUiText();
   const { getEffectiveLanguage } = useSettingsStore();
   const lang = getEffectiveLanguage();
   const isZh = lang === 'zh-CN';
@@ -174,7 +176,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       }
     } catch (e: unknown) {
       console.warn('Failed to fetch hardware readiness:', e);
-      setHardwareError(getErrorMessage(e, 'Connection refused (127.0.0.1:8000)'));
+      setHardwareError(getErrorMessage(e, ui("ui_connection_refused_127_0_0_1_8000")));
     } finally {
       setLoadingHardware(false);
     }
@@ -207,11 +209,11 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       const res = await fetch('/api/v1/llama-server/start', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!data.success) {
-        setStartError(data.message || (isZh ? '启动 llama-server 失败' : 'Failed to start llama-server'));
+        setStartError(data.message || (ui("ui_failed_to_start_llama_server")));
       }
       await fetchDiagnostics();
     } catch (e: unknown) {
-      setStartError(getErrorMessage(e, isZh ? '启动失败' : 'Start failed'));
+      setStartError(getErrorMessage(e, ui("ui_start_failed")));
     } finally {
       setLoadingLlama(false);
     }
@@ -219,18 +221,18 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
   const handleInstallLlama = async () => {
     setInstallingLlama(true);
-    setInstallMessage(isZh ? '正在初始化内置 llama.cpp 引擎...' : 'Initializing embedded llama.cpp runtime...');
+    setInstallMessage(ui("ui_initializing_embedded_llama_cpp_runtime"));
     try {
       const res = await fetch('/api/v1/llama-server/install', { method: 'POST' });
       const data = await res.json();
       if (data.installed) {
-        setInstallMessage(isZh ? '内置 llama-server 引擎已成功就绪。' : 'Embedded llama-server runtime is ready.');
+        setInstallMessage(ui("ui_embedded_llama_server_runtime_is_ready"));
       } else {
-        setInstallMessage(data.message || (isZh ? '已完成检查' : 'Check completed'));
+        setInstallMessage(data.message || (ui("ui_check_completed")));
       }
       setTimeout(() => fetchDiagnostics(), 1500);
     } catch (e: unknown) {
-      setInstallMessage(getErrorMessage(e, isZh ? '初始化请求失败' : 'Failed to initialize'));
+      setInstallMessage(getErrorMessage(e, ui("ui_failed_to_initialize")));
     } finally {
       setInstallingLlama(false);
     }
@@ -244,11 +246,11 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
     // If preset has hubModelId, use the robust multi-mirror GGUF downloader
     if (preset?.hubModelId) {
-      setPullProgress({ status: isZh ? '正在解析模型多镜像下载源...' : 'Resolving model mirrors...', percent: 0 });
+      setPullProgress({ status: ui("ui_resolving_model_mirrors"), percent: 0 });
       try {
         // Auto-install llama-server binary if not present
         if (!llamaStatus?.installed) {
-          setPullProgress({ status: isZh ? '正在部署嵌入式 llama.cpp 运行时...' : 'Deploying llama.cpp runtime...', percent: 5 });
+          setPullProgress({ status: ui("ui_deploying_llama_cpp_runtime"), percent: 5 });
           await fetch('/api/v1/llama-server/install', { method: 'POST' }).catch(() => {});
         }
 
@@ -276,18 +278,16 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
           if (currentTask.status === 'downloading' || currentTask.status === 'pending') {
             const speedMb = currentTask.speed_bps ? (currentTask.speed_bps / (1024 * 1024)).toFixed(1) : '0';
-            const statusMsg = isZh
-              ? `下载中 (${speedMb} MB/s) • 存储于 engine/models/llm/`
-              : `Downloading (${speedMb} MB/s) to engine/models/llm/`;
+            const statusMsg = ui("ui_downloading_value_mb_s_to_engine_models_llm", { value1: speedMb });
             setPullProgress({
               status: statusMsg,
               percent: Math.min(99, Math.round(currentTask.progress_pct || 0)),
             });
           } else if (currentTask.status === 'completed') {
             completed = true;
-            setPullProgress({ status: isZh ? '模型校验完成，正在启动引擎...' : 'Model verified, starting engine...', percent: 100 });
+            setPullProgress({ status: ui("ui_model_verified_starting_engine"), percent: 100 });
           } else if (currentTask.status === 'failed') {
-            throw new Error(currentTask.error_message || 'Download failed');
+            throw new Error(currentTask.error_message || ui("ui_download_failed"));
           }
         }
 
@@ -315,14 +315,14 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         setActiveStep(3);
         return;
       } catch (err: unknown) {
-        setPullError(getErrorMessage(err, isZh ? 'GGUF 模型下载失败' : 'Model download failed'));
+        setPullError(getErrorMessage(err, ui("ui_model_download_failed")));
         setIsPulling(false);
         return;
       }
     }
 
     if (!preset?.hubModelId) {
-      setPullError(isZh ? '未找到对应的 GGUF 模型配置' : 'GGUF model configuration not found');
+      setPullError(ui("ui_gguf_model_configuration_not_found"));
       setIsPulling(false);
       return;
     }
@@ -334,7 +334,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       (g) => g.backend === 'cuda' || g.vendor === 'nvidia' || g.vendor === 'amd' || g.vram_total_mb > 2048
     ) || hardware?.gpus?.[0];
 
-  const gpuNameDisplay = primaryGpu?.name || (isZh ? '未检测到独立显卡' : 'No Dedicated GPU');
+  const gpuNameDisplay = primaryGpu?.name || (ui("ui_no_dedicated_gpu"));
   const totalVramGb = primaryGpu ? Math.round(primaryGpu.vram_total_mb / 1024) : 0;
   const freeVramGb = primaryGpu ? (primaryGpu.vram_free_mb / 1024).toFixed(1) : '0';
   const usedVramGb = primaryGpu ? ((primaryGpu.vram_total_mb - primaryGpu.vram_free_mb) / 1024).toFixed(1) : '0';
@@ -357,13 +357,13 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
   // Dynamic headline for Step 2
   const gpuDescHeadline = primaryGpu
     ? `${primaryGpu.name} (${totalVramGb}GB VRAM)`
-    : (isZh ? 'CPU 模式' : 'CPU Mode');
+    : (ui("ui_cpu_mode"));
   const ramDescHeadline = hardware
     ? `${totalRamGb}GB RAM`
-    : (isZh ? '主机内存' : 'Host RAM');
+    : (ui("ui_host_ram"));
 
   return (
-    <Dialog title="Setup guide" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none animate-in fade-in duration-200">
+    <Dialog title={ui("ui_setup_guide")} onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100 max-h-[90vh]">
         {/* Header */}
         <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-slate-900/60">
@@ -373,22 +373,19 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <span>{t('setup_wizard_title', lang) || (isZh ? '系统硬件体检与本地模型部署向导' : 'Hardware Diagnostics & Model Setup')}</span>
+                <span>{t('setup_wizard_title', lang) || (ui("ui_hardware_diagnostics_model_setup"))}</span>
                 <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                  Embedded llama.cpp
-                </span>
+                  {ui("ui_embedded_llama_cpp")}</span>
               </h2>
               <p className="text-xs text-slate-400">
                 {t('setup_wizard_subtitle', lang) ||
-                  (isZh
-                    ? '一站式真实检测硬件配置、管理内置 llama.cpp 嵌入引擎与极速部署本地大模型'
-                    : 'Live GPU diagnosis, embedded llama.cpp lifecycle & instant local model provisioning')}
+                  (ui("ui_live_gpu_diagnosis_embedded_llama_cpp_lifecycle_instant"))}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -406,7 +403,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>{t('setup_step_hardware', lang) || (isZh ? '1. 硬件配置体检' : '1. Hardware Check')}</span>
+            <span>{t('setup_step_hardware', lang) || (ui("ui_1_hardware_check"))}</span>
           </button>
           <button
             onClick={() => setActiveStep(2)}
@@ -417,7 +414,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{t('setup_step_model', lang) || (isZh ? '2. 选择与部署模型' : '2. Deploy Model')}</span>
+            <span>{t('setup_step_model', lang) || (ui("ui_2_deploy_model"))}</span>
           </button>
           <button
             onClick={() => setActiveStep(3)}
@@ -428,7 +425,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{t('setup_step_ready', lang) || (isZh ? '3. 体验就绪' : '3. Ready')}</span>
+            <span>{t('setup_step_ready', lang) || (ui("ui_3_ready"))}</span>
           </button>
         </div>
 
@@ -440,16 +437,16 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
               {/* Header bar with Refresh button */}
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span className="font-medium text-slate-300">
-                  {isZh ? '实时底层硬件规格' : 'Live Hardware Telemetry'}
+                  {ui("ui_live_hardware_telemetry")}
                 </span>
                 <button
                   onClick={fetchDiagnostics}
                   disabled={loadingHardware}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white border border-slate-700/60 transition shadow-sm"
-                  title="Refresh Hardware Telemetry"
+                  title={ui("ui_refresh_hardware_telemetry")}
                 >
                   <RefreshCw className={`w-3 h-3 ${loadingHardware ? 'animate-spin text-indigo-400' : ''}`} />
-                  <span>{loadingHardware ? (isZh ? '正在诊断...' : 'Scanning...') : (isZh ? '重新体检' : 'Rescan')}</span>
+                  <span>{loadingHardware ? (ui("ui_scanning")) : (ui("ui_rescan"))}</span>
                 </button>
               </div>
 
@@ -458,19 +455,17 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-500/30 text-rose-300 space-y-2 text-xs">
                   <div className="flex items-center gap-2 font-semibold text-rose-200">
                     <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
-                    <span>{isZh ? '无法连接到后端硬件诊断服务' : 'Backend Hardware Telemetry Unavailable'}</span>
+                    <span>{ui("ui_backend_hardware_telemetry_unavailable")}</span>
                   </div>
                   <p className="text-[11px] text-rose-300/90 leading-relaxed">
-                    {isZh
-                      ? '后端服务 (http://127.0.0.1:8000) 尚未就绪或连接被拒绝。正在启动后台进程，请稍候点击下方按钮重试。'
-                      : 'The core backend service is not yet responding. Please ensure the local service is running.'}
+                    {ui("ui_the_core_backend_service_is_not_yet_responding")}
                   </p>
                   <button
                     onClick={fetchDiagnostics}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/30 hover:bg-rose-600/50 border border-rose-500/40 text-white font-medium text-xs transition"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span>{isZh ? '重试连接' : 'Retry Connection'}</span>
+                    <span>{ui("ui_retry_connection")}</span>
                   </button>
                 </div>
               )}
@@ -482,16 +477,15 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                       <Cpu className="w-4 h-4 text-indigo-400" />
-                      {isZh ? '图形显卡 (GPU)' : 'Graphics Processor'}
+                      {ui("ui_graphics_processor")}
                     </span>
                     {primaryGpu ? (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold tracking-wide border border-emerald-500/30">
-                        {primaryGpu.vendor ? `${primaryGpu.vendor.toUpperCase()} ${primaryGpu.backend?.toUpperCase() || ''}`.trim() : 'GPU ACCEL'}
+                        {primaryGpu.vendor ? `${primaryGpu.vendor.toUpperCase()} ${primaryGpu.backend?.toUpperCase() || ''}`.trim() : ui("ui_gpu_accel")}
                       </span>
                     ) : (
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-medium border border-amber-500/30">
-                        CPU MODE
-                      </span>
+                        {ui("ui_cpu_mode_2")}</span>
                     )}
                   </div>
                   <div>
@@ -502,30 +496,30 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                       <div className="space-y-1.5 mt-2">
                         <div className="flex items-center justify-between text-xs text-slate-300 font-mono">
                           <span>
-                            {isZh ? '显存' : 'VRAM'}: <strong className="text-indigo-300">{totalVramGb} GB</strong>
+                            {ui("ui_vram")}: <strong className="text-indigo-300">{totalVramGb} {ui("ui_gb")}</strong>
                           </span>
                           <span className="text-slate-400 text-[11px]">
-                            {isZh ? `空闲 ${freeVramGb}G` : `Free ${freeVramGb}G`} / {isZh ? `占用 ${usedVramGb}G` : `Used ${usedVramGb}G`}
+                            {ui("ui_free_valueg", { value1: freeVramGb })} / {ui("ui_used_valueg", { value1: usedVramGb })}
                           </span>
                         </div>
                         {/* VRAM Bar */}
                         <div className="w-full h-1.5 rounded-full bg-slate-700/60 overflow-hidden">
-                          <ProgressBar label="Observed progress" value={vramPercent} className={`h-full transition-all duration-300 ${
+                          <ProgressBar label={ui("ui_observed_progress")} value={vramPercent} className={`h-full transition-all duration-300 ${
                               vramPercent > 85 ? 'text-rose-500' : vramPercent > 60 ? 'text-amber-400' : 'text-emerald-400'
                             }`} />
                         </div>
                         <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5">
                           {primaryGpu.driver_version && (
-                            <span>{isZh ? '驱动版本' : 'Driver'}: {primaryGpu.driver_version}</span>
+                            <span>{ui("ui_driver_2")}: {primaryGpu.driver_version}</span>
                           )}
                           {primaryGpu.temperature_c !== null && primaryGpu.temperature_c !== undefined && (
-                            <span>{isZh ? '核心温度' : 'Temp'}: {primaryGpu.temperature_c}°C</span>
+                            <span>{ui("ui_temp")}: {primaryGpu.temperature_c}{ui("ui_c")}</span>
                           )}
                         </div>
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400 mt-1">
-                        {isZh ? '未检测到独立显卡加速设备，将使用 CPU 进行轻量推理' : 'Fallback to CPU execution'}
+                        {ui("ui_fallback_to_cpu_execution")}
                       </p>
                     )}
                   </div>
@@ -536,36 +530,35 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
                       <Zap className="w-4 h-4 text-purple-400" />
-                      {isZh ? '系统内存 (RAM)' : 'System Memory'}
+                      {ui("ui_system_memory")}
                     </span>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-medium border border-purple-500/30">
-                      Host RAM
-                    </span>
+                      {ui("ui_host_ram")}</span>
                   </div>
                   <div>
                     <div className="text-sm font-bold text-white">
-                      {hardware ? `${totalRamGb} GB RAM` : (isZh ? '正在读取内存...' : 'Reading RAM...')}
+                      {hardware ? ui("ui_value_gb_ram", { value1: totalRamGb }) : (ui("ui_reading_ram"))}
                     </div>
                     {hardware ? (
                       <div className="space-y-1.5 mt-2">
                         <div className="flex items-center justify-between text-xs text-slate-300 font-mono">
                           <span>
-                            {isZh ? '当前可用' : 'Available'}: <strong className="text-purple-300">{availRamGb} GB</strong>
+                            {ui("ui_available")}: <strong className="text-purple-300">{availRamGb} {ui("ui_gb")}</strong>
                           </span>
-                          <span className="text-slate-400 text-[11px]">{ramPercent}% {isZh ? '已用' : 'Used'}</span>
+                          <span className="text-slate-400 text-[11px]">{ramPercent}% {ui("ui_used")}</span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-slate-700/60 overflow-hidden">
-                          <ProgressBar label="Observed progress" value={ramPercent} className="h-full text-purple-500 transition-all duration-300" />
+                          <ProgressBar label={ui("ui_observed_progress")} value={ramPercent} className="h-full text-purple-500 transition-all duration-300" />
                         </div>
                         <p className="text-[10px] text-slate-400 pt-0.5">
                           {isZh
                             ? totalRamGb >= 16 ? '内存充裕，支持同时加载大模型与绘图管道' : '建议部署轻量模型避免内存超载'
-                            : totalRamGb >= 16 ? 'Ample memory for models & workflows' : 'Lightweight model recommended'}
+                            : totalRamGb >= 16 ? ui("ui_ample_memory_for_models_workflows") : ui("ui_lightweight_model_recommended")}
                         </p>
                       </div>
                     ) : (
                       <p className="text-xs text-slate-400 mt-1">
-                        {isZh ? '正在从系统内核读取内存状态...' : 'Querying host system RAM...'}
+                        {ui("ui_querying_host_system_ram")}
                       </p>
                     )}
                   </div>
@@ -577,14 +570,13 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-slate-400 flex items-center gap-1.5">
                     <HardDrive className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{isZh ? '磁盘存储空间 (Engine & Model Root)' : 'Disk Storage'}</span>
+                    <span>{ui("ui_disk_storage")}</span>
                   </span>
                   <span className="text-slate-300 font-mono text-xs">
                     {hardware ? (
                       <>
-                        <strong className="text-slate-100">{storageFreeGb.toFixed(1)} GB</strong>{' '}
-                        {isZh ? '可用' : 'Free'} / {storageTotalGb.toFixed(0)} GB
-                      </>
+                        <strong className="text-slate-100">{storageFreeGb.toFixed(1)} {ui("ui_gb")}</strong>{' '}
+                        {ui("ui_free")} / {storageTotalGb.toFixed(0)} {ui("ui_gb")}</>
                     ) : (
                       '...'
                     )}
@@ -598,8 +590,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/20 text-xs text-indigo-200 leading-relaxed">
                   {hardware?.summary_message ||
                     (loadingHardware
-                      ? (isZh ? '正在分析系统硬件规格与显卡加速通道...' : 'Evaluating hardware compatibility...')
-                      : (isZh ? '请启动后端服务以加载硬件规格' : 'Start backend service to load hardware specs'))}
+                      ? (ui("ui_evaluating_hardware_compatibility"))
+                      : (ui("ui_start_backend_service_to_load_hardware_specs")))}
                 </div>
                 {hardware?.guidance_notes && hardware.guidance_notes.length > 0 && (
                   <ul className="text-[11px] text-slate-400 space-y-1 list-disc pl-4 pt-1">
@@ -619,12 +611,12 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                     </div>
                     <div>
                       <div className="text-xs font-bold text-white flex items-center gap-2">
-                        <span>{isZh ? '内置 llama.cpp 嵌入引擎 (免安装 • 零污染)' : 'Embedded llama.cpp Server (Zero Host Pollution)'}</span>
+                        <span>{ui("ui_embedded_llama_cpp_server_zero_host_pollution")}</span>
                         {llamaStatus?.running ? (
                           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                         ) : !llamaStatus?.installed ? (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
-                            {isZh ? '待初始化' : 'Not Initialized'}
+                            {ui("ui_not_initialized")}
                           </span>
                         ) : (
                           <span className="w-2 h-2 rounded-full bg-slate-400" />
@@ -632,10 +624,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">
                         {llamaStatus?.running
-                          ? (isZh ? `已就绪并监听端口 ${llamaStatus.port} (模型与画布100%共享通用)` : `Active on port ${llamaStatus.port} (Shared GGUF)`)
+                          ? (ui("ui_active_on_port_value_shared_gguf", { value1: llamaStatus.port }))
                           : !llamaStatus?.installed
-                          ? (isZh ? '独立可执行二进制未就绪，可点击右侧自动初始化' : 'Binary ready for automatic setup')
-                          : (isZh ? '已完成初始化，将在部署或使用模型时自动拉起' : 'Ready to start on demand')}
+                          ? (ui("ui_binary_ready_for_automatic_setup"))
+                          : (ui("ui_ready_to_start_on_demand"))}
                       </p>
                     </div>
                   </div>
@@ -648,7 +640,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                         className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition shadow-sm"
                       >
                         <Download className="w-3.5 h-3.5" />
-                        <span>{installingLlama ? (isZh ? '初始化中...' : 'Installing...') : (isZh ? '一键安装引擎' : 'Init Engine')}</span>
+                        <span>{installingLlama ? (ui("ui_installing")) : (ui("ui_init_engine"))}</span>
                       </button>
                     ) : !llamaStatus?.running ? (
                       <button
@@ -657,12 +649,12 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                         className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg transition-colors shadow-sm"
                       >
                         <Play className="w-3.5 h-3.5" />
-                        <span>{loadingLlama ? (isZh ? '启动中...' : 'Starting...') : (isZh ? '启动服务' : 'Start Service')}</span>
+                        <span>{loadingLlama ? (ui("ui_starting")) : (ui("ui_start_service"))}</span>
                       </button>
                     ) : (
                       <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>{isZh ? '已在线运行' : 'Running'}</span>
+                        <span>{ui("ui_running")}</span>
                       </span>
                     )}
                   </div>
@@ -681,11 +673,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           {activeStep === 2 && (
             <div className="space-y-4">
               <div className="p-3 rounded-lg bg-indigo-950/30 border border-indigo-500/20 text-xs text-slate-200 leading-relaxed">
-                <span className="text-indigo-300 font-semibold">{isZh ? '硬件适配诊断：' : 'Hardware Telemetry: '}</span>
+                <span className="text-indigo-300 font-semibold">{ui("ui_hardware_telemetry")}</span>
                 <span>
-                  {isZh
-                    ? `根据您的真实硬件规格（${gpuDescHeadline} / ${ramDescHeadline}），为您智能推荐以下最佳适配大语言模型：`
-                    : `Based on your live hardware telemetry (${gpuDescHeadline} / ${ramDescHeadline}), we recommend the following models:`}
+                  {ui("ui_based_on_your_live_hardware_telemetry_value_value", { value1: gpuDescHeadline, value2: ramDescHeadline })}
                 </span>
               </div>
 
@@ -720,25 +710,25 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                           </span>
                           {isRecommended && (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
-                              {isZh ? '最佳匹配' : 'Optimal'}
+                              {ui("ui_optimal")}
                             </span>
                           )}
                           {isAlreadyInstalled && (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">
-                              {isZh ? '已安装' : 'Installed'}
+                              {ui("ui_installed")}
                             </span>
                           )}
                           {fitsGpu ? (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 font-mono">
-                              {isZh ? '显卡满血' : 'GPU Max'}
+                              {ui("ui_gpu_max")}
                             </span>
                           ) : fitsRam ? (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 font-mono">
-                              {isZh ? '内存混合' : 'RAM Hybrid'}
+                              {ui("ui_ram_hybrid")}
                             </span>
                           ) : (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-700/40 text-slate-400 font-mono">
-                              {isZh ? '较高负载' : 'Heavy Load'}
+                              {ui("ui_heavy_load")}
                             </span>
                           )}
                         </div>
@@ -746,9 +736,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                           {isZh ? model.descZh : model.descEn}
                         </p>
                         <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-0.5">
-                          <span>{isZh ? '下载体积' : 'Download Size'}: {model.size}</span>
+                          <span>{ui("ui_download_size")}: {model.size}</span>
                           <span>•</span>
-                          <span>{isZh ? '显存要求' : 'VRAM req'}: {Math.round(model.vramReqMb / 1024)} GB+</span>
+                          <span>{ui("ui_vram_req")}: {Math.round(model.vramReqMb / 1024)} {ui("ui_gb_2")}</span>
                         </div>
                       </div>
 
@@ -778,12 +768,12 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-indigo-300 flex items-center gap-2 font-medium">
                       <RotateCw className="w-3.5 h-3.5 animate-spin" />
-                      {pullProgress.status || (isZh ? '正在下载模型分片...' : 'Pulling model...')}
+                      {pullProgress.status || (ui("ui_pulling_model"))}
                     </span>
                     <span className="text-white font-mono font-bold">{pullProgress.percent}%</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                    <ProgressBar label="Observed progress" value={pullProgress.percent} className="h-full text-indigo-500 transition-all duration-300" />
+                    <ProgressBar label={ui("ui_observed_progress")} value={pullProgress.percent} className="h-full text-indigo-500 transition-all duration-300" />
                   </div>
                 </div>
               )}
@@ -805,25 +795,23 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
               </div>
               <div className="space-y-1 max-w-md">
                 <h3 className="text-base font-bold text-white">
-                  {isZh ? '大模型基座与智能体已就绪！' : 'Local Model & Agent Base Ready!'}
+                  {ui("ui_local_model_agent_base_ready")}
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  {isZh
-                    ? '您的本地大语言模型现已启动并与 Berry AI Studio 深度集成。您可以在右侧 Agents 面板或创意画布中直接使用自然语言提需求并生成工作流。'
-                    : 'Your local LLM is now running seamlessly with Berry AI Studio. Open the right-side Agent sidebar to chat, generate images, or orchestrate workflows.'}
+                  {ui("ui_your_local_llm_is_now_running_seamlessly_with")}
                 </p>
               </div>
 
               {llamaStatus?.models && llamaStatus.models.length > 0 && (
                 <div className="w-full max-w-sm p-3 rounded-xl bg-slate-800/40 border border-white/[0.06] text-left text-xs">
                   <div className="font-semibold text-slate-300 mb-1">
-                    {isZh ? '已加载 GGUF 本地模型清单:' : 'Loaded GGUF Models:'}
+                    {ui("ui_loaded_gguf_models")}
                   </div>
                   <div className="space-y-1">
                     {llamaStatus.models.map((m) => (
                       <div key={m.name} className="flex justify-between text-slate-400 font-mono text-[11px]">
                         <span>• {m.name}</span>
-                        <span>{Math.round((m.size_bytes / (1024 * 1024 * 1024)) * 10) / 10} GB</span>
+                        <span>{Math.round((m.size_bytes / (1024 * 1024 * 1024)) * 10) / 10} {ui("ui_gb")}</span>
                       </div>
                     ))}
                   </div>
@@ -842,7 +830,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 disabled={isPulling}
                 className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors"
               >
-                {isZh ? '返回上一步' : 'Back'}
+                {ui("ui_back")}
               </button>
             )}
           </div>
@@ -853,7 +841,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 onClick={() => setActiveStep(2)}
                 className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
-                <span>{isZh ? '下一步：选择并部署模型' : 'Next: Select & Deploy'}</span>
+                <span>{ui("ui_next_select_deploy")}</span>
               </button>
             )}
 
@@ -866,8 +854,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 <Download className="w-4 h-4" />
                 <span>
                   {isPulling
-                    ? (isZh ? '正在拉取模型...' : 'Pulling Model...')
-                    : (isZh ? `立即下载并部署 ${selectedModel}` : `Deploy ${selectedModel}`)}
+                    ? (ui("ui_pulling_model_2"))
+                    : (ui("ui_deploy_value", { value1: selectedModel }))}
                 </span>
               </button>
             )}
@@ -881,7 +869,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                 className="flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>{isZh ? '立即进入 AI Agent 创作' : 'Open AI Agent Now'}</span>
+                <span>{ui("ui_open_ai_agent_now")}</span>
               </button>
             )}
           </div>

@@ -1,8 +1,10 @@
+import { useUiText } from '../../i18n/useUiText';
 import React from 'react';
 import { ArrowDownToLine, ChevronUp, Loader2 } from 'lucide-react';
 import { useDownloadStore } from '../../stores/useDownloadStore';
 
 export const FloatingDownloadWidget: React.FC = () => {
+  const ui = useUiText();
   const tasks = useDownloadStore((state) => state.tasks);
   const isDrawerOpen = useDownloadStore((state) => state.isDrawerOpen);
   const toggleDrawer = useDownloadStore((state) => state.toggleDrawer);
@@ -42,12 +44,12 @@ export const FloatingDownloadWidget: React.FC = () => {
       <div className="flex items-center gap-2 text-xs font-medium">
         {activeCount > 0 ? (
           <>
-            <span className="text-neutral-200 font-semibold">{activeCount} Downloading</span>
+            <span className="text-neutral-200 font-semibold">{activeCount} {ui("ui_downloading")}</span>
             <span className="text-neutral-500">·</span>
             <span className="text-emerald-400 font-mono">{formatSpeed(totalSpeed)}</span>
           </>
         ) : (
-          <span className="text-neutral-300">{tasks.length} Downloads</span>
+          <span className="text-neutral-300">{tasks.length} {ui("ui_downloads")}</span>
         )}
       </div>
 

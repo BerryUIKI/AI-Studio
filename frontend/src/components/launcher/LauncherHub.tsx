@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import React, { useEffect } from 'react';
 import {
   Plus,
@@ -40,6 +41,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
   onLaunchFailed,
   onOpenSetupWizard,
 }) => {
+  const ui = useUiText();
   const {
     instances,
     isLoading,
@@ -73,7 +75,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
         <div className="flex items-center gap-2 mb-4">
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-medium">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Berry AI Studio Launcher Hub</span>
+            <span>{ui("ui_berry_ai_studio_launcher_hub")}</span>
           </div>
           {onOpenSetupWizard && (
             <button
@@ -85,11 +87,9 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
           )}
         </div>
         <h1 className="text-4xl font-extrabold tracking-tight text-white mb-3">
-          Creative Hub & Workspaces
-        </h1>
+          {ui("ui_creative_hub_workspaces")}</h1>
         <p className="text-slate-400 text-sm max-w-md">
-          Launch your creative workspace, orchestrate local diffusion engines, or automate with multi-modal AI agents.
-        </p>
+          {ui("ui_launch_your_creative_workspace_orchestrate_local_diffusion_engines")}</p>
 
         {/* Global Search Bar */}
         <div className="relative w-full mt-6">
@@ -98,7 +98,7 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search workspaces and engine instances..."
+            placeholder={ui("ui_search_workspaces_and_engine_instances")}
             className="w-full pl-10 pr-10 py-2.5 bg-slate-900/80 border border-white/[0.1] rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all shadow-inner"
           />
           {isLoading && (
@@ -111,15 +111,15 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
       <div className="max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-4 px-1">
           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Available Environments ({filteredInstances.length})
+            {ui("ui_available_environments")}{filteredInstances.length})
           </span>
           <button
             onClick={() => fetchInstances()}
-            title="Refresh instances status"
+            title={ui("ui_refresh_instances_status")}
             className="text-xs text-slate-400 hover:text-slate-200 flex items-center space-x-1"
           >
             <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
+            <span>{ui("ui_refresh")}</span>
           </button>
         </div>
 
@@ -150,11 +150,9 @@ export const LauncherHub: React.FC<LauncherHubProps> = ({
               <Plus className="w-6 h-6" />
             </div>
             <h3 className="text-sm font-bold text-slate-200 group-hover:text-indigo-300 transition-colors">
-              Add Engine Instance
-            </h3>
+              {ui("ui_add_engine_instance")}</h3>
             <p className="text-xs text-slate-500 text-center mt-1">
-              Connect external directory or deploy a fresh environment
-            </p>
+              {ui("ui_connect_external_directory_or_deploy_a_fresh_environment")}</p>
           </div>
         </div>
       </div>
