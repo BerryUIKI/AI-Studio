@@ -177,18 +177,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning(f"Failed to auto-start embedded llama-server: {e}")
 
     inventory_warmup = asyncio.create_task(model_store.scan_all_roots_async())
-    yield
-
-    logger.info("Berry AI Studio API shutting down...")
-    await workflow_runs.shutdown()
-    await creative_tasks.shutdown()
-    await inventory_warmup
     try:
-        if await run_blocking(llama_server_supervisor.is_running):
-            logger.info("Stopping embedded llama-server process...")
-            await mutate_process("llama", llama_server_supervisor.stop)
-    except Exception as e:
-        logger.debug(f"Error stopping llama-server on shutdown: {e}")
+        yield
+    finally:
+        logger.info("Berry AI Studio API shutting down...")
+        try:
+            outcomes = await asyncio.gather(workflow_runs.shutdown(), creative_tasks.shutdown(), return_exceptions=True)
+            inventory_warmup.cancel()
+            await asyncio.gather(inventory_warmup, return_exceptions=True)
+            try:
+                if await run_blocking(llama_server_supervisor.is_running):
+                    logger.info("Stopping embedded llama-server process...")
+                    await mutate_process("llama", llama_server_supervisor.stop)
+            except Exception as e:
+                logger.debug(f"Error stopping llama-server on shutdown: {e}")
+            for outcome in outcomes:
+                if isinstance(outcome, BaseException):
+                    raise outcome
+        finally:
+            await db_manager.close()
 
 
 setup_logging()

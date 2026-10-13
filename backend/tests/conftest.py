@@ -1,7 +1,45 @@
 """Shared test fixtures and helpers."""
-import pytest
+
+import os
+import uuid
+from collections.abc import AsyncIterator
+from pathlib import Path
 from unittest.mock import Mock, patch
-from app.schemas.engine import EngineConnection, EngineType, EngineOwnership, EngineStatus
+
+import aiosqlite
+import pytest
+import pytest_asyncio
+from app.schemas.engine import (
+    EngineConnection,
+    EngineOwnership,
+    EngineStatus,
+    EngineType,
+)
+
+# Set isolation before collection imports modules with credential/data singletons.
+_test_root = (
+    Path(__file__).resolve().parents[2] / ".cache" / "backend-tests" / uuid.uuid4().hex
+)
+os.environ["BERRY_DATA_DIR"] = str(_test_root / "data")
+os.environ["AI_WORKFLOW_ENGINE_DIR"] = str(_test_root / "engines")
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def close_test_databases(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+    """Release every real SQLite manager used by a test before its loop closes."""
+    from app.storage.db import DatabaseManager
+
+    managers: set[DatabaseManager] = set()
+    original = DatabaseManager.get_connection
+
+    async def tracked(manager: DatabaseManager) -> aiosqlite.Connection:
+        managers.add(manager)
+        return await original(manager)
+
+    monkeypatch.setattr(DatabaseManager, "get_connection", tracked)
+    yield
+    for manager in managers:
+        await manager.close()
 
 
 @pytest.fixture
