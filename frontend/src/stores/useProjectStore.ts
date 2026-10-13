@@ -337,6 +337,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   markDirty: () => {
+    // An older save response must not acknowledge edits made after its snapshot.
+    if (get().isSaving) hasPendingChangesWhileSaving = true;
     // If not dirty, mark dirty and schedule debounced autosave
     set({ isDirty: true, autosaveStatus: 'dirty' });
     get().triggerAutosave();
