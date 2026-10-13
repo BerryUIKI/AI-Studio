@@ -1,5 +1,6 @@
+import { Dialog } from '../ui/Dialog';
 import React, { useState } from 'react';
-import { AlertTriangle, X, CheckSquare, Square } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 
 export interface RunningEngineItem {
   id: string;
@@ -30,13 +31,13 @@ export const ExitConfirmDialog: React.FC<ExitConfirmDialogProps> = ({
   const hasTasks = activeTasksCount > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm select-none">
+    <Dialog title="Exit Berry" onClose={onCancel} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm select-none">
       <div className="relative w-full max-w-md bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden p-6 text-slate-100 animate-in fade-in zoom-in-95 duration-150">
         {/* Close Button */}
         <button
           onClick={onCancel}
           className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title="Cancel"
+          title="Cancel" aria-label="Cancel exit"
         >
           <X className="w-4 h-4" />
         </button>
@@ -83,17 +84,10 @@ export const ExitConfirmDialog: React.FC<ExitConfirmDialogProps> = ({
         </div>
 
         {/* Remember Choice Checkbox */}
-        <div
-          onClick={() => setRememberChoice(!rememberChoice)}
-          className="flex items-center gap-2 mb-6 cursor-pointer text-xs text-slate-300 hover:text-white transition-colors"
-        >
-          {rememberChoice ? (
-            <CheckSquare className="w-4 h-4 text-indigo-400" />
-          ) : (
-            <Square className="w-4 h-4 text-slate-500" />
-          )}
+        <label className="flex items-center gap-2 mb-6 text-xs text-slate-300">
+          <input type="checkbox" checked={rememberChoice} onChange={(event) => setRememberChoice(event.target.checked)} />
           <span>Remember my choice in Settings</span>
-        </div>
+        </label>
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-2.5">
@@ -117,6 +111,6 @@ export const ExitConfirmDialog: React.FC<ExitConfirmDialogProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

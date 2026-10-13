@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React, { useEffect, useState, useRef } from 'react';
 import { EngineInstance } from '../../stores/useEngineStore';
 import { X, RefreshCw, Copy, Check, Terminal } from 'lucide-react';
@@ -60,7 +61,7 @@ export const EngineLogViewer: React.FC<EngineLogViewerProps> = ({
   if (!isOpen || !instance) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm select-none">
+    <Dialog title="Engine logs" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm select-none">
       <div className="relative w-full max-w-3xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl flex flex-col h-[75vh] max-h-[650px] overflow-hidden text-slate-100">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-800 bg-slate-950/40">
@@ -84,21 +85,21 @@ export const EngineLogViewer: React.FC<EngineLogViewerProps> = ({
           <div className="flex items-center space-x-1.5">
             <button
               onClick={fetchLogs}
-              title="Refresh Logs"
+              title="Refresh Logs" aria-label="Refresh logs"
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={handleCopy}
-              title="Copy all logs"
+              title="Copy all logs" aria-label="Copy all logs"
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
             </button>
             <button
               onClick={onClose}
-              title="Close"
+              title="Close" aria-label="Close engine logs"
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
               <X className="w-4 h-4" />
@@ -141,6 +142,6 @@ export const EngineLogViewer: React.FC<EngineLogViewerProps> = ({
           <span className="font-mono">Auto-refresh every 4s</span>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

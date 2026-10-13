@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { removeEngine, type EngineRemovalResult } from '../../api/engineLifecycle';
 import type { EngineInstance } from '../../stores/useEngineStore';
+import { Dialog } from '../ui/Dialog';
 
 interface Props {
   instance: EngineInstance;
@@ -15,15 +16,8 @@ export function EngineRemovalDialog({ instance, onClose, onCompleted }: Props) {
   const dialog = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const done = useRef<HTMLButtonElement>(null);
-  const close = useRef(onClose);
-  close.current = onClose;
   const running = instance.is_managed && instance.status === 'running';
 
-  useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    cancel.current?.focus();
-    return () => previous?.focus();
-  }, []);
   useEffect(() => { if (result) done.current?.focus(); }, [result]);
   useEffect(() => { if (busy) dialog.current?.focus(); }, [busy]);
 
@@ -41,22 +35,11 @@ export function EngineRemovalDialog({ instance, onClose, onCompleted }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) close.current();
+    <Dialog title={instance.is_managed ? 'Uninstall engine' : 'Remove engine connection'} role="alertdialog" aria-describedby="engine-removal-description" onClose={() => { if (!busy) onClose(); }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !busy) onClose();
     }}>
-      <div ref={dialog} tabIndex={-1} role="alertdialog" aria-modal="true" aria-labelledby="engine-removal-title" aria-describedby="engine-removal-description"
-        className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-2xl"
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === 'Escape' && !busy) close.current();
-          if (event.key === 'Tab') {
-            const buttons = [...(dialog.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
-            const first = buttons[0], last = buttons[buttons.length - 1];
-            if (!buttons.length) event.preventDefault();
-            if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-            else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-          }
-        }}>
+      <div ref={dialog} tabIndex={-1}
+        className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-2xl">
         <h2 id="engine-removal-title" className="text-lg font-semibold">{instance.is_managed ? 'Uninstall' : 'Remove connection to'} {instance.name}</h2>
         <p id="engine-removal-description" className="mt-3 text-sm text-slate-300">
           {instance.is_managed
@@ -79,6 +62,6 @@ export function EngineRemovalDialog({ instance, onClose, onCompleted }: Props) {
           </>}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

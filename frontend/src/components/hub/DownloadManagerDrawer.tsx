@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React from 'react';
 import {
   X,
@@ -47,7 +48,7 @@ export const DownloadManagerDrawer: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <Dialog title="Downloads" onClose={() => setDrawerOpen(false)} className="fixed inset-0 z-50 flex justify-end">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
@@ -67,6 +68,7 @@ export const DownloadManagerDrawer: React.FC = () => {
           </div>
           <button
             onClick={() => setDrawerOpen(false)}
+            aria-label="Close downloads"
             className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-md transition-colors"
           >
             <X className="w-4 h-4" />
@@ -192,6 +194,6 @@ export const DownloadManagerDrawer: React.FC = () => {
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

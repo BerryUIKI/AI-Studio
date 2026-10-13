@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React from 'react';
 import { Download, AlertCircle, FolderSearch, X, Sparkles, CheckCircle2 } from 'lucide-react';
 import { EngineInstance } from '../../stores/useEngineStore';
@@ -30,13 +31,13 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
   const engineTitle = instance.name || (engineType === 'comfyui' ? 'ComfyUI' : 'SD WebUI');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none animate-in fade-in duration-150">
+    <Dialog title="Engine setup required" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none animate-in fade-in duration-150">
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden p-6 text-slate-100 animate-in zoom-in-95 duration-150">
         {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title="Close"
+          title="Close" aria-label="Close engine setup"
         >
           <X className="w-4 h-4" />
         </button>
@@ -107,6 +108,6 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };
