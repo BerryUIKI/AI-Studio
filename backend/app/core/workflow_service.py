@@ -58,7 +58,7 @@ class WorkflowExecutionService:
         for node in sorted_nodes:
             parents = resolver.get_parent_ids(node.id)
             try:
-                spec = await resolve_workflow_node(node, graph, known_outputs, self.runners[node.type])
+                spec = await resolve_workflow_node(node, graph, known_outputs, self.runners[node.type], cache=self.cache)
             except (ValueError, OSError) as error:
                 raise WorkflowPlanError(status_code=400, detail=str(error)) from error
             is_cached = spec.cached_output is not None
@@ -159,7 +159,7 @@ class WorkflowExecutionService:
                     )
                     continue
 
-                spec = await resolve_workflow_node(node, graph, node_outputs, self.runners[node.type])
+                spec = await resolve_workflow_node(node, graph, node_outputs, self.runners[node.type], cache=self.cache)
                 inputs = spec.inputs
                 await websocket.bind_inputs(node.id, inputs, spec.params)
                 node_hash = spec.node_hash
