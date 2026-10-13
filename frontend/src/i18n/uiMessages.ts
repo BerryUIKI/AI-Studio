@@ -1,5 +1,7 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  "ui_gpu_checking": "Checking GPU…",
+  "ui_gpu_telemetry_unavailable": "GPU telemetry unavailable",
   "ui_provider_api_key": "{provider} API key",
   "ui_no_free_key_test": "This provider has no verified free connection check. Save your key, then explicitly create an image to test access; generation may incur charges.",
   "ui_create_with": "Create with",
