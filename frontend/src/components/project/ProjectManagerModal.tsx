@@ -119,6 +119,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
               <input
                 type="text"
                 placeholder={ui("ui_search_projects")}
+                aria-label={ui("ui_search_projects")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
@@ -141,6 +142,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
               <input
                 type="text"
                 placeholder={ui("ui_project_name")}
+                aria-label={ui("ui_project_name")}
                 autoFocus
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
@@ -190,6 +192,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                         <input
                           type="text"
                           value={editName}
+                          aria-label={ui("ui_project_name")}
                           onChange={(e) => setEditName(e.target.value)}
                           autoFocus
                           onKeyDown={(e) => {
@@ -200,12 +203,14 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                         />
                         <button
                           onClick={() => handleSaveRename(proj.id)}
+                          aria-label={ui("ui_save")}
                           className="p-1 text-emerald-400 hover:bg-slate-800 rounded"
                         >
                           <Check className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
+                          aria-label={ui("ui_cancel")}
                           className="p-1 text-slate-400 hover:bg-slate-800 rounded"
                         >
                           <X className="w-4 h-4" />
