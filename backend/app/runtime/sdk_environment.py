@@ -34,10 +34,11 @@ def sdk_ready(spec: CustomProviderSpec, data_dir: Path | None = None) -> bool:
     marker = target / "ready.json"
     try:
         value = json.loads(marker.read_text(encoding="utf-8"))
-        interpreter = (
-            target
-            / ".venv"
-            / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+        environment = target / ".venv"
+        if not environment.resolve().is_relative_to(target.resolve()):
+            return False
+        interpreter = environment / (
+            "Scripts/python.exe" if sys.platform == "win32" else "bin/python"
         )
         return interpreter.is_file() and value == {
             "requirements": spec.requirements,
@@ -56,14 +57,15 @@ def sdk_module_paths(
             "Prepare the approved SDK environment before running this platform"
         )
     environment = target / ".venv"
-    return [
-        str(
-            environment / "Lib/site-packages"
-            if sys.platform == "win32"
-            else environment
-            / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
-        )
-    ]
+    directory = (
+        environment / "Lib/site-packages"
+        if sys.platform == "win32"
+        else environment
+        / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages"
+    )
+    if not directory.resolve().is_relative_to(target.resolve()):
+        raise AdapterError("SDK packages must remain inside their isolated environment")
+    return [str(directory)]
 
 
 def sdk_dependency_revision(
@@ -97,6 +99,10 @@ async def prepare_sdk_environment(
     if await run_blocking(sdk_ready, spec, data_dir):
         return
     await run_blocking(target.mkdir, parents=True, exist_ok=True)
+    if not (target / ".venv").resolve().is_relative_to(target.resolve()):
+        raise AdapterError(
+            "SDK environment path points outside application-owned storage"
+        )
     requirements = target / "requirements.txt"
     await run_blocking(requirements.write_text, spec.requirements, encoding="utf-8")
     # Code is fixed by Berry; dependency strings are validated, pinned and hashed.
@@ -104,6 +110,7 @@ async def prepare_sdk_environment(
 spec=json.loads(sys.stdin.readline())
 target=pathlib.Path(spec['target'])
 environment=target/'.venv'
+if not environment.resolve().is_relative_to(target.resolve()): raise RuntimeError('SDK path redirected')
 venv.EnvBuilder(with_pip=bool(spec['dependencies']),clear=True).create(environment)
 if spec['dependencies']:
     python=environment/('Scripts/python.exe' if sys.platform=='win32' else 'bin/python')
