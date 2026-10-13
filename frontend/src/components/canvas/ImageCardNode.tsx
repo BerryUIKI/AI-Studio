@@ -20,9 +20,11 @@ import { useCanvasStore } from '../../stores/useCanvasStore';
 import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
 import { downloadOriginalMedia, mediaCardFields } from '../../utils/media';
 import { CardMedia } from './CardMedia';
+import { useCreativeCapabilities } from '../../hooks/useCreativeCapabilities';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const ui = useUiText();
+  const supports = useCreativeCapabilities();
   const cardData = data as unknown as ImageCardData;
   const setReferenceImage = useCreativeStore((state) => state.setReferenceImage);
   const openInpaint = useCreativeStore((state) => state.openInpaint);
@@ -152,6 +154,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
               <>
                 <button
                   onClick={handleAnimate}
+                  disabled={!supports('img2video')}
                   title={ui("ui_animate_image_to_video")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-purple-400 hover:bg-slate-800 transition"
                 >
@@ -159,6 +162,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                 </button>
                 <button
                   onClick={handleVary}
+                  disabled={!supports('img2img')}
                   title={ui("ui_vary_image_to_image")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-400 hover:bg-slate-800 transition"
                 >
@@ -166,6 +170,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                 </button>
                 <button
                   onClick={handleInpaint}
+                  disabled={!supports('inpaint')}
                   title={ui("ui_inpaint_mask")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-slate-800 transition"
                 >
@@ -173,6 +178,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                 </button>
                 <button
                   onClick={handleUpscale}
+                  disabled={!supports('upscale')}
                   title={ui("ui_upscale_image_2")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-400 hover:bg-slate-800 transition"
                 >
