@@ -48,7 +48,9 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
 
   return (
     <div
-      className="absolute -bottom-14 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 bg-slate-900/95 backdrop-blur-xl border border-indigo-500/40 rounded-2xl p-1.5 shadow-2xl shadow-slate-950/80 animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
+      role="group"
+      aria-label={ui("ui_selected_asset")}
+      className="flex flex-wrap items-center gap-1 bg-slate-900/95 border border-indigo-500/40 rounded-xl p-1.5 pointer-events-auto"
       onClick={(e) => e.stopPropagation()}
     >
       {!isVideo && (

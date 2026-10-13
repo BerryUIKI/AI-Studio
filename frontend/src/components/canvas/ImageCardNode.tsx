@@ -20,7 +20,6 @@ import { useCanvasStore } from '../../stores/useCanvasStore';
 import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
 import { downloadOriginalMedia, mediaCardFields } from '../../utils/media';
 import { CardMedia } from './CardMedia';
-import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
   const ui = useUiText();
@@ -144,11 +143,6 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
           : 'border-slate-800 hover:border-slate-700'
       }`}
     >
-      {/* Floating In-Place Action Bar for Selected Card (Issue #34) */}
-      {selected && !isGenerating && (
-        <FloatingCardToolbar nodeId={id} data={cardData} />
-      )}
-
       {/* Card Content Container (with overflow-hidden for border-radius clipping) */}
       <div className="rounded-2xl overflow-hidden bg-slate-900">
         {/* Hover Action Bar (Top Right) */}
