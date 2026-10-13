@@ -24,6 +24,7 @@ from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
 from app.runners.creative_runner import creative_runner
 from app.core.creative_tasks import creative_tasks
 from app.core.creation_services import CreationServices
+from app.core.task_control import TaskControlService
 from app.core.asset_service import AssetService
 from app.core.engine_service import EngineService
 from app.core.workflow_service import WorkflowExecutionService, WorkflowPlanError
@@ -403,21 +404,16 @@ async def list_active_tasks() -> Dict[str, Any]:
     return {"active_tasks_count": len(tasks), "tasks": tasks}
 
 
+def _task_control() -> TaskControlService:
+    return TaskControlService(creative_tasks, creative_runner, workflow_runs, task_registry, task_store, active_cancellations)
+
+
 @app.post("/api/v1/tasks/{task_id}/cancel")
 async def cancel_task_endpoint(task_id: str) -> Dict[str, Any]:
-    """
-    Cancel an active creative task (R14).
-    Discloses remote cancellation limitations truthfully for cloud providers.
-    """
-    if await creative_tasks.cancel(task_id):
-        return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False,
-                "disclaimer": "Queued work will stop before dispatch. Active engine/provider work may finish; remote cancellation is not confirmed and charges may still apply."}
-    if task_id in creative_runner.active_tasks or task_id in creative_runner.active_cancellations:
-        return await creative_runner.cancel_task(task_id)
-    if workflow_runs.cancel(task_id) or task_registry.cancel_task(task_id):
-        await task_store.finish_run(task_id, "cancel-requested")
-        return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False}
-    raise HTTPException(status_code=404, detail=f"Active task '{task_id}' not found or already concluded.")
+    try:
+        return await _task_control().cancel(task_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/v1/tasks/history", response_model=List[TaskRecord])
@@ -428,12 +424,8 @@ async def generation_task_history(project_id: Optional[str] = None) -> List[Task
 
 @app.post("/api/v1/workflow/cancel/{run_id}")
 async def cancel_workflow_run(run_id: str) -> Dict[str, Any]:
-    """Cancel an active DAG workflow run (R14)."""
-    if workflow_runs.cancel(run_id) or run_id in active_cancellations:
-        if run_id in active_cancellations:
-            active_cancellations[run_id].set()
-        return {"run_id": run_id, "success": True, "status": "cancel-requested"}
-    return {"run_id": run_id, "success": False, "status": "not_found"}
+    accepted = await _task_control().cancel_workflow(run_id)
+    return {"run_id": run_id, "success": accepted, "status": "cancel-requested" if accepted else "not_found"}
 
 
 # ---------------------------------------------------------------------------
@@ -1204,13 +1196,6 @@ async def get_asset_content(asset_id: str) -> FileResponse:
                         content_disposition_type=content.disposition, headers=MEDIA_SECURITY_HEADERS)
 
 
-@app.post("/api/v1/workflow/cancel/{run_id}")
-async def cancel_workflow_run(run_id: str) -> dict[str, Any]:
-    if workflow_runs.cancel(run_id) or run_id in active_cancellations:
-        if run_id in active_cancellations:
-            active_cancellations[run_id].set()
-        return {"success": True, "run_id": run_id, "status": "cancel-requested"}
-    return {"success": False, "message": f"Run '{run_id}' not found or already completed"}
 
 
 # ---------------------------------------------------------------------------
