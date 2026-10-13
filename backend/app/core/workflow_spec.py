@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from app.core.cache import cache_store, compute_semantic_node_hash
+from app.core.cache import CacheStore, cache_store, compute_semantic_node_hash
 from app.core.content_identity import hash_file, port_content_identity
 from app.core.workers import run_blocking
 from app.core.execution_contract import validate_output_contract
@@ -35,7 +35,9 @@ async def local_model_identity(name: str) -> str:
 
 
 async def resolve_workflow_node(node: WorkflowNodeInstance, graph: WorkflowGraph,
-                                outputs: dict[str, dict[str, Any]], runner: Any) -> ResolvedWorkflowNode:
+                                outputs: dict[str, dict[str, Any]], runner: Any,
+                                cache: CacheStore | None = None) -> ResolvedWorkflowNode:
+    resolved_cache = cache if cache is not None else cache_store
     definition = registry.get(node.type)
     params = {param.name: param.default for param in definition.parameters}
     params.update(node.params)
@@ -79,12 +81,12 @@ async def resolve_workflow_node(node: WorkflowNodeInstance, graph: WorkflowGraph
     node_hash = compute_semantic_node_hash(node.type, {**params, "__execution_identity": identity}, bindings,
                                            runner_version=runner_version)
     cacheable = not str(identity.get("model_content", "")).startswith("unverified:")
-    cached = await cache_store.get_async(node_hash) if cacheable else None
+    cached = await resolved_cache.get_async(node_hash) if cacheable else None
     if cached is not None:
         try:
             validate_output_contract(node.type, cached)
         except ValueError:
-            await cache_store.invalidate_async(node_hash)
+            await resolved_cache.invalidate_async(node_hash)
             cached = None
     return ResolvedWorkflowNode(params, inputs, node_hash, cached,
         None if cacheable else "Model content identity is unverified; cached reuse is unavailable", cacheable)

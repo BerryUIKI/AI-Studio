@@ -31,7 +31,9 @@ async def test_plan_matches_execution_after_persistent_cache_reopen(tmp_path: Pa
         await store.create_run(RunRecord(id=request.run_id))
         sink = WorkflowEventSink(request, store, asyncio.Event(), asyncio.Event())
         await sink.initialize()
-        with patch("app.main.cache_store", cache), patch("app.core.workflow_spec.cache_store", cache):
+        # Only inject the service-owned cache; a hidden global must not change the result.
+        with patch("app.main.cache_store", cache), patch("app.core.workflow_spec.cache_store") as hidden_cache:
+            hidden_cache.get_async.side_effect = AssertionError('Global cache must not be consulted')
             before = await generate_plan(graph)
             assert before.cached_nodes_count == 0
             await _execute_workflow_request(request, sink)
