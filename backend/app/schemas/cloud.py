@@ -11,6 +11,7 @@ class CloudProviderId(str, Enum):
     SILICONFLOW = "siliconflow"
     DEEPSEEK = "deepseek"
     LLAMA_SERVER = "llama_server"
+    VOLCENGINE = "volcengine"
 
 
 class LLMConfig(BaseModel):
@@ -42,6 +43,7 @@ class CloudProviderInfo(BaseModel):
     capabilities: List[str] = Field(default_factory=list)  # ["txt2img", "img2img", "inpaint", "upscale"]
     upload_disclosure: str
     website_url: str
+    key_test_supported: bool = True
 
 
 class SetCredentialRequest(BaseModel):

@@ -180,6 +180,19 @@ class CredentialManager:
         """List cloud providers with capability matrices and redacted keys."""
         providers = [
             CloudProviderInfo(
+                id=CloudProviderId.VOLCENGINE,
+                name="Volcengine Ark (Beijing)",
+                description="Seedream 4.0 single-image generation and reference editing.",
+                is_configured=bool(self.get_key(CloudProviderId.VOLCENGINE)),
+                redacted_key=redact_key(self.get_key(CloudProviderId.VOLCENGINE) or ""),
+                supported_models=["doubao-seedream-4-0-250828"],
+                action_models={action: ["doubao-seedream-4-0-250828"] for action in ("txt2img", "img2img")},
+                capabilities=["txt2img", "img2img"],
+                upload_disclosure="Prompts and reference images are sent to Volcengine Ark in Beijing. Image generation may incur charges. This model revision is scheduled for retirement; no automatic model substitution is performed.",
+                website_url="https://ark.volcengine.com/region:cn-beijing/apikey",
+                key_test_supported=False,
+            ),
+            CloudProviderInfo(
                 id=CloudProviderId.OPENAI,
                 name="OpenAI",
                 description="Image generation through Berry's DALL-E 3 adapter.",
@@ -325,6 +338,9 @@ class CredentialManager:
 
     async def test_key(self, provider_id: CloudProviderId, api_key: Optional[str] = None) -> TestKeyResult:
         """Validate key against the provider's authentication endpoint."""
+        if provider_id == CloudProviderId.VOLCENGINE:
+            return TestKeyResult(provider_id=provider_id, valid=False,
+                message="Ark has no verified non-billable connection check in this adapter. Save the key and explicitly create an image to test model access; generation may incur charges.")
         key = api_key or self.get_key(provider_id)
         if not key and provider_id not in (CloudProviderId.LLAMA_SERVER,):
             return TestKeyResult(
