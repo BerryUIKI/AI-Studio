@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React, { useState } from 'react';
 import {
   FolderOpen,
@@ -90,9 +91,10 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
   };
 
   return (
-    <div
+    <Dialog title="Projects" onClose={handleClose}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in"
       onClick={handleClose}
+            aria-label="Close dialog"
     >
       <div
         className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
@@ -111,6 +113,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
           </div>
           <button
             onClick={handleClose}
+            aria-label="Close dialog"
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
           >
             <X className="w-5 h-5" />
@@ -298,6 +301,6 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
           )}
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

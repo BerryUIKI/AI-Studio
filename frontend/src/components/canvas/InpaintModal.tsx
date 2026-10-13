@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import { useEffect, useRef, useState } from 'react';
 import {
   Eraser,
@@ -154,7 +155,7 @@ export const InpaintModal = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+    <Dialog title="Inpaint image" onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
       <div
         ref={containerRef}
         className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl shadow-slate-950/90 overflow-hidden"
@@ -172,6 +173,7 @@ export const InpaintModal = () => {
           </div>
           <button
             onClick={closeModals}
+            aria-label="Close dialog"
             className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
           >
             <X className="w-4 h-4" />
@@ -198,8 +200,8 @@ export const InpaintModal = () => {
                 stopDrawing();
                 setCursorPos(null);
               }}
-              className="absolute inset-0 w-full h-full cursor-none opacity-80"
-              style={{ mixBlendMode: 'screen' }}
+              className="absolute inset-0 w-full h-full cursor-none opacity-80 mix-blend-screen"
+              aria-label="Image mask: painted regions will be edited"
             />
           </div>
 
@@ -223,6 +225,14 @@ export const InpaintModal = () => {
 
         {/* Drawing & Mask Editing Toolbar (Issue #35) */}
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex flex-col gap-3">
+          <button type="button" className="self-start rounded border border-slate-700 px-3 py-2 text-sm" onClick={() => {
+            const canvas = canvasRef.current;
+            const context = canvas?.getContext('2d');
+            if (!canvas || !context) return;
+            context.globalCompositeOperation = 'source-over';
+            context.fillStyle = 'white';
+            context.fillRect(canvas.width / 4, canvas.height / 4, canvas.width / 2, canvas.height / 2);
+          }}>Mark the center region for editing</button>
           <div className="flex flex-wrap items-center justify-between text-xs gap-3">
             {/* Tool Selection: Brush vs Eraser */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
@@ -317,6 +327,6 @@ export const InpaintModal = () => {
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

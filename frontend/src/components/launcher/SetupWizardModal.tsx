@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React, { useEffect, useState } from 'react';
 import {
   Sparkles,
@@ -361,7 +362,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
     : (isZh ? '主机内存' : 'Host RAM');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none animate-in fade-in duration-200">
+    <Dialog title="Setup guide" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md select-none animate-in fade-in duration-200">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col text-slate-100 max-h-[90vh]">
         {/* Header */}
         <div className="p-5 border-b border-white/[0.08] flex items-center justify-between bg-slate-900/60">
@@ -386,6 +387,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -893,6 +895,6 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

@@ -1,3 +1,4 @@
+import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
 import { X, Settings, ShieldCheck, Check, AlertCircle, AlertTriangle, Loader2, Info } from 'lucide-react';
 import { EngineInstance, SaveEngineConfigResult, useEngineStore } from '../../stores/useEngineStore';
@@ -155,7 +156,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
+    <Dialog title="Engine configuration" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
       <div className="relative w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl text-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
@@ -165,6 +166,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close dialog"
             disabled={isSaving}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
@@ -272,6 +274,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
               type="button"
               disabled={isSaving}
               onClick={onClose}
+            aria-label="Close dialog"
               className="px-3.5 py-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
             >
               Cancel
@@ -288,6 +291,6 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
           </div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };
