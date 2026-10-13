@@ -1,3 +1,4 @@
+import { errorMessage as getErrorMessage } from '../utils/errors';
 import { create } from 'zustand';
 
 export interface EngineInstance {
@@ -226,10 +227,10 @@ export const useEngineStore = create<EngineState>((set, get) => ({
         message: data.message || 'Configuration saved successfully.',
         requires_restart: Boolean(data.requires_restart),
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         success: false,
-        message: err.message || 'Network connection failed while saving configuration.',
+        message: getErrorMessage(err, 'Network connection failed while saving configuration.'),
       };
     }
   },
@@ -274,8 +275,8 @@ export const useEngineStore = create<EngineState>((set, get) => ({
         }
       }
       return { success: false, message: `Server error (HTTP ${res.status})` };
-    } catch (e: any) {
-      return { success: false, message: e.message || 'Network connection failed' };
+    } catch (e: unknown) {
+      return { success: false, message: getErrorMessage(e, 'Network connection failed') };
     }
   },
 

@@ -1,3 +1,4 @@
+import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
 import { X, Settings, ShieldCheck, Check, AlertCircle, AlertTriangle, Loader2, Info } from 'lucide-react';
@@ -148,8 +149,8 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
         setSavedSuccess(false);
         onClose();
       }, restartRequired ? 1400 : 900);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'An unexpected error occurred while saving.');
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, 'An unexpected error occurred while saving.'));
     } finally {
       setIsSaving(false);
     }

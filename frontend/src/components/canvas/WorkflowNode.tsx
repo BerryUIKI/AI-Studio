@@ -4,12 +4,12 @@ import { Play, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { CustomNodeData, DataType } from '../../types/workflow';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
-const TYPE_COLORS: Record<DataType, string> = {
-  string: '#fbbf24', // Amber
-  image: '#34d399',  // Emerald
-  audio: '#c084fc',  // Purple
-  video: '#f43f5e',  // Rose
-  json: '#60a5fa',   // Blue
+const TYPE_CLASSES: Record<DataType, string> = {
+  string: '!bg-amber-400', // Amber
+  image: '!bg-emerald-400',  // Emerald
+  audio: '!bg-purple-400',  // Purple
+  video: '!bg-rose-500',  // Rose
+  json: '!bg-blue-400',   // Blue
 };
 
 function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
@@ -83,12 +83,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 type="target"
                 position={Position.Left}
                 id={input.id}
-                style={{
-                  backgroundColor: TYPE_COLORS[input.type] || '#94a3b8',
-                  width: '9px',
-                  height: '9px',
-                  left: '-17px',
-                }}
+                className={`!w-[9px] !h-[9px] !-left-[17px] ${TYPE_CLASSES[input.type] || "!bg-slate-400"}`}
               />
               <span className="text-[11px] font-medium text-slate-300">{input.name}</span>
               <span className="text-[9px] uppercase px-1 rounded bg-slate-800 text-slate-400 border border-slate-700/50 ml-auto">
@@ -161,12 +156,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 type="source"
                 position={Position.Right}
                 id={outputPort.id}
-                style={{
-                  backgroundColor: TYPE_COLORS[outputPort.type] || '#94a3b8',
-                  width: '9px',
-                  height: '9px',
-                  right: '-17px',
-                }}
+                className={`!w-[9px] !h-[9px] !-right-[17px] ${TYPE_CLASSES[outputPort.type] || "!bg-slate-400"}`}
               />
             </div>
           ))}

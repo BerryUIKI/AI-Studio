@@ -1,3 +1,4 @@
+import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Cloud, ExternalLink, Key, Loader2, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
@@ -105,13 +106,13 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
           message: data.message,
         },
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestResults((prev) => ({
         ...prev,
         [providerId]: {
           loading: false,
           valid: false,
-          message: err.message || 'Connection test failed',
+          message: getErrorMessage(err, 'Connection test failed'),
         },
       }));
     }

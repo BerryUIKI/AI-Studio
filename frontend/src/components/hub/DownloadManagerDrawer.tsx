@@ -1,3 +1,4 @@
+import { ProgressBar } from '../ui/ProgressBar';
 import { Dialog } from '../ui/Dialog';
 import React from 'react';
 import {
@@ -147,18 +148,15 @@ export const DownloadManagerDrawer: React.FC = () => {
                   {/* Progress Bar */}
                   <div className="space-y-1.5">
                     <div className="w-full bg-neutral-900 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 ${
+                      <ProgressBar label="Observed progress" value={task.progress_pct} className={`h-full transition-all duration-300 ${
                           isFinished
-                            ? 'bg-emerald-500'
+                            ? 'text-emerald-500'
                             : isFailed
-                            ? 'bg-rose-500'
+                            ? 'text-rose-500'
                             : isPaused
-                            ? 'bg-amber-500'
-                            : 'bg-blue-500'
-                        }`}
-                        style={{ width: `${task.progress_pct}%` }}
-                      />
+                            ? 'text-amber-500'
+                            : 'text-blue-500'
+                        }`} />
                     </div>
 
                     {/* Progress Info Footer */}

@@ -1,3 +1,4 @@
+import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -148,8 +149,8 @@ export const InpaintModal = () => {
         if (res && res.success) {
           closeModals();
         }
-      } catch (err: any) {
-        useCreativeStore.setState({ error: err.message || 'Inpainting failed' });
+      } catch (err: unknown) {
+        useCreativeStore.setState({ error: getErrorMessage(err, 'Inpainting failed') });
       }
     }, 'image/png');
   };

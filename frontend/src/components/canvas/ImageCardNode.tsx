@@ -134,14 +134,13 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
 
   return (
     <div
-      className={`group relative rounded-2xl bg-slate-900 border transition-all duration-200 overflow-visible shadow-2xl ${
+      className={`w-80 group relative rounded-2xl bg-slate-900 border transition-all duration-200 overflow-visible shadow-2xl ${
         selected
           ? 'border-indigo-500 ring-2 ring-indigo-500/30'
           : isMissingAsset
           ? 'border-rose-500/60 ring-1 ring-rose-500/30 hover:border-rose-400'
           : 'border-slate-800 hover:border-slate-700'
       }`}
-      style={{ width: 320 }}
     >
       {/* Floating In-Place Action Bar for Selected Card (Issue #34) */}
       {selected && !isGenerating && (

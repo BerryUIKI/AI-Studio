@@ -17,13 +17,16 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel
 
 from app.core.cache import cache_store
-from app.core.dag import CyclicDependencyError, DAGResolver
 from app.nodes.registry import registry
 from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
 from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
 from app.runners.creative_runner import creative_runner
 from app.core.creative_tasks import creative_tasks
 from app.core.creation_services import CreationServices
+from app.core.task_control import TaskControlService
+from app.core.asset_service import AssetService
+from app.core.engine_service import EngineService
+from app.core.workflow_service import WorkflowExecutionService, WorkflowPlanError
 from app.api.creative import create_creative_router
 from app.core.hub_inventory import reconcile_hub_inventory
 from app.core.agent_service import AgentService
@@ -45,11 +48,7 @@ from app.core.task_registry import task_registry
 from app.runtime.open_directory import open_directory
 from app.runtime.uninstall import uninstall_managed
 from app.core.workflow_runs import WorkflowEventSink, workflow_runs
-from app.core.execution_contract import ExecutionContractError, validate_execution_contract, validate_output_contract
-from app.core.workflow_spec import resolve_workflow_node
 from app.core.media_validator import (
-    validate_and_inspect_media,
-    sanitize_filename,
     MEDIA_SECURITY_HEADERS,
 )
 from app.runtime.supervisor import supervisor
@@ -114,20 +113,12 @@ from app.schemas.model_hub import (
 from app.storage.hub_catalog import HubCatalog
 from app.runtime.hardware_evaluator import evaluate_hardware
 from app.runtime.model_downloader import model_downloader
-from app.schemas.events import (
-    GraphFinishedEvent,
-    GraphStartedEvent,
-    NodeErrorEvent,
-    NodeOutputEvent,
-    NodeStatusEvent,
-    RunCancelledEvent,
-)
 from app.schemas.node import NodeDefinition
 from app.schemas.project import Project, ProjectCreate, ProjectUpdate, AssetRecord
 from app.schemas.task import WorkflowRunRequest, WorkflowSubscription
 from app.schemas.task import TaskRecord
 from app.storage.task_store import task_store
-from app.schemas.workflow import ExecutionPlan, PlannedNodeStep, WorkflowGraph
+from app.schemas.workflow import ExecutionPlan, WorkflowGraph
 from app.storage.asset_store import asset_store
 from app.storage.db import db_manager
 from app.storage.project_store import project_store
@@ -368,10 +359,10 @@ async def manager_shutdown(request: ShutdownRequest) -> ShutdownResponse:
     stopped_engines = []
     if stop_managed:
         if await run_blocking(supervisor.is_running):
-            await mutate_process("comfyui", supervisor.stop)
+            await _engine_service().stop(EngineType.COMFYUI)
             stopped_engines.append("managed_comfyui")
         if await run_blocking(webui_supervisor.is_running):
-            await mutate_process("webui", webui_supervisor.stop)
+            await _engine_service().stop(EngineType.WEBUI)
             stopped_engines.append("managed_webui")
 
     # Schedule self-termination
@@ -400,21 +391,16 @@ async def list_active_tasks() -> Dict[str, Any]:
     return {"active_tasks_count": len(tasks), "tasks": tasks}
 
 
+def _task_control() -> TaskControlService:
+    return TaskControlService(creative_tasks, creative_runner, workflow_runs, task_registry, task_store, active_cancellations)
+
+
 @app.post("/api/v1/tasks/{task_id}/cancel")
 async def cancel_task_endpoint(task_id: str) -> Dict[str, Any]:
-    """
-    Cancel an active creative task (R14).
-    Discloses remote cancellation limitations truthfully for cloud providers.
-    """
-    if await creative_tasks.cancel(task_id):
-        return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False,
-                "disclaimer": "Queued work will stop before dispatch. Active engine/provider work may finish; remote cancellation is not confirmed and charges may still apply."}
-    if task_id in creative_runner.active_tasks or task_id in creative_runner.active_cancellations:
-        return await creative_runner.cancel_task(task_id)
-    if workflow_runs.cancel(task_id) or task_registry.cancel_task(task_id):
-        await task_store.finish_run(task_id, "cancel-requested")
-        return {"task_id": task_id, "status": "cancel-requested", "engine_interrupted": False}
-    raise HTTPException(status_code=404, detail=f"Active task '{task_id}' not found or already concluded.")
+    try:
+        return await _task_control().cancel(task_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/v1/tasks/history", response_model=List[TaskRecord])
@@ -425,12 +411,8 @@ async def generation_task_history(project_id: Optional[str] = None) -> List[Task
 
 @app.post("/api/v1/workflow/cancel/{run_id}")
 async def cancel_workflow_run(run_id: str) -> Dict[str, Any]:
-    """Cancel an active DAG workflow run (R14)."""
-    if workflow_runs.cancel(run_id) or run_id in active_cancellations:
-        if run_id in active_cancellations:
-            active_cancellations[run_id].set()
-        return {"run_id": run_id, "success": True, "status": "cancel-requested"}
-    return {"run_id": run_id, "success": False, "status": "not_found"}
+    accepted = await _task_control().cancel_workflow(run_id)
+    return {"run_id": run_id, "success": accepted, "status": "cancel-requested" if accepted else "not_found"}
 
 
 # ---------------------------------------------------------------------------
@@ -449,40 +431,44 @@ async def comfy_models() -> dict[str, List[str]]:
     return await comfy_client.get_models()
 
 
+def _engine_service() -> EngineService:
+    return EngineService(engine_manager, {EngineType.COMFYUI: supervisor, EngineType.WEBUI: webui_supervisor})
+
+
 @app.get("/api/v1/runtime/status")
 async def runtime_status() -> dict[str, Any]:
     """Check the status of the sandboxed ComfyUI runtime and process supervisor."""
-    return await run_blocking(supervisor.get_status)
+    return await _engine_service().status(EngineType.COMFYUI)
 
 
 @app.post("/api/v1/runtime/start", response_model=RuntimeStartResponse)
 async def runtime_start() -> dict[str, Any]:
     """Launch the isolated ComfyUI subprocess via supervisor."""
-    return await mutate_process("comfyui", supervisor.start)
+    return await _engine_service().start(EngineType.COMFYUI)
 
 
 @app.post("/api/v1/runtime/stop")
 async def runtime_stop() -> dict[str, Any]:
     """Stop the isolated ComfyUI subprocess via supervisor."""
-    return await mutate_process("comfyui", supervisor.stop)
+    return await _engine_service().stop(EngineType.COMFYUI)
 
 
 @app.get("/api/v1/runtime/webui/status")
 async def runtime_webui_status() -> dict[str, Any]:
     """Check the status of the sandboxed WebUI runtime and supervisor."""
-    return await run_blocking(webui_supervisor.get_status)
+    return await _engine_service().status(EngineType.WEBUI)
 
 
 @app.post("/api/v1/runtime/webui/start", response_model=RuntimeStartResponse)
 async def runtime_webui_start() -> dict[str, Any]:
     """Launch the isolated WebUI subprocess via supervisor."""
-    return await mutate_process("webui", webui_supervisor.start)
+    return await _engine_service().start(EngineType.WEBUI)
 
 
 @app.post("/api/v1/runtime/webui/stop")
 async def runtime_webui_stop() -> dict[str, Any]:
     """Stop the isolated WebUI subprocess via supervisor."""
-    return await mutate_process("webui", webui_supervisor.stop)
+    return await _engine_service().stop(EngineType.WEBUI)
 
 
 @app.get("/api/v1/runtime/{engine_type}/manifest", response_model=EngineInstallManifest)
@@ -630,15 +616,14 @@ async def list_engines() -> List[EngineConnection]:
 @app.get("/api/v1/engines/instances", response_model=EngineInstancesResponse)
 async def list_engine_instances() -> EngineInstancesResponse:
     """Return a unified catalog of all workspaces and engine instances for the Launcher Hub."""
-    instances = await run_blocking(engine_manager.get_all_instances)
+    instances = await _engine_service().instances()
     return EngineInstancesResponse(instances=instances)
 
 
 @app.get("/api/v1/engines/detect", response_model=EngineDetectResponse)
 async def detect_local_engines(paths: Optional[str] = None) -> EngineDetectResponse:
     """Scan candidate directories for existing ComfyUI or SD WebUI installations."""
-    scan_paths = [p.strip() for p in paths.split(",")] if paths else None
-    detected = await run_blocking(engine_manager.detect_engines, scan_paths)
+    detected = await _engine_service().detect(paths)
     return EngineDetectResponse(detected=detected)
 
 
@@ -698,11 +683,7 @@ async def update_engine_config(instance_id: str, request: EngineConfigUpdateRequ
     and indicates whether a running engine requires a restart.
     """
     try:
-        cfg, requires_restart = await run_blocking(engine_manager.save_engine_config,
-            instance_id=instance_id,
-            port=request.port,
-            extra_args=request.extra_args,
-        )
+        cfg, requires_restart = await _engine_service().save_config(instance_id, request)
         msg = "Configuration saved successfully."
         if requires_restart:
             msg = "Configuration saved. Engine restart is required for changes to take effect."
@@ -904,12 +885,7 @@ app.include_router(create_creative_router(lambda: CreationServices(task_store, c
 
 @app.post("/api/v1/creative/upload", response_model=AssetRecord)
 async def upload_creative_asset(file: UploadFile = File(...)) -> AssetRecord:
-    """Upload user image asset directly onto the creative canvas."""
-    data = await file.read()
-    filename = sanitize_filename(file.filename)
-    validated_mime, w, h = await run_blocking(validate_and_inspect_media, data, filename)
-    category = "video" if validated_mime.startswith("video/") else "image"
-    return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
+    return await AssetService(asset_store).upload(await file.read(), file.filename)
 
 
 class AssetUploadBase64Request(BaseModel):
@@ -920,17 +896,10 @@ class AssetUploadBase64Request(BaseModel):
 
 @app.post("/api/v1/creative/upload-base64", response_model=AssetRecord)
 async def upload_creative_asset_base64(req: AssetUploadBase64Request) -> AssetRecord:
-    """Upload asset encoded in base64 (used by CLI and programmatic API clients)."""
-    import base64
-    import binascii
     try:
-        data = base64.b64decode(req.content_base64, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid base64 payload: {exc}")
-    filename = sanitize_filename(req.filename)
-    validated_mime, w, h = await run_blocking(validate_and_inspect_media, data, filename)
-    category = "video" if validated_mime.startswith("video/") else "image"
-    return await asset_store.save_bytes(data, filename=filename, media_type=category, width=w, height=h)
+        return await AssetService(asset_store).upload_base64(req.content_base64, req.filename)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 agent_service = AgentService(
@@ -1198,107 +1167,38 @@ async def list_assets(project_id: Optional[str] = None) -> List[AssetRecord]:
 
 @app.get("/api/v1/assets/{asset_id}", response_model=AssetRecord)
 async def get_asset(asset_id: str) -> AssetRecord:
-    rec = await asset_store.get_asset(asset_id)
-    if not rec:
-        raise HTTPException(status_code=404, detail="Asset not found")
-    return rec
+    try:
+        return await AssetService(asset_store).get(asset_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/v1/assets/{asset_id}/content")
 async def get_asset_content(asset_id: str) -> FileResponse:
-    rec = await asset_store.get_asset(asset_id)
-    if not rec:
-        raise HTTPException(status_code=404, detail="Asset not found")
-    abs_path = asset_store.get_absolute_path(rec)
-    if not abs_path.is_file():
-        raise HTTPException(status_code=404, detail="Asset file missing on disk")
-
-    ext = abs_path.suffix.lower()
-    safe_types = {
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".mp4": "video/mp4",
-        ".webm": "video/webm",
-    }
-    content_type = rec.mime_type or safe_types.get(ext)
-    disposition = "inline"
-    if not content_type:
-        content_type = "application/octet-stream"
-        disposition = "attachment"
-
-    return FileResponse(
-        abs_path,
-        media_type=content_type,
-        filename=sanitize_filename(f"{Path(rec.filename).stem}{rec.extension}" if rec.extension else rec.filename),
-        content_disposition_type=disposition,
-        headers=MEDIA_SECURITY_HEADERS,
-    )
+    try:
+        content = await AssetService(asset_store).content(asset_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return FileResponse(content.path, media_type=content.mime_type, filename=content.filename,
+                        content_disposition_type=content.disposition, headers=MEDIA_SECURITY_HEADERS)
 
 
-@app.post("/api/v1/workflow/cancel/{run_id}")
-async def cancel_workflow_run(run_id: str) -> dict[str, Any]:
-    if workflow_runs.cancel(run_id) or run_id in active_cancellations:
-        if run_id in active_cancellations:
-            active_cancellations[run_id].set()
-        return {"success": True, "run_id": run_id, "status": "cancel-requested"}
-    return {"success": False, "message": f"Run '{run_id}' not found or already completed"}
 
 
 # ---------------------------------------------------------------------------
 # Workflow Planning & Execution
 # ---------------------------------------------------------------------------
 
+def _workflow_service() -> WorkflowExecutionService:
+    return WorkflowExecutionService(NODE_RUNNERS, cache_store, task_registry, active_cancellations, run_input_text_node)
+
+
 @app.post("/api/v1/workflow/plan", response_model=ExecutionPlan)
 async def generate_plan(graph: WorkflowGraph, target_node: str | None = None) -> ExecutionPlan:
-    """Analyze workflow graph, validate DAG cycles, and compute dirty-check cache hashes."""
     try:
-        resolver = DAGResolver(graph)
-        sorted_nodes = resolver.topological_sort(target_node_id=target_node)
-        validate_execution_contract(graph, sorted_nodes, NODE_RUNNERS)
-    except CyclicDependencyError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except ExecutionContractError as err:
-        raise HTTPException(status_code=400, detail=str(err))
-    except ValueError as err:
-        raise HTTPException(status_code=404, detail=str(err))
-
-    steps: List[PlannedNodeStep] = []
-    known_outputs: dict[str, dict[str, Any]] = {}
-    cached_count = 0
-
-    for node in sorted_nodes:
-        parents = resolver.get_parent_ids(node.id)
-        try:
-            spec = await resolve_workflow_node(node, graph, known_outputs, NODE_RUNNERS[node.type])
-        except (ValueError, OSError) as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-        is_cached = spec.cached_output is not None
-        if is_cached:
-            cached_count += 1
-            known_outputs[node.id] = spec.cached_output
-        elif node.type == "input.text":
-            # Pure text inputs are known without invoking an inference runner.
-            known_outputs[node.id] = {"text": spec.params["value"]}
-
-        steps.append(
-            PlannedNodeStep(
-                node_id=node.id,
-                node_type=node.type,
-                node_hash=spec.node_hash or "",
-                is_cached=is_cached,
-                dependencies=parents,
-                cache_reason=spec.cache_reason,
-            )
-        )
-
-    return ExecutionPlan(
-        steps=steps,
-        total_nodes=len(steps),
-        cached_nodes_count=cached_count,
-    )
+        return await _workflow_service().plan(graph, target_node)
+    except WorkflowPlanError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
 
 @app.post("/api/v1/workflow/submit")
@@ -1351,189 +1251,7 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
 
 
 async def _execute_workflow_request(request: WorkflowRunRequest, websocket: WorkflowEventSink) -> None:
-    """Execute into a durable event sink without owning any client connection."""
-    graph = request.graph
-    target_node = request.target_node_id
-    run_id = request.run_id
-    # Register cancellation token
-    cancel_event = websocket.cancel_event
-    active_cancellations[run_id] = cancel_event
-    task_registry.register_task(
-        task_id=run_id,
-        task_type="workflow_graph",
-        cancel_event=cancel_event,
-        metadata={"target_node": target_node},
-    )
-
-    try:
-        resolver = DAGResolver(graph)
-        sorted_nodes = resolver.topological_sort(target_node_id=target_node)
-        validate_execution_contract(graph, sorted_nodes, NODE_RUNNERS)
-    except ExecutionContractError as e:
-        await websocket.send_text(NodeErrorEvent(node_id=e.node_id, message=str(e), run_id=run_id).model_dump_json())
-        for node in graph.nodes:
-            await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error" if node.id == e.node_id else "cancelled", run_id=run_id).model_dump_json())
-        await websocket.send_text(GraphFinishedEvent(run_id=run_id, execution_time_ms=0, status="failed").model_dump_json())
-        await websocket.close()
-        active_cancellations.pop(run_id, None)
-        task_registry.unregister_task(run_id)
-        return
-    except CyclicDependencyError as e:
-        await websocket.send_text(json.dumps({"type": "ERROR", "message": str(e), "run_id": run_id}))
-        await websocket.close()
-        active_cancellations.pop(run_id, None)
-        task_registry.unregister_task(run_id)
-        return
-    except ValueError as e:
-        await websocket.send_text(json.dumps({"type": "ERROR", "message": str(e), "run_id": run_id}))
-        await websocket.close()
-        active_cancellations.pop(run_id, None)
-        task_registry.unregister_task(run_id)
-        return
-
-    # Check cache status for active nodes
-    cached_count = 0
-    node_outputs: Dict[str, Dict[str, Any]] = {}
-
-    start_time = time.monotonic()
-    failed_node_ids: set[str] = set()
-
-    try:
-        await websocket.send_text(
-            GraphStartedEvent(run_id=run_id, total_nodes=len(sorted_nodes), cached_nodes=cached_count).model_dump_json()
-        )
-
-        for node in sorted_nodes:
-            # Check cancellation
-            if cancel_event.is_set():
-                await websocket.send_text(RunCancelledEvent(run_id=run_id).model_dump_json())
-                elapsed_ms = (time.monotonic() - start_time) * 1000
-                await websocket.send_text(
-                    GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="cancelled").model_dump_json()
-                )
-                break
-
-            # Check if any upstream ancestor failed
-            ancestors = resolver._get_ancestors(node.id)
-            if any(anc in failed_node_ids for anc in ancestors):
-                # Abort this node due to upstream failure
-                await websocket.send_text(
-                    NodeStatusEvent(node_id=node.id, status="cancelled", run_id=run_id).model_dump_json()
-                )
-                continue
-
-            spec = await resolve_workflow_node(node, graph, node_outputs, NODE_RUNNERS[node.type])
-            inputs = spec.inputs
-            await websocket.bind_inputs(node.id, inputs, spec.params)
-            node_hash = spec.node_hash
-            if node_hash is None:
-                raise ValueError(spec.cache_reason)
-            # Check cache (memory or SQLite)
-            cached_output = spec.cached_output
-            if cached_output is not None:
-                await websocket.send_text(NodeStatusEvent(node_id=node.id, status="cached", run_id=run_id).model_dump_json())
-                await websocket.send_text(
-                    NodeOutputEvent(node_id=node.id, output=cached_output, run_id=run_id).model_dump_json()
-                )
-                node_outputs[node.id] = cached_output
-                continue
-
-            # Dispatch to runner
-            runner = NODE_RUNNERS.get(node.type)
-            if runner is None:
-                failed_node_ids.add(node.id)
-                err_msg = f"No runner for node type: {node.type}"
-                await websocket.send_text(NodeErrorEvent(node_id=node.id, message=err_msg, run_id=run_id).model_dump_json())
-                await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error", run_id=run_id).model_dump_json())
-                continue
-
-            output: Dict[str, Any] = {}
-            node_has_error = False
-
-            try:
-                if node.type == "input.text":
-                    async for event in run_input_text_node(node.id, spec.params):
-                        if cancel_event.is_set():
-                            break
-                        if isinstance(event, NodeOutputEvent):
-                            validate_output_contract(node.type, event.output)
-                        event.run_id = run_id
-                        await websocket.send_text(event.model_dump_json())
-                        if isinstance(event, NodeOutputEvent):
-                            output = event.output
-                else:
-                    async for event in runner(node.id, inputs, spec.params):
-                        if cancel_event.is_set():
-                            break
-                        if isinstance(event, NodeOutputEvent):
-                            validate_output_contract(node.type, event.output)
-                        event.run_id = run_id
-                        await websocket.send_text(event.model_dump_json())
-                        if isinstance(event, NodeErrorEvent):
-                            node_has_error = True
-                        elif isinstance(event, NodeOutputEvent):
-                            output = event.output
-            except WebSocketDisconnect:
-                logger.info("WebSocket disconnected during execution of node %s (run_id: %s)", node.id, run_id)
-                cancel_event.set()
-                break
-            except Exception as e:
-                node_has_error = True
-                try:
-                    await websocket.send_text(NodeErrorEvent(node_id=node.id, message=str(e), run_id=run_id).model_dump_json())
-                    await websocket.send_text(NodeStatusEvent(node_id=node.id, status="error", run_id=run_id).model_dump_json())
-                except (WebSocketDisconnect, RuntimeError):
-                    cancel_event.set()
-                    break
-
-            if cancel_event.is_set():
-                await websocket.send_text(RunCancelledEvent(run_id=run_id).model_dump_json())
-                await websocket.send_text(GraphFinishedEvent(run_id=run_id, execution_time_ms=(time.monotonic() - start_time) * 1000, status="cancelled").model_dump_json())
-                break
-
-            definition = registry.get(node.type)
-            if not node_has_error and definition and any(port.id not in output for port in definition.outputs):
-                node_has_error = True
-                await websocket.send_text(NodeErrorEvent(node_id=node.id, message="Runner did not return its declared outputs", run_id=run_id).model_dump_json())
-
-            if node_has_error:
-                failed_node_ids.add(node.id)
-                # Notify cancellation for all unexecuted descendants
-                descendants = resolver.get_descendants(node.id)
-                for desc_id in descendants:
-                    await websocket.send_text(
-                        NodeStatusEvent(node_id=desc_id, status="cancelled", run_id=run_id).model_dump_json()
-                    )
-                # Conclude run as failed
-                elapsed_ms = (time.monotonic() - start_time) * 1000
-                await websocket.send_text(
-                    GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="failed").model_dump_json()
-                )
-                break
-
-            # Cache successful output
-            if output:
-                if spec.cacheable:
-                    await cache_store.set_async(node_hash, output)
-                node_outputs[node.id] = output
-
-        else:
-            # Loop completed without break
-            elapsed_ms = (time.monotonic() - start_time) * 1000
-            await websocket.send_text(
-                GraphFinishedEvent(run_id=run_id, execution_time_ms=elapsed_ms, status="failed" if failed_node_ids else "completed").model_dump_json()
-            )
-
-    except WebSocketDisconnect:
-        logger.info("Client cleanly disconnected from workflow run %s", run_id)
-        cancel_event.set()
-    finally:
-        active_cancellations.pop(run_id, None)
-        task_registry.unregister_task(run_id)
-        try:
-            await websocket.close()
-        except Exception:
-            pass
+    await _workflow_service().execute(request, websocket)
 
 
 # ---------------------------------------------------------------------------
