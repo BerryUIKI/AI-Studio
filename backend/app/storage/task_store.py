@@ -56,13 +56,27 @@ class TaskStore:
             """INSERT INTO tasks (id, run_id, node_id, node_type, status, params_json, inputs_json,
                outputs_json, error_msg, created_at, finished_at, metadata_json)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(id) DO UPDATE SET status=excluded.status, params_json=excluded.params_json,
+               ON CONFLICT(id) DO UPDATE SET status=CASE
+               WHEN tasks.status = 'cancel-requested' AND excluded.status IN ('queued', 'running')
+               THEN tasks.status ELSE excluded.status END, params_json=excluded.params_json,
                inputs_json=excluded.inputs_json, outputs_json=excluded.outputs_json, error_msg=excluded.error_msg,
-               finished_at=excluded.finished_at, metadata_json=excluded.metadata_json""",
+               finished_at=excluded.finished_at, metadata_json=CASE
+               WHEN json_extract(tasks.metadata_json, '$.cancel_requested') = 1
+               THEN json_set(excluded.metadata_json, '$.cancel_requested', json('true'))
+               ELSE excluded.metadata_json END
+               WHERE tasks.status NOT IN ('cached', 'succeeded', 'failed', 'cancelled', 'interrupted', 'outcome-unknown')
+               OR tasks.status = excluded.status""",
             (task.id, task.run_id, task.node_id, task.node_type, task.status, json.dumps(redact_submission(task.params)),
              json.dumps(redact_submission(task.inputs)), json.dumps(redact_submission(task.outputs)), task.error,
              task.created_at, task.finished_at, json.dumps(redact_submission(task.metadata))),
         )
+        async with conn.execute("SELECT status, metadata_json, outputs_json, error_msg, finished_at FROM tasks WHERE id = ?", (task.id,)) as cursor:
+            persisted = await cursor.fetchone()
+        task.status = persisted["status"]
+        task.metadata = json.loads(persisted["metadata_json"] or "{}")
+        task.outputs = json.loads(persisted["outputs_json"] or "{}")
+        task.error = persisted["error_msg"]
+        task.finished_at = persisted["finished_at"]
         await self._append_task_event(conn, task.id, {
             "status": task.status, "metadata": task.metadata, "outputs": task.outputs,
             "error": task.error, "finished_at": task.finished_at,

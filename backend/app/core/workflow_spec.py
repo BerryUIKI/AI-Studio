@@ -23,6 +23,7 @@ class ResolvedWorkflowNode:
     node_hash: str | None
     cached_output: dict[str, Any] | None
     cache_reason: str | None = None
+    cacheable: bool = True
 
 
 async def local_model_identity(name: str) -> str:
@@ -77,11 +78,13 @@ async def resolve_workflow_node(node: WorkflowNodeInstance, graph: WorkflowGraph
         bindings.append((edge.target_handle, await port_content_identity(value, port.type), edge.source_handle))
     node_hash = compute_semantic_node_hash(node.type, {**params, "__execution_identity": identity}, bindings,
                                            runner_version=runner_version)
-    cached = await cache_store.get_async(node_hash)
+    cacheable = not str(identity.get("model_content", "")).startswith("unverified:")
+    cached = await cache_store.get_async(node_hash) if cacheable else None
     if cached is not None:
         try:
             validate_output_contract(node.type, cached)
         except ValueError:
             await cache_store.invalidate_async(node_hash)
             cached = None
-    return ResolvedWorkflowNode(params, inputs, node_hash, cached)
+    return ResolvedWorkflowNode(params, inputs, node_hash, cached,
+        None if cacheable else "Model content identity is unverified; cached reuse is unavailable", cacheable)
