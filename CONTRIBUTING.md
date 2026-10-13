@@ -28,7 +28,7 @@ Before opening a PR, please read our complete [Branching Strategy Specification]
 
 ### Prerequisites
 
-- **Node.js**: `v18.0.0+` (or `v20.x` LTS recommended)
+- **Node.js**: `v24.x` (matches CI and the locked frontend test runtime)
 - **pnpm**: `v8.x` or `v9.x` (`corepack enable` or `npm install -g pnpm`)
 - **Python**: `3.10+` or `3.12+`
 - **uv** (recommended) or standard `venv`

@@ -1,7 +1,7 @@
 """Schemas for BYOK cloud providers, credentials, capabilities, and key tests."""
 
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -38,6 +38,7 @@ class CloudProviderInfo(BaseModel):
     is_configured: bool
     redacted_key: Optional[str] = None  # e.g. "sk-...1234", never raw secret
     supported_models: List[str] = Field(default_factory=list)
+    action_models: Dict[str, List[str]] = Field(default_factory=dict)
     capabilities: List[str] = Field(default_factory=list)  # ["txt2img", "img2img", "inpaint", "upscale"]
     upload_disclosure: str
     website_url: str

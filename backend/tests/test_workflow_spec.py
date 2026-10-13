@@ -60,6 +60,19 @@ async def test_unknown_upstream_output_is_not_a_proxy_cache_hit() -> None:
 
 
 @pytest.mark.asyncio
+async def test_unverified_local_model_does_not_reuse_a_name_only_cache() -> None:
+    graph = WorkflowGraph(nodes=[{"id": "local", "type": "image.comfy.txt2img", "params": {"checkpoint": "ambiguous.safetensors"}}])
+    with patch("app.core.workflow_spec.local_model_identity", new=AsyncMock(return_value="unverified:ambiguous.safetensors")), patch(
+        "app.core.workflow_spec.cache_store.get_async", new=AsyncMock()
+    ) as lookup:
+        spec = await resolve_workflow_node(graph.nodes[0], graph, {}, NODE_RUNNERS["image.comfy.txt2img"])
+    assert spec.node_hash is not None
+    assert not spec.cacheable
+    assert spec.cached_output is None
+    lookup.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_model_replacement_changes_identity_with_same_filename_and_size(tmp_path: Path) -> None:
     model = tmp_path / "model.safetensors"
     model.write_bytes(b"first model")

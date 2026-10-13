@@ -70,3 +70,27 @@ async def test_concurrent_first_access_waits_for_schema_creation(tmp_path: Path)
         await connections[0].execute('SELECT * FROM task_events')
     finally:
         await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_late_remote_job_metadata_preserves_cancel_request_and_terminal_result(tmp_path: Path) -> None:
+    manager = DatabaseManager(tmp_path / 'cancel-race.db')
+    store = TaskStore(manager)
+    try:
+        await store.create_run(RunRecord(id='task'))
+        task = TaskRecord(id='task', run_id='task', node_id='canvas', node_type='txt2img', status='running')
+        await store.save_task(task)
+        assert await store.request_cancel('task')
+        task.metadata['provider_job_id'] = 'remote-job'
+        await store.save_task(task)
+        assert task.status == 'cancel-requested'
+        assert task.metadata['cancel_requested'] is True
+        task.status = 'succeeded'
+        task.outputs = {'asset_id': 'actual-result'}
+        await store.save_task(task)
+        stale = task.model_copy(update={'status': 'running', 'outputs': {}})
+        await store.save_task(stale)
+        assert stale.status == 'succeeded'
+        assert stale.outputs['asset_id'] == 'actual-result'
+    finally:
+        await manager.close()

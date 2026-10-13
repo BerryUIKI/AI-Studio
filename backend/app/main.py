@@ -1513,7 +1513,8 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
 
             # Cache successful output
             if output:
-                await cache_store.set_async(node_hash, output)
+                if spec.cacheable:
+                    await cache_store.set_async(node_hash, output)
                 node_outputs[node.id] = output
 
         else:
