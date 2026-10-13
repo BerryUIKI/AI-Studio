@@ -32,6 +32,19 @@ class AdapterOutput(BaseModel):
     applied_parameters: dict[str, JsonValue] | None = None
 
 
+def _contains_secret(value: Any, secret: str) -> bool:
+    if isinstance(value, str):
+        return secret in value
+    if isinstance(value, dict):
+        return any(
+            _contains_secret(key, secret) or _contains_secret(item, secret)
+            for key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_secret(item, secret) for item in value)
+    return False
+
+
 async def execute_adapter(
     *,
     language: str,
@@ -91,7 +104,7 @@ async def execute_adapter(
                     raise AdapterError(
                         "Calling code returned an invalid IPC message"
                     ) from None
-                if sdk_key and sdk_key in line.decode(errors="replace"):
+                if sdk_key and _contains_secret(message, sdk_key):
                     raise AdapterError(
                         "Calling-code output contained a credential; output rejected"
                     )

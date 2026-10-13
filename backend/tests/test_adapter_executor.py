@@ -115,3 +115,29 @@ async def test_unknown_port_type_is_rejected() -> None:
             inputs={},
             broker=AsyncMock(),
         )
+
+
+@pytest.mark.asyncio
+async def test_unicode_escaped_credential_is_still_rejected() -> None:
+    source = "def execute(input,ctx):\n    return {'type':'json','value':{'secret':ctx.api_key}}"
+    with pytest.raises(AdapterError, match="credential"):
+        await execute_adapter(
+            language="python_sdk",
+            source=source,
+            inputs={},
+            broker=AsyncMock(),
+            sdk_key='fixture-密钥"quote',
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("port", ["string", "image", "audio", "video", "json"])
+async def test_all_five_output_ports_remain_supported(port: str) -> None:
+    source = "function execute(input){return {type:input.port,value:input.value}}"
+    result = await execute_adapter(
+        language="javascript",
+        source=source,
+        inputs={"port": port, "value": "fixture"},
+        broker=AsyncMock(),
+    )
+    assert result.type == port and result.value == "fixture"
