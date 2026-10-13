@@ -440,7 +440,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
   },
 };
 
-export function t(key: string, lang: SupportedLanguage): string {
+export function t(key: string, lang: SupportedLanguage, fallback?: string): string {
   const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
-  return dict[key] || TRANSLATIONS.en[key] || key;
+  return dict[key] || TRANSLATIONS.en[key] || fallback || key;
 }

@@ -373,13 +373,12 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
-                <span>{t('setup_wizard_title', lang) || (ui("ui_hardware_diagnostics_model_setup"))}</span>
+                <span>{t('setup_wizard_title', lang, (ui("ui_hardware_diagnostics_model_setup")))}</span>
                 <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
                   {ui("ui_embedded_llama_cpp")}</span>
               </h2>
               <p className="text-xs text-slate-400">
-                {t('setup_wizard_subtitle', lang) ||
-                  (ui("ui_live_gpu_diagnosis_embedded_llama_cpp_lifecycle_instant"))}
+                {t('setup_wizard_subtitle', lang, (ui("ui_live_gpu_diagnosis_embedded_llama_cpp_lifecycle_instant")))}
               </p>
             </div>
           </div>
@@ -403,7 +402,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>{t('setup_step_hardware', lang) || (ui("ui_1_hardware_check"))}</span>
+            <span>{t('setup_step_hardware', lang, (ui("ui_1_hardware_check")))}</span>
           </button>
           <button
             onClick={() => setActiveStep(2)}
@@ -414,7 +413,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <Download className="w-3.5 h-3.5" />
-            <span>{t('setup_step_model', lang) || (ui("ui_2_deploy_model"))}</span>
+            <span>{t('setup_step_model', lang, (ui("ui_2_deploy_model")))}</span>
           </button>
           <button
             onClick={() => setActiveStep(3)}
@@ -425,7 +424,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{t('setup_step_ready', lang) || (ui("ui_3_ready"))}</span>
+            <span>{t('setup_step_ready', lang, (ui("ui_3_ready")))}</span>
           </button>
         </div>
 
@@ -706,7 +705,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                       <div className="space-y-1 flex-1 pr-3">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-white">
-                            {isZh ? model.labelZh : model.labelEn}
+                            {ui.lookup(model.labelEn)}
                           </span>
                           {isRecommended && (
                             <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">
@@ -733,7 +732,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                           )}
                         </div>
                         <p className="text-[11px] text-slate-400">
-                          {isZh ? model.descZh : model.descEn}
+                          {ui.lookup(model.descEn)}
                         </p>
                         <div className="flex items-center gap-3 text-[10px] text-slate-500 pt-0.5">
                           <span>{ui("ui_download_size")}: {model.size}</span>

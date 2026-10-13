@@ -3,8 +3,8 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { CreationSetup } from '../components/canvas/CreationSetup';
 import { useUiText, uiText } from '../i18n/useUiText';
-import { UI_ENGLISH } from '../i18n/uiMessages';
-import { TRANSLATIONS, VERIFIED_UI_LANGUAGES } from '../i18n/translations';
+import { UI_ENGLISH, UI_CHINESE_PREVIEW } from '../i18n/uiMessages';
+import { t, TRANSLATIONS, VERIFIED_UI_LANGUAGES } from '../i18n/translations';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { useEngineStore, defaultBuiltinInstances } from '../stores/useEngineStore';
 
@@ -40,4 +40,13 @@ it('resolves every primary catalog key without leaking translation identifiers',
     expect(uiText(key, 'en')).toBe(UI_ENGLISH[key]);
     expect(uiText(key, 'ru')).toBeTruthy();
   }
+});
+
+it('retains placeholder contracts in preview translations and honors explicit legacy fallback', () => {
+  const placeholders = (message: string) => [...message.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+  for (const [key, message] of Object.entries(UI_CHINESE_PREVIEW)) {
+    expect(placeholders(message)).toEqual(placeholders(UI_ENGLISH[key as keyof typeof UI_ENGLISH]));
+  }
+  expect(t('absent_legacy_key', 'fr', 'Safe fallback')).toBe('Safe fallback');
+  expect(uiText('ui_file_format', 'en', { file: 'verified', format: undefined })).toBe('File: verified; format: ');
 });

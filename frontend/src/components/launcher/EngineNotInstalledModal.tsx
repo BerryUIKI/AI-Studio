@@ -51,10 +51,10 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
           </div>
           <div>
             <h2 className="text-base font-bold text-white">
-              {engineTitle} {t('engine_not_installed_title', lang) || ui("ui_is_not_installed")}
+              {engineTitle} {t('engine_not_installed_title', lang, ui("ui_is_not_installed"))}
             </h2>
             <p className="text-xs text-slate-400">
-              {t('engine_not_installed_subtitle', lang) || ui("ui_sandboxed_runtime_environment_was_not_detected")}
+              {t('engine_not_installed_subtitle', lang, ui("ui_sandboxed_runtime_environment_was_not_detected"))}
             </p>
           </div>
         </div>
@@ -62,8 +62,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
         {/* Informative Explanation */}
         <div className="space-y-3 mb-5">
           <p className="text-xs text-slate-300 leading-relaxed">
-            {t('engine_not_installed_desc', lang) ||
-              ui("ui_to_maintain_zero_host_pollution_berry_ai_studio", { value1: engineTitle })}
+            {t('engine_not_installed_desc', lang, ui("ui_to_maintain_zero_host_pollution_berry_ai_studio", { value1: engineTitle }))}
           </p>
 
           {errorMessage && (
@@ -76,11 +75,11 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
           <div className="grid grid-cols-2 gap-2 pt-1">
             <div className="flex items-center space-x-2 p-2 rounded-lg bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-300">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{t('engine_benefit_isolated', lang) || ui("ui_100_isolated_venv")}</span>
+              <span>{t('engine_benefit_isolated', lang, ui("ui_100_isolated_venv"))}</span>
             </div>
             <div className="flex items-center space-x-2 p-2 rounded-lg bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-300">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>{t('engine_benefit_mirrors', lang) || ui("ui_accelerated_mirrors")}</span>
+              <span>{t('engine_benefit_mirrors', lang, ui("ui_accelerated_mirrors"))}</span>
             </div>
           </div>
         </div>
@@ -95,7 +94,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
             className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <Download className="w-4 h-4" />
-            <span>{t('btn_deploy_now', lang) || ui("ui_deploy_install_now")}</span>
+            <span>{t('btn_deploy_now', lang, ui("ui_deploy_install_now"))}</span>
           </button>
 
           <button
@@ -106,7 +105,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
             className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs rounded-xl border border-slate-700 transition-colors"
           >
             <FolderSearch className="w-4 h-4 text-slate-400" />
-            <span>{t('btn_locate_existing', lang) || ui("ui_locate_existing_folder")}</span>
+            <span>{t('btn_locate_existing', lang, ui("ui_locate_existing_folder"))}</span>
           </button>
         </div>
       </div>

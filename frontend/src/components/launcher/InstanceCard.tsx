@@ -334,7 +334,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         ) : isNotInstalled ? (
           <div className="flex items-center justify-between w-full">
             <span className="text-xs text-amber-500/90 font-medium">
-              {t('engine_not_installed_title', lang) || ui("ui_not_installed")}
+              {t('engine_not_installed_title', lang, ui("ui_not_installed"))}
             </span>
             <button
               onClick={handleStart}
@@ -342,7 +342,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-amber-600 hover:bg-amber-500 rounded transition-colors disabled:opacity-50 shadow-sm shadow-amber-600/30"
             >
               <Download className="w-3 h-3" />
-              <span>{t('btn_install_engine', lang) || ui("ui_deploy")}</span>
+              <span>{t('btn_install_engine', lang, ui("ui_deploy"))}</span>
             </button>
           </div>
         ) : (

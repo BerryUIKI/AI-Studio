@@ -17,6 +17,7 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
   modelName,
 }) => {
   const ui = useUiText();
+  const lang = useSettingsStore((state) => state.getEffectiveLanguage());
   const [isOpen, setIsOpen] = useState(false);
   const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -72,9 +73,6 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
 
   const style = getBadgeStyle();
   const Icon = style.icon;
-
-  const { getEffectiveLanguage } = useSettingsStore();
-  const lang = getEffectiveLanguage();
 
   const getDisplayTierLabel = (): string => {
     if (!evaluation) return '';

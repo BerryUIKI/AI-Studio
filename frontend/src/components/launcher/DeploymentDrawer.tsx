@@ -144,7 +144,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
       <div className="flex-1 p-4 bg-slate-950 overflow-y-auto font-mono text-xs leading-relaxed text-slate-400 space-y-1">
         {logs.map((log, idx) => (
           <div key={idx} className="break-all whitespace-pre-wrap">
-            <span className="text-slate-600 mr-2">&gt;</span>
+            <span className="text-slate-600 mr-2">{'>'}</span>
             <span className={log.includes('ERROR') ? 'text-red-400' : log.includes('INFO') ? 'text-indigo-300' : 'text-slate-300'}>
               {log}
             </span>
