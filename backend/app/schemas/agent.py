@@ -79,6 +79,7 @@ class AgentChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     selected_asset_id: Optional[str] = None
     preferred_engine: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class AgentChatResponse(BaseModel):

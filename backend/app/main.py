@@ -23,6 +23,9 @@ from app.runners.api_runner import NODE_RUNNERS, run_input_text_node
 from app.runners.comfy_runner import comfy_client, run_comfy_txt2img_node
 from app.runners.creative_runner import creative_runner
 from app.core.creative_tasks import creative_tasks
+from app.core.creation_services import CreationServices
+from app.api.creative import create_creative_router
+from app.core.hub_inventory import reconcile_hub_inventory
 from app.core.agent_service import AgentService
 from app.schemas.agent import (
     AgentChatRequest,
@@ -830,6 +833,7 @@ async def list_model_hub_catalog(
 ) -> HubCatalogResponse:
     """Retrieve curated model hub catalog with optional filtering (MH-M2)."""
     models = HubCatalog.list_models(category=category, architecture=architecture, query=query)
+    models = reconcile_hub_inventory(models, await model_store.scan_all_roots_async())
     return HubCatalogResponse(total=len(models), models=models)
 
 
@@ -895,35 +899,7 @@ async def cancel_download_task(task_id: str) -> dict[str, Any]:
 # Creative Primary Canvas Endpoints (M3)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/v1/creative/execute", response_model=CreativeActionResult)
-async def execute_creative_action(req: CreativeActionRequest) -> CreativeActionResult:
-    """Execute high-level image creation action (txt2img, img2img, inpaint, upscale)."""
-    task_id = f"task_{uuid.uuid4()}"
-    try:
-        task_registry.register_task(task_id, "creative_action", status="queued")
-    except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error))
-    try:
-        return await creative_runner.execute(req, task_id)
-    finally:
-        task_registry.unregister_task(task_id)
-
-
-@app.post("/api/v1/creative/submit", status_code=202)
-async def submit_creative_action(req: CreativeActionRequest) -> Dict[str, str]:
-    try:
-        task_id = await creative_tasks.submit(req, creative_runner.execute)
-    except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error))
-    return {"task_id": task_id, "status": "queued"}
-
-
-@app.get("/api/v1/creative/tasks/{task_id}", response_model=TaskRecord)
-async def creative_task_status(task_id: str) -> TaskRecord:
-    task = await task_store.get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Creative task not found.")
-    return task
+app.include_router(create_creative_router(lambda: CreationServices(task_store, creative_tasks, creative_runner)))
 
 
 @app.post("/api/v1/creative/upload", response_model=AssetRecord)
@@ -964,10 +940,18 @@ agent_service = AgentService(
 )
 
 
+@app.get("/api/v1/agent/conversation")
+async def latest_agent_conversation(project_id: str | None = None) -> dict[str, object] | None:
+    return await agent_service.history_store.latest(project_id)
+
+
 @app.post("/api/v1/agent/chat", response_model=AgentChatResponse)
 async def agent_chat_endpoint(req: AgentChatRequest) -> AgentChatResponse:
     """Conversational Agent chat endpoint: processes natural language intent and formulates a transparent action plan (M9)."""
-    return await agent_service.process_chat(req)
+    try:
+        return await agent_service.process_chat(req)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.post("/api/v1/agent/execute", response_model=List[CreativeActionResult])

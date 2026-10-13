@@ -5,10 +5,13 @@ action plan formulation, and human-in-the-loop proposal execution. Bounded heuri
 does not claim unconstrained natural-language understanding or arbitrary workflow synthesis.
 """
 
+import asyncio
 import json
 import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+
+from app.storage.conversation_store import ConversationStore, conversation_store
 
 from app.core.workflow_catalog import WorkflowCatalog
 from app.core.llm_client import LLMClient, AGENT_TOOLS_SCHEMA, SYSTEM_PROMPT
@@ -34,10 +37,13 @@ class AgentService:
         model_catalog=None,
         credential_manager=None,
         creative_runner=None,
+        history_store: ConversationStore = conversation_store,
     ):
         self.model_catalog = model_catalog
         self.credential_manager = credential_manager
         self.creative_runner = creative_runner
+        self.history_store = history_store
+        self._conversation_locks = [asyncio.Lock() for _ in range(16)]
         # In-memory conversation state: conversation_id -> list of AgentChatMessage
         self.conversations: Dict[str, List[AgentChatMessage]] = {}
 
@@ -184,6 +190,20 @@ class AgentService:
         return "v1-5-pruned-emaonly.safetensors"
 
     async def process_chat(self, req: AgentChatRequest) -> AgentChatResponse:
+        """Serialize each conversation and restore durable context after restart."""
+        conv_id = req.conversation_id or str(uuid4())
+        lock = self._conversation_locks[sum(conv_id.encode()) % len(self._conversation_locks)]
+        async with lock:
+            history = await self.history_store.load(conv_id, req.project_id)
+            self.conversations[conv_id] = history
+            try:
+                response = await self._process_chat(req.model_copy(update={"conversation_id": conv_id}))
+                await self.history_store.save(conv_id, req.project_id, history)
+                return response
+            finally:
+                self.conversations.pop(conv_id, None)
+
+    async def _process_chat(self, req: AgentChatRequest) -> AgentChatResponse:
         """Process conversational user message and formulate a transparent action plan."""
         conv_id = req.conversation_id or str(uuid4())
         if conv_id not in self.conversations:
@@ -491,8 +511,12 @@ class AgentService:
                 project_id=project_id,
                 **params,
             )
-            result = await self.creative_runner.execute(req)
+            from app.core.creative_tasks import creative_tasks
+
+            result = await creative_tasks.execute_and_wait(req, self.creative_runner.execute)
             results.append(result)
+            if not result.success:
+                break
             if result.asset_id:
                 last_asset_id = result.asset_id
 

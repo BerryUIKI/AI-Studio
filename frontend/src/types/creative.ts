@@ -105,7 +105,7 @@ export interface AgentActionStep {
   action: CreativeActionType;
   engine_id: string;
   model: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   description?: string;
 }
 
@@ -136,7 +136,7 @@ export interface AgentProposal {
   summary: string;
   target_engine: string;
   model: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   chain_steps: AgentActionStep[];
   workflow_graph?: ReviewableWorkflowGraph;
   estimated_calls: number;

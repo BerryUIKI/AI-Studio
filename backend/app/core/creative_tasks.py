@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from weakref import WeakValueDictionary
 from collections.abc import Awaitable, Callable
 
 from app.core.task_registry import task_registry
@@ -12,16 +13,37 @@ from app.storage.task_store import TERMINAL_STATUSES, TaskStore, task_store
 CreativeExecutor = Callable[[CreativeActionRequest, str], Awaitable[CreativeActionResult]]
 
 
+class CreativeQueueFull(ValueError):
+    """Admission is refused before creating a task when capacity is exhausted."""
+
+
 class CreativeTaskService:
-    def __init__(self, store: TaskStore = task_store, concurrency: int = 2) -> None:
+    def __init__(self, store: TaskStore = task_store, concurrency: int = 2, capacity: int = 64) -> None:
+        if concurrency < 1 or capacity < concurrency:
+            raise ValueError("Queue capacity must be at least its positive concurrency")
         self.store = store
+        self.capacity = capacity
         self._slots = asyncio.Semaphore(concurrency)
         self._workers: dict[str, asyncio.Task[None]] = {}
         self._cancellations: dict[str, asyncio.Event] = {}
-        self._connections: dict[str, asyncio.Lock] = {}
+        self._connections: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         self._dispatched: set[str] = set()
 
+    async def execute_and_wait(self, request: CreativeActionRequest, executor: CreativeExecutor) -> CreativeActionResult:
+        """Use the shared admission/lifecycle path for approved Agent steps."""
+        task_id = await self.submit(request, executor)
+        worker = self._workers[task_id]
+        await asyncio.shield(worker)
+        task = await self.store.get_task(task_id)
+        if task is None:
+            raise RuntimeError("Submitted task record is unavailable")
+        if task.outputs:
+            return CreativeActionResult.model_validate(task.outputs)
+        return CreativeActionResult(success=False, task_id=task_id, error_message=task.error or task.status)
+
     async def submit(self, request: CreativeActionRequest, executor: CreativeExecutor) -> str:
+        if len(self._cancellations) >= self.capacity:
+            raise CreativeQueueFull("Creation queue is full. Wait for an active task or cancel queued work before retrying.")
         request = request.model_copy(deep=True)
         task_id = f"task_{uuid.uuid4()}"
         cancel = asyncio.Event()
@@ -30,7 +52,7 @@ class CreativeTaskService:
         try:
             await self.store.create_run(RunRecord(id=task_id, project_id=request.project_id, request=request.model_dump()))
             await self.store.save_task(TaskRecord(id=task_id, run_id=task_id, node_id="canvas",
-                node_type=request.action.value, params=request.model_dump()))
+                node_type=request.action.value, params=request.model_dump(), metadata={"dispatch_started": False}))
         except BaseException:
             task_registry.unregister_task(task_id)
             self._cancellations.pop(task_id, None)
@@ -55,7 +77,14 @@ class CreativeTaskService:
                         return
                     task_registry.register_task(task_id, "creative_action", cancel, {"action": request.action.value})
                     self._dispatched.add(task_id)
-                    await executor(request, task_id)
+                    result = await executor(request, task_id)
+                    task = await self.store.get_task(task_id)
+                    if task and task.status not in TERMINAL_STATUSES:
+                        task.status = "succeeded" if result.success else "failed"
+                        task.outputs = result.model_dump()
+                        task.error = result.error_message
+                        await self.store.save_task(task)
+                        await self.store.finish_run(task_id, task.status)
         except BaseException as error:
             task = await self.store.get_task(task_id)
             if task and task.status not in TERMINAL_STATUSES:
@@ -88,6 +117,9 @@ class CreativeTaskService:
             worker = self._workers.get(task_id)
             if worker:
                 worker.cancel()
+            task_registry.unregister_task(task_id)
+            self._workers.pop(task_id, None)
+            self._cancellations.pop(task_id, None)
         return True
 
     async def shutdown(self) -> None:

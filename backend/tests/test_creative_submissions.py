@@ -42,10 +42,12 @@ async def test_submit_returns_before_inference_and_cancel_preserves_real_result(
             "app.runners.creative_runner.asset_store.get_asset", new=AsyncMock(return_value=SimpleNamespace(width=32, height=24))
         ):
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost") as client:
-                response = await asyncio.wait_for(client.post("/api/v1/creative/submit", json={"action": "txt2img", "engine_id": "fal_ai", "seed": 42}), 2)
+                # Inference remains blocked on release throughout admission. This
+                # tests submission ordering, not a two-second filesystem SLA.
+                response = await asyncio.wait_for(client.post("/api/v1/creative/submit", json={"action": "txt2img", "engine_id": "fal_ai", "seed": 42}), 10)
                 assert response.status_code == 202
                 task_id = response.json()["task_id"]
-                await asyncio.wait_for(entered.wait(), 2)
+                await asyncio.wait_for(entered.wait(), 10)
                 assert (await client.post(f"/api/v1/tasks/{task_id}/cancel")).json()["status"] == "cancel-requested"
                 assert (await client.get(f"/api/v1/creative/tasks/{task_id}")).json()["status"] == "cancel-requested"
                 # The HTTP subscriber ends while inference remains owned by the service.

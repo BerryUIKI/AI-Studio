@@ -64,23 +64,24 @@ def evaluate_model_compatibility(
         if weight_mb < 150:  # Small upscaler or tiny LoRA can run on CPU
             return ModelEvaluation(
                 tier="playable_offload",
-                tier_label="CPU运行 (无独立显卡)",
+                tier_label="CPU candidate (unverified)",
                 tier_color="amber",
-                estimated_latency_sec="5-15s",
+                estimated_latency_sec="Unverified",
                 required_vram_mb=required_footprint,
-                notes="No GPU detected; will execute on host CPU.",
+                notes="Capacity estimate only. CPU execution is not part of verified first-release support; use a supported cloud provider.",
             )
         return ModelEvaluation(
             tier="unsupported",
-            tier_label="无法运行 (无独立显卡，建议云端)",
+            tier_label="No supported GPU; use Cloud",
             tier_color="rose",
             estimated_latency_sec="N/A",
             required_vram_mb=required_footprint,
             notes="Requires dedicated NVIDIA GPU. Recommend using Cloud BYOK generation.",
         )
 
-    # Case 2: Tier 1 — Optimal VRAM (Native speed, zero CPU swap)
-    if gpu_total_mb >= (required_footprint + 1024):
+    available_vram = max(0, min(gpu_total_mb, gpu_free_mb))
+    # These are capacity estimates, not measured latency or engine acceptance.
+    if available_vram >= (required_footprint + 1024):
         # Latency estimations
         if "schnell" in model.architecture:
             latency = "4-8s"
@@ -95,16 +96,16 @@ def evaluate_model_compatibility(
 
         return ModelEvaluation(
             tier="optimal",
-            tier_label="极致流畅 (Optimal)",
+            tier_label="Estimated fit (Optimal)",
             tier_color="emerald",
-            estimated_latency_sec=latency,
+            estimated_latency_sec=f"Estimate: {latency}",
             required_vram_mb=required_footprint,
-            notes="Model fits entirely in dedicated VRAM without host memory swapping.",
+            notes=f"Unmeasured estimate for one image at {model.recommended_resolution}, reference model settings and a compatible NVIDIA engine. Assumes {available_vram}MB currently available VRAM; actual latency depends on GPU, steps, resolution and engine.",
         )
 
     # Case 3: Tier 2 — Playable with RAM Offload (Paged execution via PCIe)
-    if (gpu_total_mb + ram_avail_mb) >= (required_footprint + 4096):
-        offload_amount = max(0, required_footprint - gpu_total_mb)
+    if (available_vram + ram_avail_mb) >= (required_footprint + 4096):
+        offload_amount = max(0, required_footprint - available_vram)
         if "dev" in model.architecture:
             latency = "25-45s"
         elif "schnell" in model.architecture:
@@ -114,20 +115,20 @@ def evaluate_model_compatibility(
 
         return ModelEvaluation(
             tier="playable_offload",
-            tier_label="需共享内存 (RAM Offload)",
+            tier_label="Estimated RAM Offload",
             tier_color="amber",
-            estimated_latency_sec=latency,
+            estimated_latency_sec=f"Estimate: {latency}",
             required_vram_mb=required_footprint,
-            notes=f"Dedicated VRAM is tight; offloads ~{offload_amount}MB to host RAM via PCIe.",
+            notes=f"Unmeasured capacity estimate at {model.recommended_resolution}: ~{offload_amount}MB may require RAM offload. Actual latency and offload support depend on GPU, engine, steps and resolution.",
         )
 
     # Case 4: Tier 3 — Heavy Paging (Memory under extreme pressure)
-    if (gpu_total_mb + ram_avail_mb) >= required_footprint:
+    if (available_vram + ram_avail_mb) >= required_footprint:
         return ModelEvaluation(
             tier="heavy_paging",
-            tier_label="严重卡顿 (Heavy Paging)",
+            tier_label="Estimated heavy paging",
             tier_color="orange",
-            estimated_latency_sec=">60s",
+            estimated_latency_sec="Estimate: >60s",
             required_vram_mb=required_footprint,
             notes="Host memory under high pressure; severe swapping may cause stutter.",
         )
@@ -135,7 +136,7 @@ def evaluate_model_compatibility(
     # Case 5: Tier 4 — Unsupported / Out of Memory Risk
     return ModelEvaluation(
         tier="unsupported",
-        tier_label="无法运行 (易爆显存，建议云端)",
+        tier_label="Insufficient available memory",
         tier_color="rose",
         estimated_latency_sec="N/A",
         required_vram_mb=required_footprint,
