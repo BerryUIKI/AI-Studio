@@ -67,7 +67,7 @@ describe('rendered first-image and accessibility journeys', () => {
     expect(useCreativeStore.getState().connectionId).toBe('fal_ai');
     expect(useCreativeStore.getState().model).toBe('flux-schnell');
     expect(screen.getByRole('button', { name: 'Generate Image' }).hasAttribute('disabled')).toBe(false);
-    fireEvent.click(screen.getByText('Advanced'));
+    expect(screen.queryByText('Advanced')).toBeNull();
     expect(screen.queryByText('CFG Scale')).toBeNull();
     expect(screen.getByText('Prompts are uploaded to Fal.ai.')).toBeTruthy();
   });

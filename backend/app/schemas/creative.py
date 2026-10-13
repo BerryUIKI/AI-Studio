@@ -50,9 +50,9 @@ class GenerationProvenance(BaseModel):
     model_hash: Optional[str] = None
     connection_id: str  # Connection used for generation
     engine_id: str  # Legacy field, kept for backward compatibility
-    seed: int
-    steps: int
-    cfg_scale: float
+    seed: int | None = None
+    steps: int | None = None
+    cfg_scale: float | None = None
     dimensions: str  # e.g. "512x512"
     created_at: str
     source_asset_id: Optional[str] = None

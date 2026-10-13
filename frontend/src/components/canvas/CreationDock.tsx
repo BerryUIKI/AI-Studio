@@ -258,15 +258,15 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
             <button
               type="button"
               onClick={randomizeSeed}
-              title={ui("ui_seed_value_click_to_randomize", { value1: seed === -1 ? 'Random' : seed })}
+              title={provider?.id === 'volcengine' ? ui("ui_new_variation") : ui("ui_seed_value_click_to_randomize", { value1: seed === -1 ? 'Random' : seed })}
               className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition text-[11px]"
             >
               <Dices className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{seed === -1 ? ui("ui_random") : seed}</span>
+              <span>{provider?.id === 'volcengine' ? ui("ui_new_variation") : seed === -1 ? ui("ui_random") : seed}</span>
             </button>
 
             {/* Advanced Drawer Toggle (Issue #34 Progressive Disclosure) */}
-            <button
+            {!provider && <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
               className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border transition ${
@@ -283,7 +283,7 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
               ) : (
                 <ChevronDown className="w-3 h-3" />
               )}
-            </button>
+            </button>}
           </div>
         </div>
 

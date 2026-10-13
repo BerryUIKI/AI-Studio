@@ -5,18 +5,18 @@ export type CreativeActionType = 'txt2img' | 'img2img' | 'inpaint' | 'upscale' |
 export type CanvasNodeData = CustomNodeData | ImageCardData | WorkspaceFrameData;
 
 export interface GenerationProvenance {
-  parameters?: Partial<CreativeActionRequest>;
+  parameters?: Partial<CreativeActionRequest> & Record<string, unknown>;
   action: CreativeActionType;
   prompt: string;
-  negative_prompt?: string;
+  negative_prompt?: string | null;
   model: string;
   model_revision?: string;
   model_hash?: string;
   connection_id: string;  // Connection used for generation
   engine_id: string;      // Legacy field, kept for backward compatibility
-  seed: number;
-  steps: number;
-  cfg_scale: number;
+  seed: number | null;
+  steps: number | null;
+  cfg_scale: number | null;
   dimensions: string;
   created_at: string;
   source_asset_id?: string;

@@ -14,7 +14,7 @@ from app.schemas.engine import EngineConnection
 def adapter_identity() -> str:
     runners = Path(__file__).resolve().parent.parent / "runners"
     digest = hashlib.sha256()
-    for name in ("creative_runner.py", "api_runner.py", "comfy_runner.py", "webui_runner.py", "macro_compiler.py", "mask_converter.py"):
+    for name in ("creative_runner.py", "api_runner.py", "comfy_runner.py", "webui_runner.py", "macro_compiler.py", "mask_converter.py", "volcengine_runner.py"):
         digest.update(hash_file(runners / name).encode())
     return digest.hexdigest()
 
@@ -39,6 +39,9 @@ async def creative_execution_identity(plan: CreativeExecutionPlan, connection: E
         video = action in {CreativeActionType.IMG2VIDEO, CreativeActionType.TXT2VIDEO}
         identity.update({"endpoint": "https://api.siliconflow.cn/v1/video/submit" if video else "https://api.siliconflow.cn/v1/images/generations",
                          "model": "THUDM/CogVideoX-5b" if video else "stabilityai/stable-diffusion-xl-base-1.0"})
+    elif provider == "volcengine":
+        from app.runners.volcengine_runner import ARK_IMAGE_ENDPOINT
+        identity.update({"endpoint": ARK_IMAGE_ENDPOINT, "model": plan.target_model})
     elif provider == "openai":
         edit = action == CreativeActionType.INPAINT
         identity.update({"endpoint": "https://api.openai.com/v1/images/edits" if edit else "https://api.openai.com/v1/images/generations",

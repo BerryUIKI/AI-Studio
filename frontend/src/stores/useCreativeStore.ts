@@ -143,7 +143,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
 
     const action = override?.action || (s.referenceImage ? 'img2img' : 'txt2img');
     const isSourceDependent = ['upscale', 'img2img', 'inpaint', 'img2video'].includes(action);
-    const effectiveAspectRatio = isSourceDependent ? undefined : s.aspectRatio;
+    const effectiveAspectRatio = isSourceDependent && s.connectionId !== 'volcengine' ? undefined : s.aspectRatio;
 
     const payload: CreativeActionRequest = {
       action,
@@ -165,7 +165,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       ...override,
     };
 
-    if (isSourceDependent && !override?.aspect_ratio) {
+    if (isSourceDependent && s.connectionId !== 'volcengine' && !override?.aspect_ratio) {
       delete payload.aspect_ratio;
     }
 
