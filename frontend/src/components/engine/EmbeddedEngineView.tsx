@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import React, { useRef, useState } from 'react';
 import { ExternalLink, RefreshCw, FolderOpen, Play, Power, Download } from 'lucide-react';
 
@@ -22,6 +23,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
   onDeployEngine,
   onOpenDirectory,
 }) => {
+  const ui = useUiText();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -65,7 +67,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
                 isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
               }`}
             />
-            {isRunning ? `127.0.0.1:${port}` : 'Stopped'}
+            {isRunning ? ui("ui_127_0_0_1_value", { value1: port }) : ui("ui_stopped")}
           </span>
         </div>
 
@@ -75,19 +77,19 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
             <>
               <button
                 onClick={handleRefresh}
-                title="Reload interface"
+                title={ui("ui_reload_interface")}
                 className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>Reload</span>
+                <span>{ui("ui_reload")}</span>
               </button>
               <button
                 onClick={handleOpenBrowser}
-                title="Open in system browser"
+                title={ui("ui_open_in_system_browser")}
                 className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded transition-colors"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Browser</span>
+                <span>{ui("ui_browser")}</span>
               </button>
             </>
           ) : !isInstalled ? (
@@ -96,7 +98,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
               className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-amber-600 hover:bg-amber-500 rounded transition-colors shadow-sm shadow-amber-600/30"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Deploy {title}</span>
+              <span>{ui("ui_deploy_2")}{title}</span>
             </button>
           ) : (
             <button
@@ -105,14 +107,14 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
               className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5" />
-              <span>{isStarting ? 'Starting...' : `Start ${title}`}</span>
+              <span>{isStarting ? ui("ui_starting") : ui("ui_start_value", { value1: title })}</span>
             </button>
           )}
 
           {onOpenDirectory && (
             <button
               onClick={onOpenDirectory}
-              title="Open install folder"
+              title={ui("ui_open_install_folder")}
               className="p-1 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
@@ -127,7 +129,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
           <iframe
             ref={iframeRef}
             src={engineUrl}
-            title={`${title} Embedded View`}
+            title={ui("ui_value_embedded_view", { value1: title })}
             className="w-full h-full border-0 bg-slate-900"
             sandbox="allow-same-origin allow-scripts allow-forms allow-downloads allow-modals allow-popups"
           />
@@ -136,9 +138,9 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
             <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 shadow-xl">
               <Download className="w-8 h-8" />
             </div>
-            <h2 className="text-xl font-bold text-slate-200 mb-2">{title} is not installed</h2>
+            <h2 className="text-xl font-bold text-slate-200 mb-2">{title} {ui("ui_is_not_installed_2")}</h2>
             <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
-              Berry AI Studio maintains 100% zero host pollution by running engines inside an isolated sandboxed environment. Deploy the hermetic runtime to begin using {title}.
+              {ui("ui_berry_ai_studio_maintains_100_zero_host_pollution")}{title}.
             </p>
             <div className="flex items-center space-x-3">
               <button
@@ -146,7 +148,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
                 className="inline-flex items-center space-x-2 px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-medium text-sm rounded-lg shadow-lg shadow-amber-600/25 transition-all"
               >
                 <Download className="w-4 h-4" />
-                <span>Deploy {title} Now</span>
+                <span>{ui("ui_deploy_2")}{title} {ui("ui_now")}</span>
               </button>
             </div>
           </div>
@@ -155,17 +157,16 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
             <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-white/[0.08] flex items-center justify-center text-slate-400 mb-4 shadow-xl">
               <Power className="w-8 h-8 text-slate-500" />
             </div>
-            <h2 className="text-xl font-bold text-slate-200 mb-2">{title} is not running</h2>
+            <h2 className="text-xl font-bold text-slate-200 mb-2">{title} {ui("ui_is_not_running")}</h2>
             <p className="text-sm text-slate-400 max-w-md mb-6">
-              Start the engine process to access its native UI directly inside Berry AI Studio, or launch it from the Launcher Hub.
-            </p>
+              {ui("ui_start_the_engine_process_to_access_its_native")}</p>
             <button
               onClick={handleStart}
               disabled={isStarting}
               className="inline-flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm rounded-lg shadow-lg shadow-indigo-600/20 transition-all disabled:opacity-50"
             >
               <Play className="w-4 h-4" />
-              <span>{isStarting ? 'Booting engine...' : `Start ${title} Now`}</span>
+              <span>{isStarting ? ui("ui_booting_engine") : ui("ui_start_value_now", { value1: title })}</span>
             </button>
           </div>
         )}

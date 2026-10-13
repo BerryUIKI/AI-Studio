@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { memo } from 'react';
 import { NodeProps } from '@xyflow/react';
 import { Layers, Trash2, Sparkles } from 'lucide-react';
@@ -5,6 +6,7 @@ import { WorkspaceFrameData } from '../../types/creative';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
 export const WorkspaceFrameNode = memo(({ id, data, selected }: NodeProps) => {
+  const ui = useUiText();
   const frameData = data as unknown as WorkspaceFrameData;
   const { removeNode, nodes } = useCanvasStore();
 
@@ -37,17 +39,16 @@ export const WorkspaceFrameNode = memo(({ id, data, selected }: NodeProps) => {
       <div className="absolute -top-10 left-0 right-0 flex items-center justify-between px-3 py-1.5 pointer-events-auto">
         <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-indigo-500/30 text-xs shadow-lg">
           <Layers className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="font-semibold text-slate-100">{frameData.label || 'Agent Workspace'}</span>
+          <span className="font-semibold text-slate-100">{frameData.label || ui("ui_agent_workspace")}</span>
           <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded-full font-mono">
-            {containedCount} items
-          </span>
+            {containedCount} {ui("ui_items")}</span>
         </div>
 
         <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur-md px-2 py-1 rounded-xl border border-slate-800 text-xs shadow-lg">
           <button
             onClick={handleRemove}
             className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
-            title="Delete Workspace Frame"
+            title={ui("ui_delete_workspace_frame")}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -58,7 +59,7 @@ export const WorkspaceFrameNode = memo(({ id, data, selected }: NodeProps) => {
       <div className="absolute inset-0 flex items-center justify-center opacity-15 pointer-events-none select-none">
         <div className="flex items-center gap-2 text-indigo-300 font-medium text-sm tracking-wider uppercase">
           <Sparkles className="w-5 h-5" />
-          <span>Workspace Scratchpad</span>
+          <span>{ui("ui_workspace_scratchpad")}</span>
         </div>
       </div>
     </div>

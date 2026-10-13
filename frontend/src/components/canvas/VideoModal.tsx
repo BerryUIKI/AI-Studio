@@ -1,9 +1,11 @@
+import { useUiText } from '../../i18n/useUiText';
 import { Dialog } from '../ui/Dialog';
 import { useState } from 'react';
 import { Clapperboard, Loader2, Video, X } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 
 export const VideoModal = () => {
+  const ui = useUiText();
   const {
     videoModalOpen,
     referenceImage,
@@ -49,17 +51,17 @@ export const VideoModal = () => {
   };
 
   return (
-    <Dialog title="Experimental video creation" onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <Dialog title={ui("ui_experimental_video_creation")} onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <Clapperboard className="w-5 h-5 text-purple-400" />
-            <h2 className="font-semibold text-sm text-slate-100">Animate Image (Image-to-Video)</h2>
+            <h2 className="font-semibold text-sm text-slate-100">{ui("ui_animate_image_image_to_video")}</h2>
           </div>
           <button
             onClick={closeModals}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
           >
             <X className="w-4 h-4" />
@@ -72,31 +74,31 @@ export const VideoModal = () => {
           <div className="flex items-center gap-4 bg-slate-950 p-3 rounded-xl border border-slate-800">
             <img
               src={referenceImage.imageUrl}
-              alt="Source"
+              alt={ui("ui_source")}
               className="w-16 h-16 rounded-lg object-cover border border-slate-700"
             />
             <div className="flex flex-col text-xs">
-              <span className="font-medium text-slate-200 line-clamp-1">{referenceImage.label || 'Source Asset'}</span>
-              <span className="text-slate-400 mt-1">Resolution: {currentW} × {currentH} px</span>
-              <span className="text-purple-400 font-medium">Output: {numFrames} frames @ {fps} fps</span>
+              <span className="font-medium text-slate-200 line-clamp-1">{referenceImage.label || ui("ui_source_asset")}</span>
+              <span className="text-slate-400 mt-1">{ui("ui_resolution")}{currentW} × {currentH} {ui("ui_px")}</span>
+              <span className="text-purple-400 font-medium">{ui("ui_output")}{numFrames} {ui("ui_frames")}{fps} {ui("ui_fps")}</span>
             </div>
           </div>
 
           {/* Prompt */}
           <div className="flex flex-col gap-1.5 text-xs">
-            <label className="text-slate-300 font-medium">Motion Prompt / Style Guide:</label>
+            <label className="text-slate-300 font-medium">{ui("ui_motion_prompt_style_guide")}</label>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               rows={2}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-purple-500 transition resize-none"
-              placeholder="Describe camera movement and animation style..."
+              placeholder={ui("ui_describe_camera_movement_and_animation_style")}
             />
           </div>
 
           {/* Framerate Selection */}
           <div className="flex flex-col gap-1.5 text-xs">
-            <span className="text-slate-300 font-medium">Frame Rate (FPS):</span>
+            <span className="text-slate-300 font-medium">{ui("ui_frame_rate_fps")}</span>
             <div className="grid grid-cols-3 gap-2">
               {[8, 16, 24].map((rate) => (
                 <button
@@ -109,15 +111,14 @@ export const VideoModal = () => {
                       : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {rate} FPS
-                </button>
+                  {rate} {ui("ui_fps_2")}</button>
               ))}
             </div>
           </div>
 
           {/* Frame Count Selection */}
           <div className="flex flex-col gap-1.5 text-xs">
-            <span className="text-slate-300 font-medium">Video Length (Frames):</span>
+            <span className="text-slate-300 font-medium">{ui("ui_video_length_frames")}</span>
             <div className="grid grid-cols-2 gap-2">
               {[16, 25].map((frames) => (
                 <button
@@ -130,8 +131,7 @@ export const VideoModal = () => {
                       : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {frames} Frames (~{(frames / fps).toFixed(1)}s)
-                </button>
+                  {frames} {ui("ui_frames_2")}{(frames / fps).toFixed(1)}{ui("ui_s_2")}</button>
               ))}
             </div>
           </div>
@@ -139,7 +139,7 @@ export const VideoModal = () => {
           {/* Motion Intensity Slider */}
           <div className="flex flex-col gap-1.5 text-xs">
             <div className="flex items-center justify-between">
-              <span className="text-slate-300 font-medium">Motion Intensity (Bucket ID):</span>
+              <span className="text-slate-300 font-medium">{ui("ui_motion_intensity_bucket_id")}</span>
               <span className="text-purple-400 font-mono">{motionBucketId}</span>
             </div>
             <input
@@ -151,23 +151,23 @@ export const VideoModal = () => {
               className="w-full accent-purple-500 bg-slate-950 rounded-lg cursor-pointer"
             />
             <div className="flex justify-between text-[10px] text-slate-500">
-              <span>Subtle (10)</span>
-              <span>Balanced (127)</span>
-              <span>Dynamic (200+)</span>
+              <span>{ui("ui_subtle_10")}</span>
+              <span>{ui("ui_balanced_127")}</span>
+              <span>{ui("ui_dynamic_200")}</span>
             </div>
           </div>
 
           {/* Engine Selection */}
           <div className="flex flex-col gap-1.5 text-xs">
-            <label className="text-slate-300 font-medium">Execution Engine:</label>
+            <label className="text-slate-300 font-medium">{ui("ui_execution_engine")}</label>
             <select
               value={engineId}
               onChange={(e) => setEngineId(e.target.value)}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-purple-500"
             >
-              <option value="managed_comfyui">Local ComfyUI (Stable Video Diffusion / AnimateDiff)</option>
-              <option value="cloud_fal">Cloud Fal.ai (Fast SVD / Luma Dream Machine)</option>
-              <option value="cloud_siliconflow">Cloud SiliconFlow (CogVideoX)</option>
+              <option value="managed_comfyui">{ui("ui_local_comfyui_stable_video_diffusion_animatediff")}</option>
+              <option value="cloud_fal">{ui("ui_cloud_fal_ai_fast_svd_luma_dream_machine")}</option>
+              <option value="cloud_siliconflow">{ui("ui_cloud_siliconflow_cogvideox")}</option>
             </select>
           </div>
         </div>
@@ -177,11 +177,10 @@ export const VideoModal = () => {
           <button
             type="button"
             onClick={closeModals}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition"
           >
-            Cancel
-          </button>
+            {ui("ui_cancel")}</button>
           <button
             type="button"
             onClick={handleGenerateVideo}
@@ -191,12 +190,12 @@ export const VideoModal = () => {
             {isGenerating ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Generating Video...</span>
+                <span>{ui("ui_generating_video")}</span>
               </>
             ) : (
               <>
                 <Video className="w-4 h-4" />
-                <span>Animate to Video</span>
+                <span>{ui("ui_animate_to_video")}</span>
               </>
             )}
           </button>
