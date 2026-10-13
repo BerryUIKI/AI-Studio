@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import React from 'react';
 import { ArrowDownToLine, ChevronUp, Loader2 } from 'lucide-react';
@@ -20,9 +21,9 @@ export const FloatingDownloadWidget: React.FC = () => {
   }
 
   const formatSpeed = (bps: number) => {
-    if (bps >= 1024 * 1024 * 1024) return `${(bps / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
-    if (bps >= 1024 * 1024) return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
-    if (bps >= 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
+    if (bps >= 1024 * 1024 * 1024) return `${formatNumber((bps / (1024 * 1024 * 1024)), 1, 1)} GB/s`;
+    if (bps >= 1024 * 1024) return `${formatNumber((bps / (1024 * 1024)), 1, 1)} MB/s`;
+    if (bps >= 1024) return `${formatNumber((bps / 1024), 1, 1)} KB/s`;
     return `${bps} B/s`;
   };
 

@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Dialog } from '../ui/Dialog';
@@ -29,16 +30,16 @@ export const DownloadManagerDrawer: React.FC = () => {
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
 
   const formatBytes = (bytes: number) => {
-    if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes >= 1024 * 1024 * 1024) return `${formatNumber((bytes / (1024 * 1024 * 1024)), 1, 1)} GB`;
+    if (bytes >= 1024 * 1024) return `${formatNumber((bytes / (1024 * 1024)), 1, 1)} MB`;
+    if (bytes >= 1024) return `${formatNumber((bytes / 1024), 1, 1)} KB`;
     return `${bytes} B`;
   };
 
   const formatSpeed = (bps: number) => {
-    if (bps >= 1024 * 1024 * 1024) return `${(bps / (1024 * 1024 * 1024)).toFixed(1)} GB/s`;
-    if (bps >= 1024 * 1024) return `${(bps / (1024 * 1024)).toFixed(1)} MB/s`;
-    if (bps >= 1024) return `${(bps / 1024).toFixed(1)} KB/s`;
+    if (bps >= 1024 * 1024 * 1024) return `${formatNumber((bps / (1024 * 1024 * 1024)), 1, 1)} GB/s`;
+    if (bps >= 1024 * 1024) return `${formatNumber((bps / (1024 * 1024)), 1, 1)} MB/s`;
+    if (bps >= 1024) return `${formatNumber((bps / 1024), 1, 1)} KB/s`;
     return `${bps} B/s`;
   };
 

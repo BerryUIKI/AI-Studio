@@ -9,6 +9,9 @@ export function formatDateTime(value: string, timeOnly = false): string {
     : { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
-export function formatNumber(value: number, digits = 1): string {
-  return new Intl.NumberFormat(useSettingsStore.getState().getEffectiveLanguage(), { maximumFractionDigits: digits }).format(value);
+export function formatNumber(value: number, digits = 1, minimumDigits = 0): string {
+  return new Intl.NumberFormat(useSettingsStore.getState().getEffectiveLanguage(), {
+    maximumFractionDigits: digits, minimumFractionDigits: minimumDigits,
+  }).format(value);
 }
+

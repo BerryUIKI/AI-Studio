@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import React, { useState } from 'react';
 import { HubModel, ModelEvaluation, HardwareSummary } from '../../stores/useModelHubStore';
@@ -23,7 +24,7 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
 }) => {
   const ui = useUiText();
   const [previewFailed, setPreviewFailed] = useState(false);
-  const sizeGb = (model.size_bytes / (1024 * 1024 * 1024)).toFixed(1);
+  const sizeGb = formatNumber((model.size_bytes / (1024 * 1024 * 1024)), 1, 1);
   const isUnsupported = evaluation?.tier === 'unsupported';
 
   return (

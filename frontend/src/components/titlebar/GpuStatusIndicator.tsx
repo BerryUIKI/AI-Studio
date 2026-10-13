@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import React, { useEffect, useRef } from 'react';
 import { useHardwareStore } from '../../stores/useHardwareStore';
@@ -62,7 +63,7 @@ export const GpuStatusIndicator: React.FC = () => {
     .trim();
 
   const totalGb = Math.round(stats.vram_total_mb / 1024);
-  const usedGb = (stats.vram_used_mb / 1024).toFixed(1);
+  const usedGb = formatNumber((stats.vram_used_mb / 1024), 1, 1);
   const pct = stats.vram_total_mb > 0
     ? Math.min(100, Math.round((stats.vram_used_mb / stats.vram_total_mb) * 100))
     : 0;

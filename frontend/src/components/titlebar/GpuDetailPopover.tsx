@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import React from 'react';
@@ -10,8 +11,8 @@ interface GpuDetailPopoverProps {
 
 export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => {
   const ui = useUiText();
-  const totalGb = (stats.vram_total_mb / 1024).toFixed(1);
-  const usedGb = (stats.vram_used_mb / 1024).toFixed(1);
+  const totalGb = formatNumber((stats.vram_total_mb / 1024), 1, 1);
+  const usedGb = formatNumber((stats.vram_used_mb / 1024), 1, 1);
   const pct = stats.vram_total_mb > 0
     ? Math.min(100, Math.round((stats.vram_used_mb / stats.vram_total_mb) * 100))
     : 0;
@@ -83,7 +84,7 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
             {stats.processes.map((proc) => {
               const procMb = proc.vram_used_mb;
               const procDisplay =
-                procMb >= 1024 ? `${(procMb / 1024).toFixed(1)} GB` : `${procMb} MB`;
+                procMb >= 1024 ? `${formatNumber((procMb / 1024), 1, 1)} GB` : `${procMb} MB`;
               return (
                 <div
                   key={proc.pid}

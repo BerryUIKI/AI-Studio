@@ -1,3 +1,4 @@
+import { formatDateTime } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { Dialog } from '../ui/Dialog';
 import React, { useState } from 'react';
@@ -78,19 +79,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
     setConfirmDeleteId(null);
   };
 
-  const formatDate = (isoString: string) => {
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleDateString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return isoString;
-    }
-  };
+
 
   return (
     <Dialog title={ui("ui_projects")} onClose={handleClose}
@@ -236,7 +225,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                     <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-mono">
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {formatDate(proj.updated_at)}
+                        {formatDateTime(proj.updated_at)}
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-1">

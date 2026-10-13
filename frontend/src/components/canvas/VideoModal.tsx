@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { Dialog } from '../ui/Dialog';
 import { useState } from 'react';
@@ -131,7 +132,7 @@ export const VideoModal = () => {
                       : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  {frames} {ui("ui_frames_2")}{(frames / fps).toFixed(1)}{ui("ui_s_2")}</button>
+                  {frames} {ui("ui_frames_2")}{formatNumber((frames / fps), 1, 1)}{ui("ui_s_2")}</button>
               ))}
             </div>
           </div>

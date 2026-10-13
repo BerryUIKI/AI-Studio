@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import { listDownloadTasks } from '../../api/modelDownloads';
@@ -150,9 +151,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
   const [startError, setStartError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<string>('qwen2.5:7b');
   const [isPulling, setIsPulling] = useState(false);
-  const [pullProgress, setPullProgress] = useState<{ status: string; percent: number }>({
+  const [pullProgress, setPullProgress] = useState<{ status: string; percent?: number }>({
     status: '',
-    percent: 0,
   });
   const [pullError, setPullError] = useState<string | null>(null);
 
@@ -246,11 +246,11 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
     // If preset has hubModelId, use the robust multi-mirror GGUF downloader
     if (preset?.hubModelId) {
-      setPullProgress({ status: ui("ui_resolving_model_mirrors"), percent: 0 });
+      setPullProgress({ status: ui("ui_resolving_model_mirrors") });
       try {
         // Auto-install llama-server binary if not present
         if (!llamaStatus?.installed) {
-          setPullProgress({ status: ui("ui_deploying_llama_cpp_runtime"), percent: 5 });
+          setPullProgress({ status: ui("ui_deploying_llama_cpp_runtime") });
           await fetch('/api/v1/llama-server/install', { method: 'POST' }).catch(() => {});
         }
 
@@ -277,7 +277,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           if (!currentTask) continue;
 
           if (currentTask.status === 'downloading' || currentTask.status === 'pending') {
-            const speedMb = currentTask.speed_bps ? (currentTask.speed_bps / (1024 * 1024)).toFixed(1) : '0';
+            const speedMb = currentTask.speed_bps ? formatNumber((currentTask.speed_bps / (1024 * 1024)), 1, 1) : '0';
             const statusMsg = ui("ui_downloading_value_mb_s_to_engine_models_llm", { value1: speedMb });
             setPullProgress({
               status: statusMsg,
@@ -336,15 +336,15 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
 
   const gpuNameDisplay = primaryGpu?.name || (ui("ui_no_dedicated_gpu"));
   const totalVramGb = primaryGpu ? Math.round(primaryGpu.vram_total_mb / 1024) : 0;
-  const freeVramGb = primaryGpu ? (primaryGpu.vram_free_mb / 1024).toFixed(1) : '0';
-  const usedVramGb = primaryGpu ? ((primaryGpu.vram_total_mb - primaryGpu.vram_free_mb) / 1024).toFixed(1) : '0';
+  const freeVramGb = primaryGpu ? formatNumber((primaryGpu.vram_free_mb / 1024), 1, 1) : '0';
+  const usedVramGb = primaryGpu ? formatNumber(((primaryGpu.vram_total_mb - primaryGpu.vram_free_mb) / 1024), 1, 1) : '0';
   const vramPercent =
     primaryGpu && primaryGpu.vram_total_mb > 0
       ? Math.min(100, Math.round(((primaryGpu.vram_total_mb - primaryGpu.vram_free_mb) / primaryGpu.vram_total_mb) * 100))
       : 0;
 
   const totalRamGb = hardware ? Math.round(hardware.ram_total_mb / 1024) : 0;
-  const availRamGb = hardware ? (hardware.ram_avail_mb / 1024).toFixed(1) : '0';
+  const availRamGb = hardware ? formatNumber((hardware.ram_avail_mb / 1024), 1, 1) : '0';
   const ramPercent =
     hardware && hardware.ram_total_mb > 0
       ? Math.min(100, Math.round(((hardware.ram_total_mb - hardware.ram_avail_mb) / hardware.ram_total_mb) * 100))
@@ -574,8 +574,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                   <span className="text-slate-300 font-mono text-xs">
                     {hardware ? (
                       <>
-                        <strong className="text-slate-100">{storageFreeGb.toFixed(1)} {ui("ui_gb")}</strong>{' '}
-                        {ui("ui_free")} / {storageTotalGb.toFixed(0)} {ui("ui_gb")}</>
+                        <strong className="text-slate-100">{formatNumber(storageFreeGb, 1, 1)} {ui("ui_gb")}</strong>{' '}
+                        {ui("ui_free")} / {formatNumber(storageTotalGb, 0, 0)} {ui("ui_gb")}</>
                     ) : (
                       '...'
                     )}
@@ -769,7 +769,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                       <RotateCw className="w-3.5 h-3.5 animate-spin" />
                       {pullProgress.status || (ui("ui_pulling_model"))}
                     </span>
-                    <span className="text-white font-mono font-bold">{pullProgress.percent}%</span>
+                    <span className="text-white font-mono font-bold">{pullProgress.percent === undefined ? ui("ui_waiting_for_observed_progress") : `${formatNumber(pullProgress.percent, 1)}%`}</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
                     <ProgressBar label={ui("ui_observed_progress")} value={pullProgress.percent} className="h-full text-indigo-500 transition-all duration-300" />

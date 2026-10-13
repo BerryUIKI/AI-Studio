@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import React, { useState, useRef } from 'react';
 import { ModelEvaluation, HardwareSummary } from '../../stores/useModelHubStore';
@@ -128,7 +129,7 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
                 <HardDrive className="w-3.5 h-3.5 text-purple-400" />
                 {ui("ui_required_footprint")}</span>
               <span className="font-mono font-medium">
-                {(evaluation.required_vram_mb / 1024).toFixed(1)} {ui("ui_gb")}</span>
+                {formatNumber((evaluation.required_vram_mb / 1024), 1, 1)} {ui("ui_gb")}</span>
             </div>
 
             <div className="flex items-center justify-between">
@@ -151,12 +152,12 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
               <div className="flex justify-between text-slate-300">
                 <span className="truncate pr-2">{hardwareSummary.gpu_name}</span>
                 <span className="font-mono shrink-0">
-                  {(hardwareSummary.vram_total_mb / 1024).toFixed(0)} {ui("ui_gb_vram")}</span>
+                  {formatNumber((hardwareSummary.vram_total_mb / 1024), 0, 0)} {ui("ui_gb_vram")}</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>{ui("ui_system_ram")}</span>
                 <span className="font-mono">
-                  {(hardwareSummary.ram_avail_mb / 1024).toFixed(1)}{ui("ui_g_free")}{(hardwareSummary.ram_total_mb / 1024).toFixed(0)}{ui("ui_g_4")}</span>
+                  {formatNumber((hardwareSummary.ram_avail_mb / 1024), 1, 1)}{ui("ui_g_free")}{formatNumber((hardwareSummary.ram_total_mb / 1024), 0, 0)}{ui("ui_g_4")}</span>
               </div>
             </div>
           )}

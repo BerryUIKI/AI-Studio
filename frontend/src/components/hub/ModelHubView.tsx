@@ -1,3 +1,4 @@
+import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import React, { useEffect } from 'react';
 import { Package, Search, Filter, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
@@ -147,7 +148,7 @@ export const ModelHubView: React.FC<ModelHubViewProps> = ({
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
               <span>
                 {hardwareSummary
-                  ? ui("ui_value_valueg", { value1: hardwareSummary.gpu_name, value2: (hardwareSummary.vram_total_mb / 1024).toFixed(0) })
+                  ? ui("ui_value_valueg", { value1: hardwareSummary.gpu_name, value2: formatNumber((hardwareSummary.vram_total_mb / 1024), 0, 0) })
                   : ui("ui_hardware_diagnostics_active")}
               </span>
             </div>

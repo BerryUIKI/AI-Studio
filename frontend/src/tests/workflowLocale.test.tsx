@@ -7,6 +7,7 @@ import { UI_ENGLISH, UI_CHINESE_PREVIEW } from '../i18n/uiMessages';
 import { t, TRANSLATIONS, VERIFIED_UI_LANGUAGES } from '../i18n/translations';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { useEngineStore, defaultBuiltinInstances } from '../stores/useEngineStore';
+import { formatDateTime, formatNumber } from '../i18n/format';
 
 afterEach(() => { cleanup(); useSettingsStore.getState().setLanguage('en'); });
 
@@ -49,4 +50,12 @@ it('retains placeholder contracts in preview translations and honors explicit le
   }
   expect(t('absent_legacy_key', 'fr', 'Safe fallback')).toBe('Safe fallback');
   expect(uiText('ui_file_format', 'en', { file: 'verified', format: undefined })).toBe('File: verified; format: ');
+});
+
+it('formats displayed numbers and dates using the selected locale', () => {
+  useSettingsStore.getState().setLanguage('fr');
+  expect(formatNumber(1.5, 1, 1)).toBe('1,5');
+  expect(formatDateTime('invalid-date')).toBe('Date unavailable');
+  useSettingsStore.getState().setLanguage('en');
+  expect(formatNumber(1, 1, 1)).toBe('1.0');
 });
