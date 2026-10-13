@@ -12,6 +12,10 @@ export interface LanguageOption {
   nativeLabel: string;
 }
 
+// English is the release UI language. Other dictionaries are translation
+// previews and do not claim complete primary-workflow coverage.
+export const VERIFIED_UI_LANGUAGES: SupportedLanguage[] = ['en'];
+
 export const LANGUAGE_OPTIONS: LanguageOption[] = [
   { id: 'system', label: 'Follow System', nativeLabel: 'Auto (System)' },
   { id: 'en', label: 'English', nativeLabel: 'English (US)' },

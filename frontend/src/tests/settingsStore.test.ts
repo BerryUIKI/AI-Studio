@@ -31,10 +31,10 @@ describe('useSettingsStore', () => {
     useSettingsStore.getState().resetSettings();
   });
 
-  it('initializes with default exit policy prompt and landing view launcher', () => {
+  it('initializes with default exit policy prompt and landing view canvas', () => {
     const state = useSettingsStore.getState();
     expect(state.exitPolicy).toBe('prompt');
-    expect(state.defaultLandingView).toBe('launcher');
+    expect(state.defaultLandingView).toBe('canvas');
   });
 
   it('updates exit policy and persists to localStorage', () => {
@@ -66,7 +66,7 @@ describe('useSettingsStore', () => {
 
     store.resetSettings();
     expect(useSettingsStore.getState().exitPolicy).toBe('prompt');
-    expect(useSettingsStore.getState().defaultLandingView).toBe('launcher');
+    expect(useSettingsStore.getState().defaultLandingView).toBe('canvas');
     expect(useSettingsStore.getState().language).toBe('system');
   });
 

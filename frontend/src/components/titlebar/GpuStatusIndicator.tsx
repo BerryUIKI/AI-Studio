@@ -82,7 +82,7 @@ export const GpuStatusIndicator: React.FC = () => {
         <span className={`w-1.5 h-1.5 rounded-full shadow-sm ${dotColor}`} />
         <Cpu className="w-3 h-3 text-indigo-400" />
         <span className="font-semibold text-slate-100">{shortName}</span>
-        <span className="text-slate-400 font-mono">
+        <span className="hidden lg:inline text-slate-400 font-mono">
           {usedGb}G / {totalGb}G ({pct}%)
         </span>
       </button>

@@ -25,6 +25,7 @@ import {
   LanguageSetting,
   t,
   resolveEffectiveLanguage,
+  VERIFIED_UI_LANGUAGES,
 } from '../../i18n/translations';
 
 export type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
@@ -182,14 +183,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-bold text-white">{t('lang_heading', currentLang)}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{t('lang_desc', currentLang)}</p>
+                <p className="text-xs text-slate-400 mt-0.5">English is the release language. Other languages are translation previews with English fallback; primary workflow coverage is incomplete.</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                 {LANGUAGE_OPTIONS.map((opt) => {
                   const isSelected = language === opt.id;
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={opt.id}
                       onClick={() => setLanguage(opt.id as LanguageSetting)}
                       className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between min-h-[76px] ${
@@ -204,8 +206,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </span>
                         {isSelected && <Check className="w-4 h-4 text-indigo-400 shrink-0" />}
                       </div>
-                      <span className="text-[11px] text-slate-400">{opt.label}</span>
-                    </div>
+                      <span className="text-[11px] text-slate-400">{opt.label}{opt.id !== 'system' && !VERIFIED_UI_LANGUAGES.includes(opt.id) ? ' — Translation preview' : ''}</span>
+                    </button>
                   );
                 })}
               </div>

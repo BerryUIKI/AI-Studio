@@ -22,7 +22,7 @@ const STORAGE_KEY = 'berry_ai_studio_settings';
 
 const defaultSettings: AppSettings = {
   exitPolicy: 'prompt',
-  defaultLandingView: 'launcher',
+  defaultLandingView: 'canvas',
   language: 'system',
 };
 

@@ -4,6 +4,9 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { GenerationTask } from '../../types/task';
+import { formatDateTime } from '../../i18n/format';
+import { CreativeActionRequest } from '../../types/creative';
+import { nextResultPosition } from '../../utils/canvasPlacement';
 
 export function TaskHistory() {
   const projectId = useProjectStore((state) => state.currentProject?.id);
@@ -42,11 +45,18 @@ export function TaskHistory() {
     canvas.pushSnapshot();
     const id = `history_${task.id}_${Date.now()}`;
     useCanvasStore.setState({ nodes: [...canvas.nodes, {
-      id, type: 'imageCard', position: { x: 100, y: 100 },
+      id, type: 'imageCard', position: nextResultPosition(canvas.nodes, result.provenance?.source_asset_id),
       data: { ...mediaCardFields(result), assetId: result.asset_id, imageUrl, videoUrl: result.video_url, mediaType: result.video_url ? 'video' : 'image',
         width: result.width || 512, height: result.height || 512, provenance: result.provenance, label: result.provenance?.prompt || task.node_type },
     }], selectedNodeId: id });
     canvas.notifyCanvasChange();
+  };
+
+  const retry = async (task: GenerationTask) => {
+    if (generating || useProjectStore.getState().currentProject?.id !== projectId) return;
+    if (task.status === 'outcome-unknown' && !window.confirm('The previous provider job may still be running or already completed. A new submission may incur duplicate charges. Submit a new task anyway?')) return;
+    await useCreativeStore.getState().executeCreativeAction({ ...task.params as Partial<CreativeActionRequest>, project_id: projectId });
+    await refresh();
   };
 
   return (
@@ -60,8 +70,11 @@ export function TaskHistory() {
           <article key={task.id} className="space-y-1 border-t border-slate-700 pt-2 text-sm">
             <p className="font-medium">{task.node_type} · {task.status}</p>
             <p className="truncate text-slate-400">{String(task.params.prompt || '')}</p>
-            <time className="text-xs text-slate-400" dateTime={task.created_at}>{new Date(task.created_at).toLocaleString()}</time>
+            <time className="text-xs text-slate-400" dateTime={task.created_at}>{formatDateTime(task.created_at)}</time>
             {task.error && <p className="text-xs text-amber-300">{task.error}</p>}
+            {['failed', 'cancelled', 'interrupted', 'outcome-unknown'].includes(task.status)
+              && ['txt2img', 'img2img', 'inpaint', 'upscale', 'txt2video', 'img2video'].includes(String(task.params.action))
+              && <button type="button" disabled={generating} className="rounded border border-slate-600 px-2 py-1 text-xs disabled:opacity-50" onClick={() => void retry(task)}>{task.status === 'outcome-unknown' ? 'Review and retry uncertain task' : 'Retry as a new task'}</button>}
             {(task.outputs.image_url || task.outputs.video_url) && <button type="button" className="block rounded border border-slate-600 px-2 py-1 text-xs" onClick={() => placeResult(task)}>Place result on canvas</button>}
           </article>
         ))}
