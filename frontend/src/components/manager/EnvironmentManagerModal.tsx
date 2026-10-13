@@ -86,7 +86,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
   const [newRootLabel, setNewRootLabel] = useState<string>('');
   const [shuttingDown, setShuttingDown] = useState<boolean>(false);
   const [shutdownError, setShutdownError] = useState<string | null>(null);
-  const [updateManifest, setUpdateManifest] = useState<any>(null);
+  const [updateManifest, setUpdateManifest] = useState<{ engine_type: string; status: string; previous_commit?: string; rollback_performed?: boolean } | null>(null);
 
   const fetchStatus = async () => {
     try {

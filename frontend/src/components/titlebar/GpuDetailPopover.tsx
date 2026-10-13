@@ -1,3 +1,4 @@
+import { ProgressBar } from '../ui/ProgressBar';
 import React from 'react';
 import { GpuStats } from '../../stores/useHardwareStore';
 import { Thermometer, Zap, HardDrive, Cpu } from 'lucide-react';
@@ -13,7 +14,7 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
     ? Math.min(100, Math.round((stats.vram_used_mb / stats.vram_total_mb) * 100))
     : 0;
 
-  const barColor = pct > 80 ? 'bg-rose-500' : pct > 50 ? 'bg-amber-400' : 'bg-emerald-400';
+  const barColor = pct > 80 ? 'text-rose-500' : pct > 50 ? 'text-amber-400' : 'text-emerald-400';
 
   return (
     <div
@@ -66,10 +67,7 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
             </span>
           </div>
           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-300 ${barColor}`}
-              style={{ width: `${pct}%` }}
-            />
+            <ProgressBar label="Observed progress" value={pct} className={`h-full transition-all duration-300 ${barColor}`} />
           </div>
         </div>
       </div>

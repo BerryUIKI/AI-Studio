@@ -1,3 +1,4 @@
+import { errorMessage as getErrorMessage } from '../../utils/errors';
 import React, { useState } from 'react';
 import {
   Settings,
@@ -92,8 +93,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       });
       const data = await res.json();
       setLlmTestResult({ valid: data.valid, message: data.message });
-    } catch (err: any) {
-      setLlmTestResult({ valid: false, message: err.message || 'Connection failed' });
+    } catch (err: unknown) {
+      setLlmTestResult({ valid: false, message: getErrorMessage(err, 'Connection failed') });
     } finally {
       setLlmTesting(false);
     }

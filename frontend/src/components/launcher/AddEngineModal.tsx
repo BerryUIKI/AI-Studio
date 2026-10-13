@@ -1,3 +1,4 @@
+import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
 import {
@@ -105,8 +106,8 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
         const err = await res.json();
         alert(`Failed to bind: ${err.detail || 'Unknown error'}`);
       }
-    } catch (e: any) {
-      alert(`Network error: ${e.message}`);
+    } catch (e: unknown) {
+      alert(`Network error: ${getErrorMessage(e, 'Unknown error')}`);
     }
   };
 
@@ -138,8 +139,8 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
         const err = await res.json();
         setManualError(err.detail || 'Directory validation failed.');
       }
-    } catch (err: any) {
-      setManualError(err.message || 'Connection error.');
+    } catch (err: unknown) {
+      setManualError(getErrorMessage(err, 'Connection error.'));
     } finally {
       setIsSubmittingManual(false);
     }

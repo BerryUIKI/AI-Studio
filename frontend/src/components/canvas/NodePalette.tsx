@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Plus, Type, Image as ImageIcon, Sparkles, Monitor } from 'lucide-react';
+import { Plus, Type, Image as ImageIcon, Sparkles, Monitor, type LucideIcon } from 'lucide-react';
 import { NodeDefinition, NodeCategory } from '../../types/workflow';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
-const CATEGORY_ICONS: Record<string, any> = {
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
   input: Type,
   text: Sparkles,
   image: ImageIcon,
