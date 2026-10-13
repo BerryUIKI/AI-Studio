@@ -106,3 +106,13 @@ async def test_http_redirect_cannot_forward_platform_key() -> None:
         with pytest.raises(AdapterError, match="307"):
             await ProviderBroker(spec(), "fixture", client=client).request({})
     assert len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_escaped_credentials_are_rejected_before_query_dispatch() -> None:
+    client = AsyncMock()
+    with pytest.raises(AdapterError, match="credential"):
+        await ProviderBroker(spec(), 'fixture-密钥"quote', client=client).request(
+            {"params": {"token": 'fixture-密钥"quote'}}
+        )
+    client.stream.assert_not_called()

@@ -7,7 +7,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
-from app.runners.adapter_executor import AdapterError, AdapterOutput
+from app.runners.adapter_executor import AdapterError, AdapterOutput, _contains_secret
 from app.schemas.custom_provider import CustomProviderSpec
 
 MAX_HTTP_BYTES = 16 * 1024 * 1024
@@ -90,7 +90,8 @@ class ProviderBroker:
         method = operation.get("method", "POST")
         path = operation.get("path", "")
         if (
-            method not in {"GET", "POST"}
+            not isinstance(method, str)
+            or method not in {"GET", "POST"}
             or not isinstance(path, str)
             or len(path) > 2048
         ):
@@ -118,7 +119,7 @@ class ProviderBroker:
             raise AdapterError("Broker request must be JSON") from None
         if len(serialized.encode()) > MAX_HTTP_BYTES:
             raise AdapterError("Broker request exceeds the byte limit")
-        if self.key and self.key in serialized:
+        if self.key and _contains_secret(operation, self.key):
             raise AdapterError(
                 "Broker input contains a credential; use the configured authentication mode"
             )
