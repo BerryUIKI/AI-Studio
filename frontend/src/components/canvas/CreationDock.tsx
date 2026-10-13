@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { useShallow } from 'zustand/react/shallow';
 import React, { useState } from 'react';
 import {
@@ -16,7 +17,9 @@ import { CreationSetup, useCreationReadiness } from './CreationSetup';
 type CreativeTaskStatusProps = Pick<ReturnType<typeof useCreativeStore.getState>,
   'isGenerating' | 'generationNotice' | 'generationStage' | 'activeTaskId' | 'cancellationRequested' | 'cancelGeneration'>;
 
-export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }: CreativeTaskStatusProps) => (
+export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }: CreativeTaskStatusProps) => {
+  const ui = useUiText();
+  return (
   <>
     {generationNotice && <p role="status" className="px-3 text-xs text-amber-200">{generationNotice}</p>}
     {isGenerating && (
@@ -24,20 +27,22 @@ export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationS
         <div className="flex items-center gap-2.5">
           <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
           <div className="flex flex-col">
-            <span className="font-medium text-indigo-200">{generationStage || 'Running'}</span>
-            <span className="text-[10px] text-slate-400">{activeTaskId || 'Waiting for task admission'}</span>
+            <span className="font-medium text-indigo-200">{generationStage || ui("ui_running")}</span>
+            <span className="text-[10px] text-slate-400">{activeTaskId || ui("ui_waiting_for_task_admission")}</span>
           </div>
         </div>
         <button type="button" onClick={() => void cancelGeneration()} disabled={!activeTaskId || cancellationRequested}
           className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-200 disabled:opacity-50">
-          {cancellationRequested ? 'Cancellation requested' : 'Cancel'}
+          {cancellationRequested ? ui("ui_cancellation_requested") : ui("ui_cancel")}
         </button>
       </div>
     )}
   </>
 );
+};
 
 export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = () => undefined }: { onCloudSetup?: () => void; onLocalSetup?: () => void }) => {
+  const ui = useUiText();
   const {
     prompt,
     setPrompt,
@@ -134,18 +139,18 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
             <div className="flex items-center gap-2">
               <img
                 src={referenceImage.imageUrl}
-                alt="Reference"
+                alt={ui("ui_reference")}
                 className="w-7 h-7 rounded object-cover border border-indigo-700/50"
               />
               <div>
-                <span className="font-medium text-indigo-300">Image-to-Image Variation</span>
-                <p className="text-[10px] text-slate-400">Transforming selected canvas image</p>
+                <span className="font-medium text-indigo-300">{ui("ui_image_to_image_variation")}</span>
+                <p className="text-[10px] text-slate-400">{ui("ui_transforming_selected_canvas_image")}</p>
               </div>
             </div>
             <button
               onClick={() => setReferenceImage(null)}
               className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-              title="Clear reference"
+              title={ui("ui_clear_reference")}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -157,13 +162,13 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
           <div className="relative flex-1">
             <input
               type="text"
-              aria-label="Image prompt"
+              aria-label={ui("ui_image_prompt")}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={
                 referenceImage
-                  ? 'Describe how to vary this image...'
-                  : 'What do you want to create? (e.g. serene mountain cabin, oil painting...)'
+                  ? ui("ui_describe_how_to_vary_this_image")
+                  : ui("ui_what_do_you_want_to_create_e_g")
               }
               className="w-full bg-slate-950/80 border border-slate-700/70 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition pr-10"
               disabled={isGenerating}
@@ -179,12 +184,12 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
               {isGenerating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Creating...</span>
+                  <span>{ui("ui_creating")}</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>{referenceImage ? 'Vary Image' : 'Generate Image'}</span>
+                  <span>{referenceImage ? ui("ui_vary_image") : ui("ui_generate_image")}</span>
                 </>
               )}
             </button>
@@ -196,10 +201,10 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
               }
               disabled={!prompt.trim() || isGenerating}
               className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-purple-600/90 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium shadow-lg shadow-purple-600/25 transition whitespace-nowrap"
-              title="Experimental video generation — integration unverified"
+              title={ui("ui_experimental_video_generation_integration_unverified")}
             >
               <Video className="w-4 h-4" />
-              <span>Experimental video</span>
+              <span>{ui("ui_experimental_video")}</span>
             </button>}
           </div>
         </form>
@@ -208,7 +213,7 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
         <div className="flex flex-wrap items-center justify-between text-xs pt-1 border-t border-slate-800/60 px-1 gap-2">
           {/* Aspect Ratios */}
           <div className="flex items-center gap-1">
-            <span className="text-slate-400 mr-1 text-[11px]">Ratio:</span>
+            <span className="text-slate-400 mr-1 text-[11px]">{ui("ui_ratio")}</span>
             {aspectRatios.map((ratio) => (
               <button
                 key={ratio}
@@ -234,21 +239,20 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
               onClick={() => {
                 window.location.hash = 'manager';
               }}
-              title="Inspect local models, scan roots, and engine compatibility"
+              title={ui("ui_inspect_local_models_scan_roots_and_engine_compatibility")}
               className="px-2 py-0.5 rounded-md bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 hover:text-purple-100 border border-purple-800/60 transition text-[11px] font-medium"
             >
-              Models ↗
-            </button>
+              {ui("ui_models")}</button>
 
             {/* Seed Randomizer */}
             <button
               type="button"
               onClick={randomizeSeed}
-              title={`Seed: ${seed === -1 ? 'Random' : seed}. Click to randomize.`}
+              title={ui("ui_seed_value_click_to_randomize", { value1: seed === -1 ? 'Random' : seed })}
               className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition text-[11px]"
             >
               <Dices className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{seed === -1 ? 'Random' : seed}</span>
+              <span>{seed === -1 ? ui("ui_random") : seed}</span>
             </button>
 
             {/* Advanced Drawer Toggle (Issue #34 Progressive Disclosure) */}
@@ -260,10 +264,10 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
                   ? 'bg-indigo-600/30 border-indigo-500/60 text-indigo-200'
                   : 'bg-slate-800/80 border-slate-700/60 text-slate-400 hover:text-slate-200'
               }`}
-              title="Toggle Advanced Parameters (CFG, Steps, Denoise, Negative Prompt)"
+              title={ui("ui_toggle_advanced_parameters_cfg_steps_denoise_negative_prompt")}
             >
               <SlidersHorizontal className="w-3 h-3" />
-              <span>Advanced</span>
+              <span>{ui("ui_advanced")}</span>
               {showAdvanced ? (
                 <ChevronUp className="w-3 h-3" />
               ) : (
@@ -279,13 +283,12 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
             {/* Negative Prompt */}
             <div className="flex flex-col gap-1 md:col-span-2">
               <label className="text-[11px] font-medium text-slate-300">
-                Negative Prompt (What to exclude):
-              </label>
+                {ui("ui_negative_prompt_what_to_exclude")}</label>
               <input
                 type="text"
                 value={negativePrompt}
                 onChange={(e) => setNegativePrompt(e.target.value)}
-                placeholder="e.g. low quality, blurry, deformed..."
+                placeholder={ui("ui_e_g_low_quality_blurry_deformed")}
                 className="w-full bg-slate-950/80 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -293,7 +296,7 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
             {/* CFG Scale Slider */}
             <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
               <div className="flex justify-between items-center text-[11px]">
-                <span className="text-slate-300 font-medium">CFG Scale (Prompt Guidance)</span>
+                <span className="text-slate-300 font-medium">{ui("ui_cfg_scale_prompt_guidance")}</span>
                 <span className="font-mono text-indigo-400">{cfgScale}</span>
               </div>
               <input
@@ -306,14 +309,13 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
                 className="w-full accent-indigo-500 cursor-pointer"
               />
               <span className="text-[10px] text-slate-500">
-                Higher = strictly adheres to prompt, lower = more creative freedom
-              </span>
+                {ui("ui_higher_strictly_adheres_to_prompt_lower_more_creative")}</span>
             </div>
 
             {/* Inference Steps Slider */}
             <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
               <div className="flex justify-between items-center text-[11px]">
-                <span className="text-slate-300 font-medium">Sampling Steps</span>
+                <span className="text-slate-300 font-medium">{ui("ui_sampling_steps")}</span>
                 <span className="font-mono text-indigo-400">{steps}</span>
               </div>
               <input
@@ -326,15 +328,14 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
                 className="w-full accent-indigo-500 cursor-pointer"
               />
               <span className="text-[10px] text-slate-500">
-                Standard: 20 steps. Higher increases quality but requires more time.
-              </span>
+                {ui("ui_standard_20_steps_higher_increases_quality_but_requires")}</span>
             </div>
 
             {/* Denoise Strength (shown if img2img) */}
             {referenceImage && (
               <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
                 <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-slate-300 font-medium">Denoising Strength</span>
+                  <span className="text-slate-300 font-medium">{ui("ui_denoising_strength")}</span>
                   <span className="font-mono text-indigo-400">{denoise}</span>
                 </div>
                 <input
@@ -347,15 +348,14 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
                   className="w-full accent-indigo-500 cursor-pointer"
                 />
                 <span className="text-[10px] text-slate-500">
-                  0.3 = subtle touch-up, 0.75 = major variation, 1.0 = completely reimagined
-                </span>
+                  {ui("ui_0_3_subtle_touch_up_0_75_major")}</span>
               </div>
             )}
 
 
             {/* Seed Configuration */}
             <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
-              <label className="text-[11px] font-medium text-slate-300">Seed (-1 for Random):</label>
+              <label className="text-[11px] font-medium text-slate-300">{ui("ui_seed_1_for_random")}</label>
               <div className="flex items-center gap-1.5">
                 <input
                   type="number"
@@ -368,8 +368,7 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
                   onClick={randomizeSeed}
                   className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md text-xs whitespace-nowrap"
                 >
-                  Roll
-                </button>
+                  {ui("ui_roll")}</button>
               </div>
             </div>
           </div>

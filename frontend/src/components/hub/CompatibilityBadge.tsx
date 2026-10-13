@@ -1,3 +1,5 @@
+import { formatNumber } from '../../i18n/format';
+import { useUiText } from '../../i18n/useUiText';
 import React, { useState, useRef } from 'react';
 import { ModelEvaluation, HardwareSummary } from '../../stores/useModelHubStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
@@ -15,6 +17,8 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
   hardwareSummary,
   modelName,
 }) => {
+  const ui = useUiText();
+  const lang = useSettingsStore((state) => state.getEffectiveLanguage());
   const [isOpen, setIsOpen] = useState(false);
   const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -33,7 +37,7 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
     return (
       <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
         <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-        <span>Evaluating...</span>
+        <span>{ui("ui_evaluating")}</span>
       </div>
     );
   }
@@ -71,9 +75,6 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
   const style = getBadgeStyle();
   const Icon = style.icon;
 
-  const { getEffectiveLanguage } = useSettingsStore();
-  const lang = getEffectiveLanguage();
-
   const getDisplayTierLabel = (): string => {
     if (!evaluation) return '';
     if (evaluation.notes && evaluation.notes.toLowerCase().includes('cpu')) {
@@ -97,7 +98,7 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors cursor-pointer select-none ${style.pill}`}
-        title="View hardware compatibility & memory diagnostic breakdown"
+        title={ui("ui_view_hardware_compatibility_memory_diagnostic_breakdown")}
       >
         <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
         <Icon className="w-3 h-3" />
@@ -113,7 +114,7 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
           {/* Header */}
           <div className="pb-2 mb-2.5 border-b border-slate-800">
             <div className="font-semibold text-slate-100 text-sm flex items-center justify-between">
-              <span>Memory Runnability</span>
+              <span>{ui("ui_memory_runnability")}</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${style.pill}`}>
                 {evaluation.tier}
               </span>
@@ -126,18 +127,15 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-slate-400">
                 <HardDrive className="w-3.5 h-3.5 text-purple-400" />
-                Required Footprint
-              </span>
+                {ui("ui_required_footprint")}</span>
               <span className="font-mono font-medium">
-                {(evaluation.required_vram_mb / 1024).toFixed(1)} GB
-              </span>
+                {formatNumber((evaluation.required_vram_mb / 1024), 1, 1)} {ui("ui_gb")}</span>
             </div>
 
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-slate-400">
                 <Zap className="w-3.5 h-3.5 text-sky-400" />
-                Est. Gen Speed
-              </span>
+                {ui("ui_est_gen_speed")}</span>
               <span className="font-mono font-medium text-indigo-300">
                 {evaluation.estimated_latency_sec}
               </span>
@@ -149,19 +147,17 @@ export const CompatibilityBadge: React.FC<CompatibilityBadgeProps> = ({
             <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800/80 mb-3 space-y-1 text-[11px]">
               <div className="flex items-center gap-1.5 text-slate-400 font-medium mb-1">
                 <Cpu className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Your Hardware:</span>
+                <span>{ui("ui_your_hardware")}</span>
               </div>
               <div className="flex justify-between text-slate-300">
                 <span className="truncate pr-2">{hardwareSummary.gpu_name}</span>
                 <span className="font-mono shrink-0">
-                  {(hardwareSummary.vram_total_mb / 1024).toFixed(0)} GB VRAM
-                </span>
+                  {formatNumber((hardwareSummary.vram_total_mb / 1024), 0, 0)} {ui("ui_gb_vram")}</span>
               </div>
               <div className="flex justify-between text-slate-400">
-                <span>System RAM:</span>
+                <span>{ui("ui_system_ram")}</span>
                 <span className="font-mono">
-                  {(hardwareSummary.ram_avail_mb / 1024).toFixed(1)}G free / {(hardwareSummary.ram_total_mb / 1024).toFixed(0)}G
-                </span>
+                  {formatNumber((hardwareSummary.ram_avail_mb / 1024), 1, 1)}{ui("ui_g_free")}{formatNumber((hardwareSummary.ram_total_mb / 1024), 0, 0)}{ui("ui_g_4")}</span>
               </div>
             </div>
           )}

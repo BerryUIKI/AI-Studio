@@ -2,6 +2,11 @@ import js from "@eslint/js";
 import tsParser from "@typescript-eslint/parser";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 
+const localizedTextRules = [
+  { selector: "JSXText[value=/[A-Za-z]/]", message: "Route UI display text through the locale catalog." },
+  { selector: "JSXAttribute[name.name=/^(title|placeholder|alt|aria-label|label|fallbackTitle)$/][value.type='Literal']", message: "Use the locale catalog for accessible names and display attributes." },
+];
+
 export default [
   js.configs.recommended,
   {
@@ -35,10 +40,15 @@ export default [
     rules: { "@typescript-eslint/no-explicit-any": "error" },
   },
   {
+    files: ["src/App.tsx", "src/components/**/*.tsx"],
+    ignores: ["src/components/**/*.test.tsx"],
+    rules: { "no-restricted-syntax": ["error", ...localizedTextRules] },
+  },
+  {
     files: ["src/components/**/*.tsx"],
-    ignores: ["src/components/agent/CanvasAgentPrompt.tsx", "src/components/canvas/QuickAddMenu.tsx", "src/components/canvas/WorkspaceFrameNode.tsx", "src/components/canvas/InpaintModal.tsx"],
+    ignores: ["src/components/**/*.test.tsx", "src/components/agent/CanvasAgentPrompt.tsx", "src/components/canvas/QuickAddMenu.tsx", "src/components/canvas/WorkspaceFrameNode.tsx", "src/components/canvas/InpaintModal.tsx"],
     rules: {
-      "no-restricted-syntax": ["error", { selector: "JSXAttribute[name.name='style']", message: "Use Tailwind classes or the shared ProgressBar. Runtime canvas geometry exceptions are documented in docs/SERVICE_BOUNDARIES.md." }],
+      "no-restricted-syntax": ["error", ...localizedTextRules, { selector: "JSXAttribute[name.name='style']", message: "Use Tailwind classes or the shared ProgressBar. Runtime canvas geometry exceptions are documented in docs/SERVICE_BOUNDARIES.md." }],
     },
   },
   {

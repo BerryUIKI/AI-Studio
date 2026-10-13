@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
@@ -38,6 +39,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
   initialTab = 'detected',
   initialEngineType = 'comfyui',
 }) => {
+  const ui = useUiText();
   const [activeTab, setActiveTab] = useState<'detected' | 'browse' | 'install'>(initialTab);
   const [detectedList, setDetectedList] = useState<DetectedItem[]>([]);
   const [isScanning, setIsScanning] = useState(false);
@@ -66,10 +68,10 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
         const data = await res.json();
         setDetectedList(data.detected || []);
       } else {
-        setScanError('Failed to scan for local installations.');
+        setScanError(ui("ui_failed_to_scan_for_local_installations"));
       }
     } catch {
-      setScanError('Unable to reach backend detection service.');
+      setScanError(ui("ui_unable_to_reach_backend_detection_service"));
     } finally {
       setIsScanning(false);
     }
@@ -104,17 +106,17 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
         onClose();
       } else {
         const err = await res.json();
-        alert(`Failed to bind: ${err.detail || 'Unknown error'}`);
+        alert(ui("ui_failed_to_bind_value", { value1: err.detail || 'Unknown error' }));
       }
     } catch (e: unknown) {
-      alert(`Network error: ${getErrorMessage(e, 'Unknown error')}`);
+      alert(ui("ui_network_error_value", { value1: getErrorMessage(e, 'Unknown error') }));
     }
   };
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualPath.trim()) {
-      setManualError('Please specify an installation directory path.');
+      setManualError(ui("ui_please_specify_an_installation_directory_path"));
       return;
     }
 
@@ -137,10 +139,10 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
         onClose();
       } else {
         const err = await res.json();
-        setManualError(err.detail || 'Directory validation failed.');
+        setManualError(err.detail || ui("ui_directory_validation_failed"));
       }
     } catch (err: unknown) {
-      setManualError(getErrorMessage(err, 'Connection error.'));
+      setManualError(getErrorMessage(err, ui("ui_connection_error")));
     } finally {
       setIsSubmittingManual(false);
     }
@@ -154,17 +156,17 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
   };
 
   return (
-    <Dialog title="Add engine" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
+    <Dialog title={ui("ui_add_engine")} onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
       <div className="relative w-full max-w-2xl rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl text-slate-100 overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center space-x-2">
             <Plus className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-base font-bold text-white">Add Engine Instance</h2>
+            <h2 className="text-base font-bold text-white">{ui("ui_add_engine_instance")}</h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
@@ -181,7 +183,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Auto-Detected ({detectedList.length})
+            {ui("ui_auto_detected")}{detectedList.length})
           </button>
           <button
             onClick={() => setActiveTab('browse')}
@@ -191,8 +193,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Browse Local Folder
-          </button>
+            {ui("ui_browse_local_folder")}</button>
           <button
             onClick={() => setActiveTab('install')}
             className={`py-3 px-4 text-xs font-semibold border-b-2 transition-colors ${
@@ -201,8 +202,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            One-Click Install
-          </button>
+            {ui("ui_one_click_install")}</button>
         </div>
 
         {/* Tab Contents */}
@@ -211,15 +211,14 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-400">
-                  Scanned your local disk for common ComfyUI, WebUI, and portable packages.
-                </p>
+                  {ui("ui_scanned_your_local_disk_for_common_comfyui_webui")}</p>
                 <button
                   onClick={scanForEngines}
                   disabled={isScanning}
                   className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isScanning ? 'animate-spin' : ''}`} />
-                  <span>Rescan</span>
+                  <span>{ui("ui_rescan")}</span>
                 </button>
               </div>
 
@@ -233,10 +232,9 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
               {detectedList.length === 0 && !isScanning ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <FolderOpen className="w-10 h-10 text-slate-600 mb-3" />
-                  <p className="text-sm font-semibold text-slate-300">No external engines detected</p>
+                  <p className="text-sm font-semibold text-slate-300">{ui("ui_no_external_engines_detected")}</p>
                   <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                    No installations were found in standard directories. You can specify a custom path in the "Browse Local Folder" tab, or deploy a new sandboxed engine.
-                  </p>
+                    {ui("ui_no_installations_were_found_in_standard_directories_you")}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -259,7 +257,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                           <div className="flex items-center space-x-2 mt-1">
                             <span className="inline-flex items-center text-[10px] text-emerald-400">
                               <CheckCircle2 className="w-3 h-3 mr-1" />
-                              {item.has_python_env ? 'Isolated venv detected' : 'Standard environment'}
+                              {item.has_python_env ? ui("ui_isolated_venv_detected") : ui("ui_standard_environment")}
                             </span>
                           </div>
                         </div>
@@ -269,8 +267,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                         onClick={() => handleBindDetected(item)}
                         className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white rounded-lg transition-colors ml-4 whitespace-nowrap"
                       >
-                        Bind Engine
-                      </button>
+                        {ui("ui_bind_engine")}</button>
                     </div>
                   ))}
                 </div>
@@ -281,8 +278,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
           {activeTab === 'browse' && (
             <form onSubmit={handleManualSubmit} className="space-y-4">
               <p className="text-xs text-slate-400">
-                Specify the absolute root folder of an existing ComfyUI or SD WebUI installation.
-              </p>
+                {ui("ui_specify_the_absolute_root_folder_of_an_existing")}</p>
 
               {manualError && (
                 <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-center space-x-2">
@@ -292,7 +288,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
               )}
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Engine Type</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">{ui("ui_engine_type")}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -307,7 +303,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                     }`}
                   >
                     <Puzzle className="w-4 h-4" />
-                    <span>ComfyUI</span>
+                    <span>{ui("ui_comfyui")}</span>
                   </button>
                   <button
                     type="button"
@@ -322,35 +318,35 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                     }`}
                   >
                     <ImageIcon className="w-4 h-4" />
-                    <span>SD WebUI</span>
+                    <span>{ui("ui_sd_webui")}</span>
                   </button>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Directory Path</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">{ui("ui_directory_path")}</label>
                 <input
                   type="text"
                   value={manualPath}
                   onChange={(e) => setManualPath(e.target.value)}
-                  placeholder="e.g. D:\ComfyUI_windows_portable\ComfyUI"
+                  placeholder={ui("ui_e_g_d_comfyui_windows_portable_comfyui")}
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Display Name (Optional)</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">{ui("ui_display_name_optional")}</label>
                   <input
                     type="text"
                     value={manualName}
                     onChange={(e) => setManualName(e.target.value)}
-                    placeholder="My Custom Engine"
+                    placeholder={ui("ui_my_custom_engine")}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Port</label>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">{ui("ui_port")}</label>
                   <input
                     type="number"
                     value={manualPort}
@@ -366,7 +362,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                   disabled={isSubmittingManual}
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {isSubmittingManual ? 'Validating...' : 'Bind Directory'}
+                  {isSubmittingManual ? ui("ui_validating") : ui("ui_bind_directory")}
                 </button>
               </div>
             </form>
@@ -375,11 +371,10 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
           {activeTab === 'install' && (
             <div className="space-y-4">
               <p className="text-xs text-slate-400">
-                Install a sandboxed, isolated engine environment with zero host system pollution.
-              </p>
+                {ui("ui_install_a_sandboxed_isolated_engine_environment_with_zero")}</p>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Target Engine</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">{ui("ui_target_engine")}</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
@@ -391,7 +386,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                     }`}
                   >
                     <Puzzle className="w-4 h-4" />
-                    <span>ComfyUI (Recommended)</span>
+                    <span>{ui("ui_comfyui_recommended")}</span>
                   </button>
                   <button
                     type="button"
@@ -403,15 +398,14 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                     }`}
                   >
                     <ImageIcon className="w-4 h-4" />
-                    <span>SD WebUI</span>
+                    <span>{ui("ui_sd_webui")}</span>
                   </button>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Network Acceleration Mirror
-                </label>
+                  {ui("ui_network_acceleration_mirror")}</label>
                 <div className="space-y-2">
                   <label className="flex items-center p-3 rounded-xl bg-slate-800/40 border border-slate-700 cursor-pointer hover:border-slate-600">
                     <input
@@ -424,11 +418,9 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                     />
                     <div className="ml-3">
                       <div className="text-xs font-semibold text-slate-200">
-                        China Mainland Accelerated (Recommended for CN users)
-                      </div>
+                        {ui("ui_china_mainland_accelerated_recommended_for_cn_users")}</div>
                       <div className="text-[11px] text-slate-400">
-                        Uses GHProxy, Tsinghua pip mirror, and HF-Mirror for fast downloads.
-                      </div>
+                        {ui("ui_uses_ghproxy_tsinghua_pip_mirror_and_hf_mirror")}</div>
                     </div>
                   </label>
 
@@ -443,11 +435,9 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                     />
                     <div className="ml-3">
                       <div className="text-xs font-semibold text-slate-200">
-                        Direct Official Sources
-                      </div>
+                        {ui("ui_direct_official_sources")}</div>
                       <div className="text-[11px] text-slate-400">
-                        Direct connection to GitHub, PyPI.org, and HuggingFace.
-                      </div>
+                        {ui("ui_direct_connection_to_github_pypi_org_and_huggingface")}</div>
                     </div>
                   </label>
                 </div>
@@ -460,7 +450,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
                   className="inline-flex items-center space-x-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white rounded-lg shadow-lg shadow-indigo-600/20 transition-all"
                 >
                   <Download className="w-4 h-4" />
-                  <span>Start Managed Installation</span>
+                  <span>{ui("ui_start_managed_installation")}</span>
                 </button>
               </div>
             </div>

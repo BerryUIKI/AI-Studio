@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Palette,
@@ -45,6 +46,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   onDeploy,
   onLaunchFailed,
 }) => {
+  const ui = useUiText();
   const { setActiveView } = useNavigationStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isActing, setIsActing] = useState(false);
@@ -190,7 +192,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                     e.stopPropagation();
                     setIsMenuOpen(!isMenuOpen);
                   }}
-                  title="Instance options"
+                  title={ui("ui_instance_options")}
                   className="p-1 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
                 >
                   <MoreVertical className="w-4 h-4" />
@@ -208,7 +210,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                         className="flex items-center w-full px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                       >
                         <Settings className="w-3.5 h-3.5 mr-2 text-slate-400" />
-                        <span>Configure Engine</span>
+                        <span>{ui("ui_configure_engine")}</span>
                       </button>
                     )}
 
@@ -221,7 +223,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                         className="flex items-center w-full px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                       >
                         <FileText className="w-3.5 h-3.5 mr-2 text-slate-400" />
-                        <span>View Logs</span>
+                        <span>{ui("ui_view_logs")}</span>
                       </button>
                     )}
 
@@ -234,7 +236,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                         className="flex items-center w-full px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                       >
                         <FolderOpen className="w-3.5 h-3.5 mr-2 text-slate-400" />
-                        <span>Open Directory</span>
+                        <span>{ui("ui_open_directory")}</span>
                       </button>
                     )}
 
@@ -247,7 +249,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                         className="flex items-center w-full px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                       >
                         <ExternalLink className="w-3.5 h-3.5 mr-2 text-slate-400" />
-                        <span>Open Browser</span>
+                        <span>{ui("ui_open_browser")}</span>
                       </button>
                     )}
 
@@ -262,7 +264,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
                         className="flex items-center w-full px-2.5 py-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5 mr-2 text-red-400" />
-                        <span>{instance.is_managed ? 'Uninstall' : 'Remove Connection'}</span>
+                        <span>{instance.is_managed ? ui("ui_uninstall") : ui("ui_remove_connection_2")}</span>
                       </button>
                     )}
                   </div>
@@ -277,7 +279,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
           {instance.name}
         </h3>
         <div className="text-xs text-slate-500 font-mono mb-2">
-          {instance.version || (instance.is_managed ? 'Managed' : 'External Path')}
+          {instance.version || (instance.is_managed ? ui("ui_managed") : ui("ui_external_path"))}
         </div>
 
         {/* Capabilities Pills */}
@@ -305,7 +307,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
             }}
             className="text-xs font-semibold text-indigo-400 group-hover:text-indigo-300 flex items-center space-x-1"
           >
-            <span>Open {instance.name}</span>
+            <span>{ui("ui_open_2")}{instance.name}</span>
             <span className="group-hover:translate-x-1 transition-transform">→</span>
           </button>
         ) : isRunning ? (
@@ -317,7 +319,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               }}
               className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center space-x-1"
             >
-              <span>Switch to View</span>
+              <span>{ui("ui_switch_to_view")}</span>
               <span>→</span>
             </button>
             <button
@@ -326,13 +328,13 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-red-300 bg-slate-800 hover:bg-red-500/20 rounded border border-slate-700 hover:border-red-500/30 transition-colors"
             >
               <Square className="w-3 h-3 text-red-400" />
-              <span>Stop</span>
+              <span>{ui("ui_stop")}</span>
             </button>
           </div>
         ) : isNotInstalled ? (
           <div className="flex items-center justify-between w-full">
             <span className="text-xs text-amber-500/90 font-medium">
-              {t('engine_not_installed_title', lang) || 'Not Installed'}
+              {t('engine_not_installed_title', lang, ui("ui_not_installed"))}
             </span>
             <button
               onClick={handleStart}
@@ -340,19 +342,19 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
               className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-amber-600 hover:bg-amber-500 rounded transition-colors disabled:opacity-50 shadow-sm shadow-amber-600/30"
             >
               <Download className="w-3 h-3" />
-              <span>{t('btn_install_engine', lang) || 'Deploy'}</span>
+              <span>{t('btn_install_engine', lang, ui("ui_deploy"))}</span>
             </button>
           </div>
         ) : (
           <div className="flex items-center justify-between w-full">
-            <span className="text-xs text-slate-500">Offline</span>
+            <span className="text-xs text-slate-500">{ui("ui_offline")}</span>
             <button
               onClick={handleStart}
               disabled={isActing}
               className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded transition-colors disabled:opacity-50"
             >
               <Play className="w-3 h-3" />
-              <span>{isActing ? 'Booting...' : 'Start'}</span>
+              <span>{isActing ? ui("ui_booting") : ui("ui_start")}</span>
             </button>
           </div>
         )}

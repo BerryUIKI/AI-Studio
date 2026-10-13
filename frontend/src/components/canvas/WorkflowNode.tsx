@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Play, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
@@ -13,6 +14,7 @@ const TYPE_CLASSES: Record<DataType, string> = {
 };
 
 function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
+  const ui = useUiText();
   const customData = data as CustomNodeData;
   const { definition, params, status, output } = customData;
   const updateNodeParam = useCanvasStore((state) => state.updateNodeParam);
@@ -23,26 +25,22 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
       case 'running':
         return (
           <span className="flex items-center gap-1 text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-            <Clock className="w-2.5 h-2.5 animate-spin" /> Running
-          </span>
+            <Clock className="w-2.5 h-2.5 animate-spin" /> {ui("ui_running")}</span>
         );
       case 'cached':
         return (
           <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-            <CheckCircle2 className="w-2.5 h-2.5" /> Cached
-          </span>
+            <CheckCircle2 className="w-2.5 h-2.5" /> {ui("ui_cached")}</span>
         );
       case 'completed':
         return (
           <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-            <CheckCircle2 className="w-2.5 h-2.5" /> Done
-          </span>
+            <CheckCircle2 className="w-2.5 h-2.5" /> {ui("ui_done")}</span>
         );
       case 'error':
         return (
           <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-            <AlertCircle className="w-2.5 h-2.5" /> Error
-          </span>
+            <AlertCircle className="w-2.5 h-2.5" /> {ui("ui_error")}</span>
         );
       default:
         return null;
@@ -65,7 +63,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
           {getStatusBadge()}
           <button
             onClick={() => runWorkflow(id)}
-            title="Run this node"
+            title={ui("ui_run_this_node")}
             className="p-1 rounded hover:bg-slate-700/60 text-slate-400 hover:text-indigo-400 transition"
           >
             <Play className="w-3 h-3 fill-current" />
@@ -167,7 +165,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
           <div className="mt-2 pt-2 border-t border-slate-800/60">
             <img
               src={output.image}
-              alt="Node Output"
+              alt={ui("ui_node_output")}
               className="w-full h-32 object-cover rounded-lg border border-slate-800 shadow-md"
             />
           </div>

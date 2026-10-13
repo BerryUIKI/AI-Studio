@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import React, { useState } from 'react';
 import {
@@ -42,6 +43,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenCloudSettings,
   onOpenEnvironmentManager,
 }) => {
+  const ui = useUiText();
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection);
 
   // LLM Config state
@@ -75,7 +77,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         body: JSON.stringify(llmConfig),
       });
       if (res.ok) {
-        setLlmTestResult({ valid: true, message: 'Settings saved successfully!' });
+        setLlmTestResult({ valid: true, message: ui("ui_settings_saved_successfully") });
       }
     } finally {
       setLlmSaving(false);
@@ -94,7 +96,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const data = await res.json();
       setLlmTestResult({ valid: data.valid, message: data.message });
     } catch (err: unknown) {
-      setLlmTestResult({ valid: false, message: getErrorMessage(err, 'Connection failed') });
+      setLlmTestResult({ valid: false, message: getErrorMessage(err, ui("ui_connection_failed")) });
     } finally {
       setLlmTesting(false);
     }
@@ -136,7 +138,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <h1 className="text-base font-bold text-white tracking-tight">
                 {t('settings_title', currentLang)}
               </h1>
-              <p className="text-[11px] text-slate-400 truncate">Berry AI Studio</p>
+              <p className="text-[11px] text-slate-400 truncate">{ui("ui_berry_ai_studio")}</p>
             </div>
           </div>
 
@@ -172,7 +174,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         {/* Footer info in sidebar */}
         <div className="px-2 py-3 border-t border-white/[0.06] text-[11px] text-slate-500">
-          <span>v0.1.0 · Multi-Platform</span>
+          <span>{ui("ui_v0_1_0_multi_platform")}</span>
         </div>
       </aside>
 
@@ -184,7 +186,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-bold text-white">{t('lang_heading', currentLang)}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">English is the release language. Other languages are translation previews with English fallback; primary workflow coverage is incomplete.</p>
+                <p className="text-xs text-slate-400 mt-0.5">{ui("ui_english_is_the_release_language_other_languages_are")}</p>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -207,7 +209,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         </span>
                         {isSelected && <Check className="w-4 h-4 text-indigo-400 shrink-0" />}
                       </div>
-                      <span className="text-[11px] text-slate-400">{opt.label}{opt.id !== 'system' && !VERIFIED_UI_LANGUAGES.includes(opt.id) ? ' — Translation preview' : ''}</span>
+                      <span className="text-[11px] text-slate-400">{opt.label}{opt.id !== 'system' && !VERIFIED_UI_LANGUAGES.includes(opt.id) ? ui("ui_translation_preview") : ''}</span>
                     </button>
                   );
                 })}
@@ -323,13 +325,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
                   <div>
                     <label className="text-[11px] font-medium text-slate-300 block mb-1">
-                      API Base URL
-                    </label>
+                      {ui("ui_api_base_url")}</label>
                     <input
                       type="text"
                       value={llmConfig.base_url}
                       onChange={(e) => setLlmConfig({ ...llmConfig, base_url: e.target.value })}
-                      placeholder="e.g. http://127.0.0.1:8080/v1"
+                      placeholder={ui("ui_e_g_http_127_0_0_1_8080")}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -342,7 +343,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="text"
                       value={llmConfig.model}
                       onChange={(e) => setLlmConfig({ ...llmConfig, model: e.target.value })}
-                      placeholder="e.g. qwen2.5-7b-instruct-q4_k_m.gguf"
+                      placeholder={ui("ui_e_g_qwen2_5_7b_instruct_q4_k")}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -355,7 +356,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       type="password"
                       value={llmConfig.api_key || ''}
                       onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
-                      placeholder={llmConfig.provider === 'llama_server' ? t('agent_api_key_placeholder_llama', currentLang) : 'sk-...'}
+                      placeholder={llmConfig.provider === 'llama_server' ? t('agent_api_key_placeholder_llama', currentLang) : ui("ui_sk")}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -510,11 +511,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] flex items-center justify-between">
                 <div>
                   <h3 className="text-xs font-semibold text-slate-200">
-                    OpenAI · Fal.ai · SiliconFlow
-                  </h3>
+                    {ui("ui_openai_fal_ai_siliconflow")}</h3>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Store API tokens securely on this device without leaking to cloud logs.
-                  </p>
+                    {ui("ui_store_api_tokens_securely_on_this_device_without")}</p>
                 </div>
                 {onOpenCloudSettings && (
                   <button
@@ -539,11 +538,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] flex items-center justify-between">
                 <div>
                   <h3 className="text-xs font-semibold text-slate-200">
-                    ComfyUI & Stable Diffusion WebUI
-                  </h3>
+                    {ui("ui_comfyui_stable_diffusion_webui")}</h3>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Manage isolated engine virtualenvs, model search roots, and GPU device assignments.
-                  </p>
+                    {ui("ui_manage_isolated_engine_virtualenvs_model_search_roots_and")}</p>
                 </div>
                 {onOpenEnvironmentManager && (
                   <button
@@ -568,11 +565,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] space-y-3">
                 <div className="flex items-center space-x-2 text-indigo-400 text-xs font-bold uppercase tracking-wider">
                   <Info className="w-4 h-4" />
-                  <span>Berry AI Studio v0.1.0</span>
+                  <span>{ui("ui_berry_ai_studio_v0_1_0")}</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  A high-performance creative studio for generative AI, blending cloud flexibility with optional zero-host-pollution local execution.
-                </p>
+                  {ui("ui_a_high_performance_creative_studio_for_generative_ai")}</p>
                 <div className="pt-2 border-t border-white/[0.06]">
                   <p className="font-mono text-[11px] text-slate-400">
                     {t('about_manifesto', currentLang)}
