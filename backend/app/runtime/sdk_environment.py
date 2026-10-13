@@ -30,9 +30,9 @@ def sdk_directory(spec: CustomProviderSpec, data_dir: Path | None = None) -> Pat
 
 
 def sdk_ready(spec: CustomProviderSpec, data_dir: Path | None = None) -> bool:
-    target = sdk_directory(spec, data_dir)
-    marker = target / "ready.json"
     try:
+        target = sdk_directory(spec, data_dir)
+        marker = target / "ready.json"
         value = json.loads(marker.read_text(encoding="utf-8"))
         environment = target / ".venv"
         if not environment.resolve().is_relative_to(target.resolve()):
@@ -44,7 +44,7 @@ def sdk_ready(spec: CustomProviderSpec, data_dir: Path | None = None) -> bool:
             "requirements": spec.requirements,
             "python": sys.version,
         }
-    except (ValueError, OSError):
+    except (ValueError, OSError, AdapterError):
         return False
 
 

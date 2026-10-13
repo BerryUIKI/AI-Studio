@@ -32,6 +32,8 @@ class CustomProviderService:
     ) -> tuple[AdapterOutput, int]:
         record = await self.record(identifier)
         spec = record.spec
+        if set(inputs) & {"api_key", "sdk_key", "authorization", "token"}:
+            raise AdapterError("Credentials must use protected platform settings, not calling-code inputs")
         if (
             inputs.get("model") not in spec.models
             or inputs.get("action", "txt2img") not in spec.actions
@@ -44,6 +46,8 @@ class CustomProviderService:
                 "Review and explicitly approve this calling-code revision before execution"
             )
         key = self.credentials.get_key(spec.id) or ""
+        if fixture is None and spec.auth != "none" and not key:
+            raise AdapterError("Custom platform API key is missing")
         broker = ProviderBroker(spec, key, fixture=fixture)
         if spec.mode == "rest":
             body = render_template(spec.body_template, inputs)
