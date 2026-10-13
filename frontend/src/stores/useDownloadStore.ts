@@ -1,3 +1,4 @@
+import { listDownloadTasks } from '../api/modelDownloads';
 import { create } from 'zustand';
 import { useModelHubStore } from './useModelHubStore';
 
@@ -50,10 +51,8 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
   fetchTasks: async () => {
     try {
-      const res = await fetch('/api/v1/models/hub/tasks');
-      if (res.ok) {
-        const data = await res.json();
-        const tasks: DownloadTask[] = data.tasks || [];
+      {
+        const tasks = await listDownloadTasks();
         const newlyCompleted = tasks.some((task) => task.status === 'completed'
           && get().tasks.find((previous) => previous.task_id === task.task_id)?.status !== 'completed');
         set({ tasks });

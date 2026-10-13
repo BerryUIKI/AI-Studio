@@ -1,3 +1,6 @@
+import { ProgressBar } from '../ui/ProgressBar';
+import { listDownloadTasks } from '../../api/modelDownloads';
+import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import React, { useEffect, useState } from 'react';
 import {
@@ -169,9 +172,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
       } else {
         setHardwareError(`HTTP ${hwRes.status}: ${hwRes.statusText}`);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.warn('Failed to fetch hardware readiness:', e);
-      setHardwareError(e?.message || 'Connection refused (127.0.0.1:8000)');
+      setHardwareError(getErrorMessage(e, 'Connection refused (127.0.0.1:8000)'));
     } finally {
       setLoadingHardware(false);
     }
@@ -207,8 +210,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         setStartError(data.message || (isZh ? '启动 llama-server 失败' : 'Failed to start llama-server'));
       }
       await fetchDiagnostics();
-    } catch (e: any) {
-      setStartError(e?.message || (isZh ? '启动失败' : 'Start failed'));
+    } catch (e: unknown) {
+      setStartError(getErrorMessage(e, isZh ? '启动失败' : 'Start failed'));
     } finally {
       setLoadingLlama(false);
     }
@@ -226,8 +229,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         setInstallMessage(data.message || (isZh ? '已完成检查' : 'Check completed'));
       }
       setTimeout(() => fetchDiagnostics(), 1500);
-    } catch (e: any) {
-      setInstallMessage(e?.message || (isZh ? '初始化请求失败' : 'Failed to initialize'));
+    } catch (e: unknown) {
+      setInstallMessage(getErrorMessage(e, isZh ? '初始化请求失败' : 'Failed to initialize'));
     } finally {
       setInstallingLlama(false);
     }
@@ -267,10 +270,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         let completed = false;
         while (!completed) {
           await new Promise((r) => setTimeout(r, 800));
-          const pollRes = await fetch('/api/v1/models/hub/tasks');
-          if (!pollRes.ok) continue;
-          const tasks = await pollRes.json();
-          const currentTask = Array.isArray(tasks) ? tasks.find((t: any) => t.task_id === taskId) : null;
+          const tasks = await listDownloadTasks();
+          const currentTask = tasks.find((task) => task.task_id === taskId);
           if (!currentTask) continue;
 
           if (currentTask.status === 'downloading' || currentTask.status === 'pending') {
@@ -313,8 +314,8 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         await fetchDiagnostics();
         setActiveStep(3);
         return;
-      } catch (err: any) {
-        setPullError(err?.message || (isZh ? 'GGUF 模型下载失败' : 'Model download failed'));
+      } catch (err: unknown) {
+        setPullError(getErrorMessage(err, isZh ? 'GGUF 模型下载失败' : 'Model download failed'));
         setIsPulling(false);
         return;
       }
@@ -509,12 +510,9 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                         </div>
                         {/* VRAM Bar */}
                         <div className="w-full h-1.5 rounded-full bg-slate-700/60 overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-300 ${
-                              vramPercent > 85 ? 'bg-rose-500' : vramPercent > 60 ? 'bg-amber-400' : 'bg-emerald-400'
-                            }`}
-                            style={{ width: `${vramPercent}%` }}
-                          />
+                          <ProgressBar label="Observed progress" value={vramPercent} className={`h-full transition-all duration-300 ${
+                              vramPercent > 85 ? 'text-rose-500' : vramPercent > 60 ? 'text-amber-400' : 'text-emerald-400'
+                            }`} />
                         </div>
                         <div className="flex items-center gap-3 text-[10px] text-slate-400 pt-0.5">
                           {primaryGpu.driver_version && (
@@ -557,10 +555,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                           <span className="text-slate-400 text-[11px]">{ramPercent}% {isZh ? '已用' : 'Used'}</span>
                         </div>
                         <div className="w-full h-1.5 rounded-full bg-slate-700/60 overflow-hidden">
-                          <div
-                            className="h-full bg-purple-500 transition-all duration-300"
-                            style={{ width: `${ramPercent}%` }}
-                          />
+                          <ProgressBar label="Observed progress" value={ramPercent} className="h-full text-purple-500 transition-all duration-300" />
                         </div>
                         <p className="text-[10px] text-slate-400 pt-0.5">
                           {isZh
@@ -788,10 +783,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
                     <span className="text-white font-mono font-bold">{pullProgress.percent}%</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-slate-800 overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
-                      style={{ width: `${pullProgress.percent}%` }}
-                    />
+                    <ProgressBar label="Observed progress" value={pullProgress.percent} className="h-full text-indigo-500 transition-all duration-300" />
                   </div>
                 </div>
               )}
@@ -846,7 +838,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
           <div>
             {activeStep > 1 && (
               <button
-                onClick={() => setActiveStep((prev) => (prev - 1) as any)}
+                onClick={() => setActiveStep((prev) => prev === 3 ? 2 : 1)}
                 disabled={isPulling}
                 className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors"
               >

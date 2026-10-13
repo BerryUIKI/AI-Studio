@@ -30,8 +30,16 @@ export default [
     },
   },
   {
-    files: ["src/api/**/*.{ts,tsx}", "src/types/**/*.ts", "src/stores/useCanvasStore.ts", "src/stores/useAgentStore.ts", "src/stores/useCreationSetupStore.ts"],
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/tests/**"],
     rules: { "@typescript-eslint/no-explicit-any": "error" },
+  },
+  {
+    files: ["src/components/**/*.tsx"],
+    ignores: ["src/components/agent/CanvasAgentPrompt.tsx", "src/components/canvas/QuickAddMenu.tsx", "src/components/canvas/WorkspaceFrameNode.tsx", "src/components/canvas/InpaintModal.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", { selector: "JSXAttribute[name.name='style']", message: "Use Tailwind classes or the shared ProgressBar. Runtime canvas geometry exceptions are documented in docs/SERVICE_BOUNDARIES.md." }],
+    },
   },
   {
     ignores: ["dist/**", "src-tauri/**", "node_modules/**"],
