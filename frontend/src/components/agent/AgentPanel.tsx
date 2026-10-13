@@ -19,6 +19,10 @@ import {
 } from 'lucide-react';
 import { AgentChatMessage, AgentProposal, CreativeActionResult, ImageCardData } from '../../types/creative';
 import { useCanvasStore } from '../../stores/useCanvasStore';
+import { useProjectStore } from '../../stores/useProjectStore';
+import { useAgentStore } from '../../stores/useAgentStore';
+import { nextResultPosition } from '../../utils/canvasPlacement';
+import { formatDateTime } from '../../i18n/format';
 
 
 interface AgentPanelProps {
@@ -28,7 +32,10 @@ interface AgentPanelProps {
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline = false }) => {
-  const [messages, setMessages] = useState<AgentChatMessage[]>([
+  const projectId = useProjectStore((state) => state.currentProject?.id);
+  const conversationKey = projectId ?? 'unassigned';
+  const conversation = useAgentStore((state) => state.conversations[conversationKey]);
+  const messages: AgentChatMessage[] = conversation?.messages.length ? conversation.messages : [
     {
       id: 'welcome-1',
       role: 'assistant',
@@ -36,13 +43,27 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         "Hello! I am your Berry Creative Assistant. You can describe any generative workflow in natural language (e.g. *'Create a photorealistic cyberpunk street scene in 16:9, then upscale 2x'* or *'Animate this picture'*), and I will formulate a transparent, human-in-the-loop action plan for your review.",
       created_at: new Date().toISOString(),
     },
-  ]);
+  ];
+  const appendMessage = (message: AgentChatMessage) => useAgentStore.getState().append(conversationKey, message);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [executingProposalId, setExecutingProposalId] = useState<string | null>(null);
   const [executionError, setExecutionError] = useState<string | null>(null);
   const [expandedGraphs, setExpandedGraphs] = useState<Record<string, boolean>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen || conversation) return;
+    const controller = new AbortController();
+    const query = projectId ? `?project_id=${encodeURIComponent(projectId)}` : '';
+    void fetch(`/api/v1/agent/conversation${query}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Conversation history unavailable');
+        const saved: { conversation_id: string; messages: AgentChatMessage[] } | null = await response.json();
+        if (saved) useAgentStore.getState().restore(conversationKey, saved.conversation_id, saved.messages);
+      }).catch(() => { /* Chat remains available when history cannot be fetched. */ });
+    return () => controller.abort();
+  }, [isOpen, projectId, conversationKey, conversation]);
 
   const toggleGraphExpanded = (proposalId: string) => {
     setExpandedGraphs((prev) => ({ ...prev, [proposalId]: !prev[proposalId] }));
@@ -76,7 +97,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
       created_at: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    appendMessage(userMessage);
     if (!textToSend) setInputText('');
     setIsLoading(true);
     setExecutionError(null);
@@ -88,6 +109,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         body: JSON.stringify({
           message: text,
           selected_asset_id: selectedAssetId,
+          conversation_id: conversation?.id,
+          project_id: projectId,
         }),
       });
 
@@ -95,16 +118,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         throw new Error(`Agent error: HTTP ${resp.status}`);
       }
 
-      const data = await resp.json();
-      setMessages((prev) => [...prev, data.message]);
-    } catch (err: any) {
+      const data: { conversation_id: string; message: AgentChatMessage } = await resp.json();
+      useAgentStore.getState().setIdentity(conversationKey, data.conversation_id);
+      appendMessage(data.message);
+    } catch (err: unknown) {
       const errorMessage: AgentChatMessage = {
         id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `Sorry, I encountered an error: ${err.message || 'Unable to connect to Agent service'}`,
+        content: `Agent request failed: ${err instanceof Error ? err.message : 'Unable to connect to Agent service'}`,
         created_at: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, errorMessage]);
+      appendMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -127,6 +151,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         body: JSON.stringify({
           proposal_id: proposal.id,
           proposal: approvedProposal,
+          project_id: projectId,
         }),
       });
 
@@ -137,13 +162,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
 
       const results: CreativeActionResult[] = await resp.json();
 
+      if (results.some((result) => !result.success)) throw new Error(results.find((result) => !result.success)?.error_message || 'Agent step failed');
+      if (useProjectStore.getState().currentProject?.id !== projectId) {
+        appendMessage({ id: `done-${Date.now()}`, role: 'assistant', content: 'Results are saved in the original project task history.', created_at: new Date().toISOString() });
+        return;
+      }
+      if (results.length <= 1) useCanvasStore.getState().pushSnapshot();
+      const frameOrigin = nextResultPosition(useCanvasStore.getState().nodes, selectedAssetId);
+
       // Automatically group multi-item proposals into a bounded workspace frame (Issue #38)
       if (results.length > 1) {
         const frameWidth = Math.min(1200, results.length * 360 + 60);
         useCanvasStore.getState().addWorkspaceFrame(
           `Agent Plan: ${proposal.title}`,
-          { x: 80, y: 80 },
-          { width: frameWidth, height: 520 }
+          frameOrigin,
+          { width: frameWidth, height: Math.ceil(results.length / 3) * 440 + 80 }
         );
       }
 
@@ -153,8 +186,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         if (res.success && (res.image_url || res.video_url)) {
           const canvasStore = useCanvasStore.getState();
           const existingNodes = canvasStore.nodes;
-          const xOffset = 120 + idx * 360;
-          const yOffset = 120;
+          const position = results.length > 1
+            ? { x: frameOrigin.x + 40 + (idx % 3) * 360, y: frameOrigin.y + 40 + Math.floor(idx / 3) * 440 }
+            : nextResultPosition(existingNodes, selectedAssetId);
 
           const isVideo = Boolean(res.video_url || proposal.intent.includes('video'));
           const cardId = `${isVideo ? 'video' : 'image'}_agent_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
@@ -174,14 +208,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
           const newCardNode = {
             id: cardId,
             type: 'imageCard',
-            position: { x: xOffset, y: yOffset },
-            data: cardData as any,
+            position,
+            data: cardData,
           };
 
           useCanvasStore.setState({
             nodes: [...existingNodes, newCardNode],
             selectedNodeId: cardId,
           });
+          canvasStore.notifyCanvasChange();
         }
       }
 
@@ -192,9 +227,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         content: `Action plan **${proposal.title}** executed successfully! The generated asset(s) have been placed on your creative canvas.`,
         created_at: new Date().toISOString(),
       };
-      setMessages((prev) => [...prev, completeMessage]);
-    } catch (err: any) {
-      setExecutionError(err.message || 'Execution failed');
+      appendMessage(completeMessage);
+    } catch (err: unknown) {
+      setExecutionError(err instanceof Error ? err.message : 'Execution failed');
     } finally {
       setExecutingProposalId(null);
     }
@@ -464,7 +499,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
               )}
             </div>
             <span className="mt-1 text-[10px] text-slate-500 px-1">
-              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {formatDateTime(msg.created_at, true)}
             </span>
           </div>
         ))}
@@ -513,6 +548,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         >
           <input
             type="text"
+            aria-label="Message to Creative Assistant"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             placeholder={
@@ -525,6 +561,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
           />
           <button
             type="submit"
+            aria-label="Send message"
             disabled={!inputText.trim() || isLoading}
             className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white transition-colors shrink-0"
           >

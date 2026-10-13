@@ -1,9 +1,9 @@
 import { mediaCardFields } from '../utils/media';
 import { create } from 'zustand';
+import { observeCreativeTask } from '../api/creativeTasks';
 import { CreativeActionRequest, CreativeActionResult, ImageCardData } from '../types/creative';
 import { useCanvasStore } from './useCanvasStore';
 import { useProjectStore } from './useProjectStore';
-import { GenerationTask } from '../types/task';
 
 interface CreativeState {
   prompt: string;
@@ -239,11 +239,8 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
 
       const submission: { task_id: string } = await resp.json();
       set({ activeTaskId: submission.task_id });
-      let result: CreativeActionResult;
-      for (;;) {
-        const statusResponse = await fetch(`/api/v1/creative/tasks/${submission.task_id}`, { signal: AbortSignal.timeout(30000) });
-        if (!statusResponse.ok) throw new Error(`Task status unavailable (HTTP ${statusResponse.status}); task ${submission.task_id} remains in history.`);
-        const task: GenerationTask = await statusResponse.json();
+      let result: CreativeActionResult | undefined;
+      for await (const task of observeCreativeTask(submission.task_id)) {
         if (['succeeded', 'cached'].includes(task.status)) {
           result = task.outputs as CreativeActionResult;
           if (task.metadata.cancel_requested) set({ generationNotice: 'Execution completed before cancellation could be confirmed.' });
@@ -254,10 +251,9 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
         set({ generationStage: stage });
         useCanvasStore.setState((state) => ({ nodes: state.nodes.map((node) => node.id === placeholderId
           ? { ...node, data: { ...node.data, generationStage: stage, generationProgress: 0 } } : node) }));
-        await new Promise<void>((resolve) => setTimeout(resolve, 1000));
       }
-      if (!result.success || (!result.image_url && !result.video_url)) {
-        throw new Error(result.error_message || 'Generation failed');
+      if (!result || !result.success || (!result.image_url && !result.video_url)) {
+        throw new Error(result?.error_message || 'Generation failed');
       }
 
       set({

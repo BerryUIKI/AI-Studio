@@ -33,6 +33,10 @@ class HubModelRecord(BaseModel):
     sha256: Optional[str] = None
     is_installed: bool = False
     installed_path: Optional[str] = None
+    installed_model_id: Optional[str] = None
+    is_ready: bool = False
+    engine_compatibility: List[str] = Field(default_factory=list)
+    guidance: Optional[str] = None
 
 
 class HubCatalogResponse(BaseModel):
