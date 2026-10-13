@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { Dialog } from '../ui/Dialog';
 import React from 'react';
 import { Download, AlertCircle, FolderSearch, X, Sparkles, CheckCircle2 } from 'lucide-react';
@@ -22,6 +23,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
   onDeploy,
   onLocate,
 }) => {
+  const ui = useUiText();
   const { getEffectiveLanguage } = useSettingsStore();
   const lang = getEffectiveLanguage();
 
@@ -31,13 +33,13 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
   const engineTitle = instance.name || (engineType === 'comfyui' ? 'ComfyUI' : 'SD WebUI');
 
   return (
-    <Dialog title="Engine setup required" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none animate-in fade-in duration-150">
+    <Dialog title={ui("ui_engine_setup_required")} onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none animate-in fade-in duration-150">
       <div className="relative w-full max-w-lg bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden p-6 text-slate-100 animate-in zoom-in-95 duration-150">
         {/* Close Button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          title="Close" aria-label="Close engine setup"
+          title={ui("ui_close")} aria-label={ui("ui_close_engine_setup")}
         >
           <X className="w-4 h-4" />
         </button>
@@ -49,10 +51,10 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
           </div>
           <div>
             <h2 className="text-base font-bold text-white">
-              {engineTitle} {t('engine_not_installed_title', lang) || 'is Not Installed'}
+              {engineTitle} {t('engine_not_installed_title', lang) || ui("ui_is_not_installed")}
             </h2>
             <p className="text-xs text-slate-400">
-              {t('engine_not_installed_subtitle', lang) || 'Sandboxed runtime environment was not detected'}
+              {t('engine_not_installed_subtitle', lang) || ui("ui_sandboxed_runtime_environment_was_not_detected")}
             </p>
           </div>
         </div>
@@ -61,7 +63,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
         <div className="space-y-3 mb-5">
           <p className="text-xs text-slate-300 leading-relaxed">
             {t('engine_not_installed_desc', lang) ||
-              `To maintain zero host pollution, Berry AI Studio requires an isolated runtime environment before ${engineTitle} can be started.`}
+              ui("ui_to_maintain_zero_host_pollution_berry_ai_studio", { value1: engineTitle })}
           </p>
 
           {errorMessage && (
@@ -74,11 +76,11 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
           <div className="grid grid-cols-2 gap-2 pt-1">
             <div className="flex items-center space-x-2 p-2 rounded-lg bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-300">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{t('engine_benefit_isolated', lang) || '100% Isolated Venv'}</span>
+              <span>{t('engine_benefit_isolated', lang) || ui("ui_100_isolated_venv")}</span>
             </div>
             <div className="flex items-center space-x-2 p-2 rounded-lg bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-300">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>{t('engine_benefit_mirrors', lang) || 'Accelerated Mirrors'}</span>
+              <span>{t('engine_benefit_mirrors', lang) || ui("ui_accelerated_mirrors")}</span>
             </div>
           </div>
         </div>
@@ -93,7 +95,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
             className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <Download className="w-4 h-4" />
-            <span>{t('btn_deploy_now', lang) || 'Deploy & Install Now'}</span>
+            <span>{t('btn_deploy_now', lang) || ui("ui_deploy_install_now")}</span>
           </button>
 
           <button
@@ -104,7 +106,7 @@ export const EngineNotInstalledModal: React.FC<EngineNotInstalledModalProps> = (
             className="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs rounded-xl border border-slate-700 transition-colors"
           >
             <FolderSearch className="w-4 h-4 text-slate-400" />
-            <span>{t('btn_locate_existing', lang) || 'Locate Existing Folder'}</span>
+            <span>{t('btn_locate_existing', lang) || ui("ui_locate_existing_folder")}</span>
           </button>
         </div>
       </div>
