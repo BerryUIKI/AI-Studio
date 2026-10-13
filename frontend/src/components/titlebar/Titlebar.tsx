@@ -25,6 +25,7 @@ import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { GpuStatusIndicator } from './GpuStatusIndicator';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { useEngineStore } from '../../stores/useEngineStore';
 
 export interface ComfyStatus {
   online: boolean;
@@ -86,6 +87,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   const autosaveStatus = useProjectStore((s) => s.autosaveStatus);
   const saveProject = useProjectStore((s) => s.saveProject);
   const setIsManagerModalOpen = useProjectStore((s) => s.setIsManagerModalOpen);
+  const configuredComfyEndpoint = useEngineStore((state) => state.instances.find((instance) =>
+    instance.connection_id === 'comfyui-managed' || instance.id === 'comfyui-managed')?.endpoint);
+  const nativeComfyUrl = configuredComfyEndpoint || (comfyStatus?.port ? `http://127.0.0.1:${comfyStatus.port}` : undefined);
 
   useEffect(() => {
     let unlistenResize: (() => void) | undefined;
@@ -384,9 +388,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             <span className="hidden lg:inline text-slate-300">
               {comfyStatus?.online ? 'Engine Active' : 'Standby'}
             </span>
-            {comfyStatus?.online && (
+            {comfyStatus?.online && nativeComfyUrl && (
               <a
-                href="http://127.0.0.1:8188"
+                href={nativeComfyUrl}
                 target="_blank"
                 rel="noreferrer"
                 title="Open ComfyUI native web interface in a new tab"
