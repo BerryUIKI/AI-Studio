@@ -28,6 +28,16 @@ ALLOWED_ORIGINS: Set[str] = {
     "https://tauri.localhost",
 }
 
+
+def configured_loopback_origins(port: int) -> Set[str]:
+    """Trust the configured Berry origin without accepting arbitrary loopback ports."""
+    if not 1 <= port <= 65535:
+        raise ValueError("BERRY_PORT must be between 1 and 65535")
+    return {f"http://localhost:{port}", f"http://127.0.0.1:{port}"}
+
+
+ALLOWED_ORIGINS.update(configured_loopback_origins(int(os.environ.get("BERRY_PORT", "8000"))))
+
 # Routes that perform execution, lifecycle modifications, or access secrets
 SENSITIVE_PREFIXES = (
     "/api/v1/runtime/",
