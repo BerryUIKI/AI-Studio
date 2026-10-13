@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { HubModel, ModelEvaluation, HardwareSummary } from '../../stores/useModelHubStore';
 import { CompatibilityBadge } from './CompatibilityBadge';
 import { Download, Cloud, Check, HardDrive } from 'lucide-react';
@@ -9,6 +9,7 @@ interface HubModelCardProps {
   hardwareSummary?: HardwareSummary | null;
   onInstall: (model: HubModel) => void;
   onUseCloud?: (model: HubModel) => void;
+  onUseModel?: (model: HubModel) => void;
 }
 
 export const HubModelCard: React.FC<HubModelCardProps> = ({
@@ -17,7 +18,9 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
   hardwareSummary,
   onInstall,
   onUseCloud,
+  onUseModel,
 }) => {
+  const [previewFailed, setPreviewFailed] = useState(false);
   const sizeGb = (model.size_bytes / (1024 * 1024 * 1024)).toFixed(1);
   const isUnsupported = evaluation?.tier === 'unsupported';
 
@@ -25,15 +28,18 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
     <div className="group relative flex flex-col justify-between rounded-2xl bg-slate-900/60 hover:bg-slate-800/60 border border-white/[0.08] hover:border-indigo-500/40 transition-all duration-200 overflow-hidden shadow-lg hover:shadow-indigo-500/5 hover:-translate-y-0.5">
       {/* Top Media Preview Area */}
       <div className="relative w-full h-44 bg-slate-950 overflow-hidden">
-        <img
+        {previewFailed || !model.preview_image_url ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-indigo-950 to-slate-900 p-5 text-center text-slate-300">
+            <HardDrive aria-hidden="true" className="h-8 w-8 text-indigo-300" />
+            <span className="text-sm font-medium">{model.name}</span>
+            <span className="text-xs">{model.category} · Preview unavailable</span>
+          </div>
+        ) : <img
           src={model.preview_image_url}
           alt={model.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onError={(e) => {
-            // Fallback gradient if preview image fails to load
-            (e.target as HTMLElement).style.display = 'none';
-          }}
-        />
+          onError={() => setPreviewFailed(true)}
+        />}
 
         {/* Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/20 to-transparent" />
@@ -106,17 +112,17 @@ export const HubModelCard: React.FC<HubModelCardProps> = ({
           {/* Primary Action Button */}
           {model.is_installed ? (
             <button
-              disabled
+              onClick={() => onUseModel?.(model)}
               className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold bg-slate-800/80 text-emerald-400 border border-emerald-500/20 cursor-default"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>Installed to Engine</span>
+              <span>{model.is_ready ? 'Use Model' : 'Check Model Readiness'}</span>
             </button>
           ) : isUnsupported ? (
             <button
               onClick={() => onUseCloud?.(model)}
               className="flex items-center justify-center gap-1.5 w-full py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-              title="This model exceeds local hardware VRAM limits; generate seamlessly using Cloud BYOK mode."
+              title="Check whether a configured cloud provider offers this model family"
             >
               <Cloud className="w-3.5 h-3.5 text-purple-200" />
               <span>Use Cloud Mode</span>
