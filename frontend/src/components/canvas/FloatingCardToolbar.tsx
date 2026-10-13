@@ -14,6 +14,8 @@ import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { creativeRequestFromProvenance } from '../../utils/creativeReplay';
 import { downloadOriginalMedia } from '../../utils/media';
+import { useCreativeCapabilities } from '../../hooks/useCreativeCapabilities';
+import { useShallow } from 'zustand/react/shallow';
 
 interface FloatingCardToolbarProps {
   nodeId: string;
@@ -22,8 +24,13 @@ interface FloatingCardToolbarProps {
 
 export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId, data }) => {
   const ui = useUiText();
-  const { setReferenceImage, openInpaint, openUpscale, openImg2Video } = useCreativeStore();
-  const { duplicateNode, removeNode, arrangeBranchTree } = useCanvasStore();
+  const { setReferenceImage, openInpaint, openUpscale, openImg2Video } = useCreativeStore(useShallow((state) => ({
+    setReferenceImage: state.setReferenceImage, openInpaint: state.openInpaint, openUpscale: state.openUpscale, openImg2Video: state.openImg2Video,
+  })));
+  const { duplicateNode, removeNode, arrangeBranchTree } = useCanvasStore(useShallow((state) => ({
+    duplicateNode: state.duplicateNode, removeNode: state.removeNode, arrangeBranchTree: state.arrangeBranchTree,
+  })));
+  const supports = useCreativeCapabilities();
   const isGenerating = useCreativeStore((state) => state.isGenerating);
   const executeCreativeAction = useCreativeStore((state) => state.executeCreativeAction);
 
@@ -56,36 +63,40 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
       {!isVideo && (
         <>
           <button
+            disabled={!supports('img2img')}
             onClick={() => setReferenceImage(data)}
             title={ui("ui_vary_image_to_image_reference")}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-600/30 transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-600/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             <span>{ui("ui_vary")}</span>
           </button>
 
           <button
+            disabled={!supports('inpaint')}
             onClick={() => openInpaint(data)}
             title={ui("ui_inpaint_mask")}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-amber-300 hover:text-white hover:bg-amber-600/30 transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-amber-300 hover:text-white hover:bg-amber-600/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Paintbrush className="w-3.5 h-3.5 text-amber-400" />
             <span>{ui("ui_inpaint")}</span>
           </button>
 
           <button
+            disabled={!supports('upscale')}
             onClick={() => openUpscale(data)}
             title={ui("ui_upscale_resolution")}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-600/30 transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-600/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>{ui("ui_upscale")}</span>
           </button>
 
           <button
+            disabled={!supports('img2video')}
             onClick={() => openImg2Video(data)}
             title={ui("ui_animate_to_video")}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-purple-300 hover:text-white hover:bg-purple-600/30 transition"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-purple-300 hover:text-white hover:bg-purple-600/30 transition disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Video className="w-3.5 h-3.5 text-purple-400" />
             <span>{ui("ui_animate")}</span>
