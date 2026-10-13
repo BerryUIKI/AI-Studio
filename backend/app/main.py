@@ -25,6 +25,7 @@ from app.core.creative_tasks import creative_tasks
 from app.core.creation_services import CreationServices
 from app.core.task_control import TaskControlService
 from app.core.asset_service import AssetService
+from app.api.custom_providers import router as custom_providers_router
 from app.core.engine_service import EngineService
 from app.core.workflow_service import WorkflowExecutionService, WorkflowPlanError
 from app.api.creative import create_creative_router
@@ -976,14 +977,17 @@ async def repair_comfy_workflow(workflow: Dict[str, Any]) -> WorkflowRepairResul
 @app.get("/api/v1/cloud/providers", response_model=List[CloudProviderInfo])
 async def list_cloud_providers() -> List[CloudProviderInfo]:
     """List available BYOK cloud providers with redacted secrets and capabilities."""
-    return credentials_manager.list_providers()
+    return await run_blocking(credentials_manager.list_providers)
 
 
 @app.post("/api/v1/cloud/credentials", response_model=CloudProviderInfo)
 async def set_cloud_credential(req: SetCredentialRequest) -> CloudProviderInfo:
     """Store or update a BYOK cloud API key locally without exposure."""
+    providers = await run_blocking(credentials_manager.list_providers)
+    if not any(provider.id == req.provider_id for provider in providers):
+        raise HTTPException(status_code=404, detail="Provider not found")
     try:
-        credentials_manager.set_key(req.provider_id, req.api_key)
+        await run_blocking(credentials_manager.set_key, req.provider_id, req.api_key)
     except Exception as e:
         logger.error(f"Failed to persist credential: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to persist credentials: {e}")
@@ -1001,14 +1005,18 @@ async def test_cloud_credential(req: TestKeyRequest) -> TestKeyResult:
 
 
 @app.delete("/api/v1/cloud/credentials/{provider_id}")
-async def delete_cloud_credential(provider_id: CloudProviderId) -> dict[str, bool]:
+async def delete_cloud_credential(provider_id: str) -> dict[str, bool]:
     """Delete a stored BYOK API key."""
     try:
-        credentials_manager.delete_key(provider_id)
+        validated = SetCredentialRequest(provider_id=provider_id, api_key="")
+        await run_blocking(credentials_manager.delete_key, validated.provider_id)
     except Exception as e:
         logger.error(f"Failed to delete credential: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update stored credentials: {e}")
     return {"success": True}
+
+
+app.include_router(custom_providers_router)
 
 
 # ---------------------------------------------------------------------------

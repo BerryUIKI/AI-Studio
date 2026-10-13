@@ -6,7 +6,7 @@ import re
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 
 class CustomProviderSpec(BaseModel):
@@ -95,9 +95,12 @@ class CustomProviderSpec(BaseModel):
                 )
         return value.strip()
 
+    @computed_field
     @property
     def revision(self) -> str:
-        payload = json.dumps(self.model_dump(), sort_keys=True, separators=(",", ":"))
+        payload = json.dumps(
+            self.model_dump(exclude={"revision"}), sort_keys=True, separators=(",", ":")
+        )
         return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -110,6 +113,7 @@ class CustomProviderRecord(BaseModel):
     spec: CustomProviderSpec
     trusted_revision: str | None = None
 
+    @computed_field
     @property
     def execution_trusted(self) -> bool:
         return self.trusted_revision == self.spec.revision

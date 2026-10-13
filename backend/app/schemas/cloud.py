@@ -1,8 +1,10 @@
 """Schemas for BYOK cloud providers, credentials, capabilities, and key tests."""
 
+import re
 from enum import Enum
 from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class CloudProviderId(str, Enum):
@@ -33,7 +35,7 @@ class SetLLMConfigRequest(BaseModel):
 
 
 class CloudProviderInfo(BaseModel):
-    id: CloudProviderId
+    id: CloudProviderId | str
     name: str
     description: str
     is_configured: bool
@@ -46,18 +48,32 @@ class CloudProviderInfo(BaseModel):
     key_test_supported: bool = True
 
 
-class SetCredentialRequest(BaseModel):
-    provider_id: CloudProviderId
+class _ProviderRequest(BaseModel):
+    provider_id: CloudProviderId | str
+
+    @field_validator("provider_id", mode="before")
+    @classmethod
+    def validate_provider_id(cls, value: str) -> CloudProviderId | str:
+        if not isinstance(value, str):
+            raise ValueError("Provider identifier must be a string")
+        try:
+            return CloudProviderId(value)
+        except ValueError:
+            if not re.fullmatch(r"custom-[a-z0-9][a-z0-9-]{0,62}", value):
+                raise ValueError("Unknown provider identifier") from None
+            return value
+
+
+class SetCredentialRequest(_ProviderRequest):
     api_key: str
 
 
-class TestKeyRequest(BaseModel):
-    provider_id: CloudProviderId
+class TestKeyRequest(_ProviderRequest):
     api_key: Optional[str] = None  # If omitted, test the currently stored key
 
 
 class TestKeyResult(BaseModel):
-    provider_id: CloudProviderId
+    provider_id: CloudProviderId | str
     valid: bool
     message: str
     status_code: Optional[int] = None
