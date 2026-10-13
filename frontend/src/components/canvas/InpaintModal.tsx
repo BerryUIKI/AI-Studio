@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import { useEffect, useRef, useState } from 'react';
@@ -13,6 +14,7 @@ import {
 import { useCreativeStore } from '../../stores/useCreativeStore';
 
 export const InpaintModal = () => {
+  const ui = useUiText();
   const { inpaintModalOpen, referenceImage, closeModals, executeCreativeAction, isGenerating } =
     useCreativeStore();
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -136,7 +138,7 @@ export const InpaintModal = () => {
           method: 'POST',
           body: formData,
         });
-        if (!uploadResp.ok) throw new Error('Failed to upload mask');
+        if (!uploadResp.ok) throw new Error(ui("ui_failed_to_upload_mask"));
         const maskAsset = await uploadResp.json();
 
         const res = await executeCreativeAction({
@@ -150,13 +152,13 @@ export const InpaintModal = () => {
           closeModals();
         }
       } catch (err: unknown) {
-        useCreativeStore.setState({ error: getErrorMessage(err, 'Inpainting failed') });
+        useCreativeStore.setState({ error: getErrorMessage(err, ui("ui_inpainting_failed")) });
       }
     }, 'image/png');
   };
 
   return (
-    <Dialog title="Inpaint image" onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
+    <Dialog title={ui("ui_inpaint_image")} onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
       <div
         ref={containerRef}
         className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl shadow-slate-950/90 overflow-hidden"
@@ -168,13 +170,13 @@ export const InpaintModal = () => {
               <Paintbrush className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-semibold text-sm text-slate-100">In-Place Canvas Mask Studio</h2>
-              <p className="text-[11px] text-slate-400">Paint the regions you want the AI to reconstruct</p>
+              <h2 className="font-semibold text-sm text-slate-100">{ui("ui_in_place_canvas_mask_studio")}</h2>
+              <p className="text-[11px] text-slate-400">{ui("ui_paint_the_regions_you_want_the_ai_to")}</p>
             </div>
           </div>
           <button
             onClick={closeModals}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
           >
             <X className="w-4 h-4" />
@@ -187,7 +189,7 @@ export const InpaintModal = () => {
             {/* Background source image */}
             <img
               src={referenceImage.imageUrl}
-              alt="Source"
+              alt={ui("ui_source")}
               className="max-w-full max-h-[55vh] object-contain select-none pointer-events-none"
             />
             {/* Mask Drawing Canvas overlay */}
@@ -202,7 +204,7 @@ export const InpaintModal = () => {
                 setCursorPos(null);
               }}
               className="absolute inset-0 w-full h-full cursor-none opacity-80 mix-blend-screen"
-              aria-label="Image mask: painted regions will be edited"
+              aria-label={ui("ui_image_mask_painted_regions_will_be_edited")}
             />
           </div>
 
@@ -233,7 +235,7 @@ export const InpaintModal = () => {
             context.globalCompositeOperation = 'source-over';
             context.fillStyle = 'white';
             context.fillRect(canvas.width / 4, canvas.height / 4, canvas.width / 2, canvas.height / 2);
-          }}>Mark the center region for editing</button>
+          }}>{ui("ui_mark_the_center_region_for_editing")}</button>
           <div className="flex flex-wrap items-center justify-between text-xs gap-3">
             {/* Tool Selection: Brush vs Eraser */}
             <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
@@ -247,7 +249,7 @@ export const InpaintModal = () => {
                 }`}
               >
                 <Paintbrush className="w-3.5 h-3.5" />
-                <span>Brush</span>
+                <span>{ui("ui_brush")}</span>
               </button>
               <button
                 type="button"
@@ -259,13 +261,13 @@ export const InpaintModal = () => {
                 }`}
               >
                 <Eraser className="w-3.5 h-3.5" />
-                <span>Eraser</span>
+                <span>{ui("ui_eraser")}</span>
               </button>
             </div>
 
             {/* Brush Size Slider */}
             <div className="flex items-center gap-2 text-slate-300 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-              <span className="text-[11px] text-slate-400">Size:</span>
+              <span className="text-[11px] text-slate-400">{ui("ui_size")}</span>
               <input
                 type="range"
                 min="6"
@@ -274,26 +276,26 @@ export const InpaintModal = () => {
                 onChange={(e) => setBrushSize(Number(e.target.value))}
                 className="w-28 accent-amber-500 cursor-pointer"
               />
-              <span className="font-mono text-xs text-amber-300 w-8">{brushSize}px</span>
+              <span className="font-mono text-xs text-amber-300 w-8">{brushSize}{ui("ui_px")}</span>
             </div>
 
             {/* Mask Actions: Invert & Clear */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleInvert}
-                title="Invert Mask Selection"
+                title={ui("ui_invert_mask_selection")}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
               >
                 <FlipHorizontal className="w-3.5 h-3.5" />
-                <span>Invert</span>
+                <span>{ui("ui_invert")}</span>
               </button>
               <button
                 onClick={handleClear}
-                title="Clear All Mask Strokes"
+                title={ui("ui_clear_all_mask_strokes")}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Clear</span>
+                <span>{ui("ui_clear")}</span>
               </button>
             </div>
           </div>
@@ -304,7 +306,7 @@ export const InpaintModal = () => {
               type="text"
               value={inpaintPrompt}
               onChange={(e) => setInpaintPrompt(e.target.value)}
-              placeholder="Describe what should be synthesized in the masked area..."
+              placeholder={ui("ui_describe_what_should_be_synthesized_in_the_masked")}
               className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500 transition"
               disabled={isGenerating}
             />
@@ -316,12 +318,12 @@ export const InpaintModal = () => {
               {isGenerating ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Inpainting...</span>
+                  <span>{ui("ui_inpainting")}</span>
                 </>
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  <span>Synthesize</span>
+                  <span>{ui("ui_synthesize")}</span>
                 </>
               )}
             </button>

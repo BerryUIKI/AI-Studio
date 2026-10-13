@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
 
@@ -42,6 +43,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   public render() {
     if (this.state.hasError) {
+      return <ErrorFallback title={this.props.fallbackTitle} error={this.state.error} onReset={this.handleReset} onReload={this.handleReload} />;
+    }
+
+    return this.props.children;
+  }
+}
+
+
+function ErrorFallback({ title, error, onReset, onReload }: { title?: string; error: Error | null; onReset: () => void; onReload: () => void }) {
+  const ui = useUiText();
       return (
         <div className="flex-1 w-full h-full min-h-[300px] flex items-center justify-center p-6 bg-slate-950 text-slate-100">
           <div className="max-w-lg w-full bg-slate-900 border border-red-500/30 rounded-xl p-6 shadow-2xl space-y-4">
@@ -50,43 +61,38 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <h2 className="text-lg font-semibold">
-                {this.props.fallbackTitle || 'Something went wrong'}
+                {title || ui("ui_something_went_wrong")}
               </h2>
             </div>
 
             <p className="text-sm text-slate-400 leading-relaxed">
-              An unexpected runtime error occurred in this view. You can attempt to reset the component state or reload the application.
-            </p>
+              {ui("ui_an_unexpected_runtime_error_occurred_in_this_view")}</p>
 
-            {this.state.error && (
+            {error && (
               <div className="p-3 bg-slate-950/80 rounded-lg border border-slate-800 text-xs font-mono text-red-300 break-all max-h-32 overflow-y-auto">
-                {this.state.error.message}
+                {error.message}
               </div>
             )}
 
             <div className="flex items-center justify-end space-x-3 pt-2">
               <button
                 type="button"
-                onClick={this.handleReset}
+                onClick={onReset}
                 className="inline-flex items-center space-x-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset View</span>
+                <span>{ui("ui_reset_view")}</span>
               </button>
               <button
                 type="button"
-                onClick={this.handleReload}
+                onClick={onReload}
                 className="inline-flex items-center space-x-2 px-3.5 py-2 text-xs font-medium rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>Reload App</span>
+                <span>{ui("ui_reload_app")}</span>
               </button>
             </div>
           </div>
         </div>
       );
-    }
-
-    return this.props.children;
-  }
 }

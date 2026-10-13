@@ -1,3 +1,4 @@
+import { useUiText } from './i18n/useUiText';
 import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Titlebar, type ComfyStatus, type RuntimeStatus } from './components/titlebar/Titlebar';
@@ -41,6 +42,7 @@ const ModelHubView = lazy(() => import('./components/hub/ModelHubView').then((mo
 const SettingsView = lazy(() => import('./components/settings/SettingsView').then((module) => ({ default: module.SettingsView })));
 
 export default function App() {
+  const ui = useUiText();
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
   const [comfyStatus, setComfyStatus] = useState<ComfyStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
@@ -116,9 +118,9 @@ export default function App() {
   const handleOpenEngineDirectory = async (instanceId: string) => {
     try {
       const path = await openEngineDirectory(instanceId);
-      setEngineNotice(`Opened directory: ${path}`);
+      setEngineNotice(ui("ui_opened_directory_value", { value1: path }));
     } catch (error) {
-      setEngineNotice(error instanceof Error ? error.message : 'Could not open the engine directory');
+      setEngineNotice(error instanceof Error ? error.message : ui("ui_could_not_open_the_engine_directory"));
     }
   };
 
@@ -389,7 +391,7 @@ export default function App() {
           webuiRunning={false}
           isGenerating={isExecuting}
         />
-        <Suspense fallback={<div role="status" className="flex flex-1 items-center justify-center text-slate-300">Loading workspace…</div>}>
+        <Suspense fallback={<div role="status" className="flex flex-1 items-center justify-center text-slate-300">{ui("ui_loading_workspace")}</div>}>
         <ViewContainer>
           {{
             launcher: (
@@ -415,7 +417,7 @@ export default function App() {
               />
             ),
             canvas: (
-              <ErrorBoundary fallbackTitle="Canvas Rendering Error" onReset={clearCanvas}>
+              <ErrorBoundary fallbackTitle={ui("ui_canvas_rendering_error")} onReset={clearCanvas}>
                 <div className="flex-1 flex w-full h-full overflow-hidden relative">
                   {showNodePalette && <NodePalette />}
                   <main className="flex-1 relative w-full h-full">
@@ -427,7 +429,7 @@ export default function App() {
               </ErrorBoundary>
             ),
             models: (
-              <ErrorBoundary fallbackTitle="Model Hub Error">
+              <ErrorBoundary fallbackTitle={ui("ui_model_hub_error")}>
                 <ModelHubView />
               </ErrorBoundary>
             ),
@@ -435,10 +437,10 @@ export default function App() {
               const comfyInst = instances.find((i) => i.id === 'comfyui-managed' || i.type === 'comfyui');
               const dynamicPort = comfyStatus?.port || (comfyInst?.endpoint ? Number(new URL(comfyInst.endpoint).port) : 8188) || 8188;
               return (
-                <ErrorBoundary fallbackTitle="ComfyUI View Error">
+                <ErrorBoundary fallbackTitle={ui("ui_comfyui_view_error")}>
                   <EmbeddedEngineView
                     engineType="comfyui"
-                    title="ComfyUI"
+                    title={ui("ui_comfyui")}
                     port={dynamicPort}
                     isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
                     isInstalled={Boolean(
@@ -456,10 +458,10 @@ export default function App() {
               const webuiInst = instances.find((i) => i.id === 'webui-managed' || i.type === 'webui');
               const dynamicPort = (webuiInst?.endpoint ? Number(new URL(webuiInst.endpoint).port) : 7860) || 7860;
               return (
-                <ErrorBoundary fallbackTitle="SD WebUI View Error">
+                <ErrorBoundary fallbackTitle={ui("ui_sd_webui_view_error")}>
                   <EmbeddedEngineView
                     engineType="webui"
-                    title="SD WebUI"
+                    title={ui("ui_sd_webui")}
                     port={dynamicPort}
                     isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
                     isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
@@ -483,7 +485,7 @@ export default function App() {
         {/* Persistent Collapsible Right Sidebar AI Agent */}
         {showAgentPanel && (
           <aside className="w-96 flex-shrink-0 h-full border-l border-slate-800 bg-slate-900 shadow-2xl z-30 transition-all duration-200">
-            <Suspense fallback={<p role="status" className="p-4">Loading assistant…</p>}><AgentPanel
+            <Suspense fallback={<p role="status" className="p-4">{ui("ui_loading_assistant")}</p>}><AgentPanel
               isOpen={showAgentPanel}
               onClose={() => setShowAgentPanel(false)}
               inline={true}
@@ -495,7 +497,7 @@ export default function App() {
       {/* Contextual Action Modals */}
       {engineNotice && <div role="status" className="fixed bottom-5 left-20 z-50 max-w-lg rounded-xl border border-slate-600 bg-slate-900 p-4 text-sm text-slate-100 shadow-xl">
         <p className="break-all">{engineNotice}</p>
-        <button onClick={() => setEngineNotice(null)} className="mt-2 rounded bg-slate-700 px-3 py-1">Dismiss</button>
+        <button onClick={() => setEngineNotice(null)} className="mt-2 rounded bg-slate-700 px-3 py-1">{ui("ui_dismiss")}</button>
       </div>}
       {removalTarget && <EngineRemovalDialog key={removalTarget.id} instance={instances.find((instance) => instance.id === removalTarget.id) ?? removalTarget}
         onClose={() => setRemovalTarget(null)} onCompleted={() => { void fetchInstances(); refreshStatus(); }} />}

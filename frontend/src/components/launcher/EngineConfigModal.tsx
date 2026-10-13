@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
@@ -27,6 +28,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const ui = useUiText();
   const [port, setPort] = useState<string>('8188');
   const [selectedFlags, setSelectedFlags] = useState<string[]>(['--lowvram']);
   const [customArgs, setCustomArgs] = useState<string>('');
@@ -104,7 +106,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
 
     const portNum = parseInt(port, 10);
     if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-      setErrorMessage('Port must be a valid integer between 1 and 65535.');
+      setErrorMessage(ui("ui_port_must_be_a_valid_integer_between_1"));
       return;
     }
 
@@ -131,7 +133,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
       }
 
       if (result && result.success === false) {
-        setErrorMessage(result.message || 'Failed to save engine configuration.');
+        setErrorMessage(result.message || ui("ui_failed_to_save_engine_configuration"));
         return;
       }
 
@@ -140,8 +142,8 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
       setSuccessMessage(
         result?.message ||
           (restartRequired
-            ? 'Configuration saved. Engine restart is required for changes to take effect.'
-            : 'Configuration saved successfully.')
+            ? ui("ui_configuration_saved_engine_restart_is_required_for_changes")
+            : ui("ui_configuration_saved_successfully"))
       );
       setSavedSuccess(true);
 
@@ -150,24 +152,24 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
         onClose();
       }, restartRequired ? 1400 : 900);
     } catch (err: unknown) {
-      setErrorMessage(getErrorMessage(err, 'An unexpected error occurred while saving.'));
+      setErrorMessage(getErrorMessage(err, ui("ui_an_unexpected_error_occurred_while_saving")));
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <Dialog title="Engine configuration" onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
+    <Dialog title={ui("ui_engine_configuration")} onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
       <div className="relative w-full max-w-md rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl text-slate-100 overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center space-x-2">
             <Settings className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-sm font-bold text-white">Configure {instance.name}</h2>
+            <h2 className="text-sm font-bold text-white">{ui("ui_configure")}{instance.name}</h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             disabled={isSaving}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
@@ -182,8 +184,8 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
             <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 flex items-start space-x-2 text-[11px]">
               <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
               <div>
-                <span className="font-semibold block">Engine is actively running</span>
-                <span>Port and launch argument changes will take effect after restarting the engine.</span>
+                <span className="font-semibold block">{ui("ui_engine_is_actively_running")}</span>
+                <span>{ui("ui_port_and_launch_argument_changes_will_take_effect")}</span>
               </div>
             </div>
           )}
@@ -192,12 +194,12 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
           {!instance.is_managed && (
             <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 flex items-center space-x-2 text-[11px]">
               <Info className="w-4 h-4 shrink-0 text-indigo-400" />
-              <span>External Engine: Berry manages connection endpoints only. Zero host process mutation is guaranteed.</span>
+              <span>{ui("ui_external_engine_berry_manages_connection_endpoints_only_zero")}</span>
             </div>
           )}
 
           <div>
-            <label className="block text-slate-300 font-medium mb-1">Port</label>
+            <label className="block text-slate-300 font-medium mb-1">{ui("ui_port")}</label>
             <input
               type="number"
               value={port}
@@ -205,11 +207,11 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
               onChange={(e) => setPort(e.target.value)}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-indigo-500 font-mono disabled:opacity-50"
             />
-            <p className="text-[11px] text-slate-500 mt-1">Default: 8188 for ComfyUI, 7860 for WebUI</p>
+            <p className="text-[11px] text-slate-500 mt-1">{ui("ui_default_8188_for_comfyui_7860_for_webui")}</p>
           </div>
 
           <div>
-            <label className="block text-slate-300 font-medium mb-2">Performance Optimization Flags</label>
+            <label className="block text-slate-300 font-medium mb-2">{ui("ui_performance_optimization_flags")}</label>
             <div className="grid grid-cols-2 gap-2">
               {KNOWN_FLAGS.map(({ flag, label }) => {
                 const isSelected = selectedFlags.includes(flag);
@@ -237,13 +239,13 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-slate-300 font-medium mb-1">Custom Launch Arguments</label>
+            <label className="block text-slate-300 font-medium mb-1">{ui("ui_custom_launch_arguments")}</label>
             <input
               type="text"
               value={customArgs}
               disabled={isSaving}
               onChange={(e) => setCustomArgs(e.target.value)}
-              placeholder="e.g. --listen 0.0.0.0 --fast"
+              placeholder={ui("ui_e_g_listen_0_0_0_0_fast")}
               className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono disabled:opacity-50"
             />
           </div>
@@ -275,11 +277,10 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
               type="button"
               disabled={isSaving}
               onClick={onClose}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
               className="px-3.5 py-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
             >
-              Cancel
-            </button>
+              {ui("ui_cancel")}</button>
             <button
               type="button"
               disabled={isSaving}
@@ -287,7 +288,7 @@ export const EngineConfigModal: React.FC<EngineConfigModalProps> = ({
               className="flex items-center space-x-1.5 px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-lg transition-colors disabled:opacity-50"
             >
               {isSaving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isSaving ? 'Saving...' : 'Save Configuration'}</span>
+              <span>{isSaving ? ui("ui_saving_2") : ui("ui_save_configuration")}</span>
             </button>
           </div>
         </div>

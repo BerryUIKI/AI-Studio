@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Terminal, CheckCircle2, AlertCircle } from 'lucide-react';
@@ -16,6 +17,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
   mirrorPreset,
   onClose,
 }) => {
+  const ui = useUiText();
   const [phase, setPhase] = useState<string>('checking');
   const [logs, setLogs] = useState<string[]>([]);
   const [isCompleted, setIsCompleted] = useState<boolean>(false);
@@ -37,8 +39,8 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
     fetch(`/api/v1/runtime/${engineType}/install`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: mirrorPreset ? JSON.stringify({ mirror_preset: mirrorPreset }) : undefined,
-    }).then((response) => { if (!response.ok) throw new Error(`Installation request failed (${response.status})`); })
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not start installation'));
+    }).then((response) => { if (!response.ok) throw new Error(ui("ui_installation_request_failed_value", { value1: response.status })); })
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : ui("ui_could_not_start_installation")));
 
     // Poll installation manifest
     const pollInterval = setInterval(async () => {
@@ -66,7 +68,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
               break;
             case 'failed':
             case 'interrupted':
-              setError(manifest.error_message || 'Installation encountered an error.');
+              setError(manifest.error_message || ui("ui_installation_encountered_an_error"));
               clearInterval(pollInterval);
               break;
           }
@@ -95,9 +97,9 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
           </div>
           <div>
             <h2 className="text-sm font-bold text-slate-100">
-              Deploying {engineType === 'comfyui' ? 'ComfyUI' : 'SD WebUI'}
+              {ui("ui_deploying")}{engineType === 'comfyui' ? ui("ui_comfyui") : ui("ui_sd_webui")}
             </h2>
-            <p className="text-[11px] text-slate-400">Sandboxed isolated runtime</p>
+            <p className="text-[11px] text-slate-400">{ui("ui_sandboxed_isolated_runtime")}</p>
           </div>
         </div>
         <button
@@ -112,14 +114,14 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
       <div className="px-5 py-4 bg-slate-950/40 border-b border-slate-800/80">
         <div className="flex items-center justify-between text-xs mb-2">
           <span className="font-semibold text-slate-300 capitalize">
-            Phase: {phase.replace('_', ' ')}
+            {ui("ui_phase")}{phase.replace('_', ' ')}
           </span>
-          <span className="font-mono text-indigo-400 font-bold">{isCompleted ? 'Complete' : 'Waiting for observed progress'}</span>
+          <span className="font-mono text-indigo-400 font-bold">{isCompleted ? ui("ui_complete") : ui("ui_waiting_for_observed_progress")}</span>
         </div>
 
         {/* Progress Bar */}
         <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-          <ProgressBar label="Engine installation" value={isCompleted ? 100 : undefined}
+          <ProgressBar label={ui("ui_engine_installation")} value={isCompleted ? 100 : undefined}
             className={error ? 'text-red-500' : isCompleted ? 'text-emerald-500' : 'text-indigo-500'} />
         </div>
 
@@ -133,7 +135,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
         {isCompleted && (
           <div className="mt-3 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center space-x-2">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            <span>Engine successfully deployed and ready to run!</span>
+            <span>{ui("ui_engine_successfully_deployed_and_ready_to_run")}</span>
           </div>
         )}
       </div>
@@ -142,7 +144,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
       <div className="flex-1 p-4 bg-slate-950 overflow-y-auto font-mono text-xs leading-relaxed text-slate-400 space-y-1">
         {logs.map((log, idx) => (
           <div key={idx} className="break-all whitespace-pre-wrap">
-            <span className="text-slate-600 mr-2">&gt;</span>
+            <span className="text-slate-600 mr-2">{'>'}</span>
             <span className={log.includes('ERROR') ? 'text-red-400' : log.includes('INFO') ? 'text-indigo-300' : 'text-slate-300'}>
               {log}
             </span>
@@ -153,12 +155,12 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
 
       {/* Footer Controls */}
       <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
-        <span className="text-[11px] text-slate-500 font-mono">Zero Host Pollution Guaranteed</span>
+        <span className="text-[11px] text-slate-500 font-mono">{ui("ui_zero_host_pollution_guaranteed")}</span>
         <button
           onClick={onClose}
           className="px-4 py-1.5 text-xs font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors border border-slate-700"
         >
-          {isCompleted || error ? 'Close' : 'Minimize to Background'}
+          {isCompleted || error ? ui("ui_close") : ui("ui_minimize_to_background")}
         </button>
       </div>
     </div>

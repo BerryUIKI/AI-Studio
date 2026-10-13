@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { useEffect } from 'react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCreationSetupStore, modelsForProvider, providerConnection, localModelAvailable, localModelFilename } from '../../stores/useCreationSetupStore';
@@ -28,6 +29,7 @@ export function useCreationReadiness() {
 }
 
 export function CreationSetup({ onCloudSetup, onLocalSetup }: CreationSetupProps) {
+  const ui = useUiText();
   const readiness = useCreationReadiness();
   const providers = useCreationSetupStore((state) => state.providers);
   const refresh = useCreationSetupStore((state) => state.refresh);
@@ -45,29 +47,29 @@ export function CreationSetup({ onCloudSetup, onLocalSetup }: CreationSetupProps
   };
 
   return <div className="flex flex-wrap items-center gap-2 text-sm">
-    <label htmlFor="creation-target">Create with</label>
+    <label htmlFor="creation-target">{ui("ui_create_with")}</label>
     <select id="creation-target" value={readiness.connection} onChange={(event) => selectConnection(event.target.value)} className="max-w-48 rounded border border-slate-700 bg-slate-950 px-2 py-1">
-      <option value="">Choose provider or engine</option>
+      <option value="">{ui("ui_choose_provider_or_engine")}</option>
       {!providers.some((item) => providerConnection(item.id) === readiness.connection) && !instances.some((item) => (item.connection_id || item.id) === readiness.connection)
-        && readiness.connection && <option value={readiness.connection}>Setup required</option>}
-      {providers.filter((provider) => modelsForProvider(provider, action).length > 0).map((provider) => <option key={provider.id} value={providerConnection(provider.id)}>{provider.name}{provider.is_configured ? '' : ' — key needed'}</option>)}
+        && readiness.connection && <option value={readiness.connection}>{ui("ui_setup_required")}</option>}
+      {providers.filter((provider) => modelsForProvider(provider, action).length > 0).map((provider) => <option key={provider.id} value={providerConnection(provider.id)}>{provider.name}{provider.is_configured ? '' : ui("ui_key_needed")}</option>)}
       {instances.filter((instance) => ['comfyui', 'webui'].includes(instance.type)).map((instance) => <option key={instance.id} value={instance.connection_id || instance.id}>{instance.name} — {instance.status}</option>)}
     </select>
-    <label htmlFor="creation-model">Model</label>
+    <label htmlFor="creation-model">{ui("ui_model")}</label>
     <select id="creation-model" value={readiness.model} onChange={(event) => useCreativeStore.getState().setModel(event.target.value)} className="max-w-48 rounded border border-slate-700 bg-slate-950 px-2 py-1">
-      <option value="">Choose a validated model</option>
-      {!readiness.choices.includes(readiness.model) && readiness.model && <option value={readiness.model}>Model needs validation</option>}
+      <option value="">{ui("ui_choose_a_validated_model")}</option>
+      {!readiness.choices.includes(readiness.model) && readiness.model && <option value={readiness.model}>{ui("ui_model_needs_validation")}</option>}
       {readiness.choices.map((name) => <option key={name} value={name}>{name}</option>)}
     </select>
-    <button type="button" onClick={() => void refresh()} className="rounded border border-slate-700 px-2 py-1">Refresh readiness</button>
+    <button type="button" onClick={() => void refresh()} className="rounded border border-slate-700 px-2 py-1">{ui("ui_refresh_readiness")}</button>
     {!readiness.ready && <div role="status" className="w-full text-amber-200">
-      {readiness.loading ? 'Checking setup…' : readiness.error || 'Choose a configured cloud provider, or start an engine and validate its model.'}
+      {readiness.loading ? ui("ui_checking_setup") : readiness.error || ui("ui_choose_a_configured_cloud_provider_or_start_an")}
       <div className="mt-1 flex gap-3">
-        <button type="button" className="underline" onClick={onCloudSetup}>Set up cloud — no GPU required</button>
-        <button type="button" className="underline" onClick={onLocalSetup}>Set up local engine and models</button>
+        <button type="button" className="underline" onClick={onCloudSetup}>{ui("ui_set_up_cloud_no_gpu_required")}</button>
+        <button type="button" className="underline" onClick={onLocalSetup}>{ui("ui_set_up_local_engine_and_models")}</button>
       </div>
     </div>}
     {readiness.provider && <p className="w-full text-xs text-slate-400">{readiness.provider.upload_disclosure}</p>}
-    {readiness.engine && readiness.choices.length > 0 && <p className="w-full text-xs text-amber-200">Model structure and prerequisites checked. Engine inference compatibility still needs a successful generation.</p>}
+    {readiness.engine && readiness.choices.length > 0 && <p className="w-full text-xs text-amber-200">{ui("ui_model_structure_and_prerequisites_checked_engine_inference_compatibility")}</p>}
   </div>;
 }

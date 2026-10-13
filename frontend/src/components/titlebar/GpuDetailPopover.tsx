@@ -1,3 +1,5 @@
+import { formatNumber } from '../../i18n/format';
+import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import React from 'react';
 import { GpuStats } from '../../stores/useHardwareStore';
@@ -8,8 +10,9 @@ interface GpuDetailPopoverProps {
 }
 
 export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => {
-  const totalGb = (stats.vram_total_mb / 1024).toFixed(1);
-  const usedGb = (stats.vram_used_mb / 1024).toFixed(1);
+  const ui = useUiText();
+  const totalGb = formatNumber((stats.vram_total_mb / 1024), 1, 1);
+  const usedGb = formatNumber((stats.vram_used_mb / 1024), 1, 1);
   const pct = stats.vram_total_mb > 0
     ? Math.min(100, Math.round((stats.vram_used_mb / stats.vram_total_mb) * 100))
     : 0;
@@ -29,7 +32,7 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
         </div>
         {stats.driver_version && (
           <div className="text-[11px] text-slate-400 mt-0.5">
-            Driver: <span className="font-mono text-slate-300">{stats.driver_version}</span>
+            {ui("ui_driver")}<span className="font-mono text-slate-300">{stats.driver_version}</span>
           </div>
         )}
       </div>
@@ -40,9 +43,8 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
           <div className="flex items-center justify-between text-slate-300">
             <span className="flex items-center gap-1.5 text-slate-400">
               <Thermometer className="w-3.5 h-3.5 text-amber-400" />
-              Temperature
-            </span>
-            <span className="font-mono font-medium">{stats.temperature_c}°C</span>
+              {ui("ui_temperature")}</span>
+            <span className="font-mono font-medium">{stats.temperature_c}{ui("ui_c")}</span>
           </div>
         )}
 
@@ -50,8 +52,7 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
           <div className="flex items-center justify-between text-slate-300">
             <span className="flex items-center gap-1.5 text-slate-400">
               <Zap className="w-3.5 h-3.5 text-sky-400" />
-              GPU Utilization
-            </span>
+              {ui("ui_gpu_utilization")}</span>
             <span className="font-mono font-medium">{stats.utilization_pct}%</span>
           </div>
         )}
@@ -60,14 +61,13 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
           <div className="flex items-center justify-between text-slate-300 mb-1">
             <span className="flex items-center gap-1.5 text-slate-400">
               <HardDrive className="w-3.5 h-3.5 text-purple-400" />
-              VRAM Memory
-            </span>
+              {ui("ui_vram_memory")}</span>
             <span className="font-mono font-medium">
-              {usedGb}G / {totalGb}G <span className="text-slate-400 text-[11px]">({pct}%)</span>
+              {usedGb}{ui("ui_g")}{totalGb}{ui("ui_g_3")}<span className="text-slate-400 text-[11px]">({pct}%)</span>
             </span>
           </div>
           <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-            <ProgressBar label="Observed progress" value={pct} className={`h-full transition-all duration-300 ${barColor}`} />
+            <ProgressBar label={ui("ui_observed_progress")} value={pct} className={`h-full transition-all duration-300 ${barColor}`} />
           </div>
         </div>
       </div>
@@ -75,18 +75,16 @@ export const GpuDetailPopover: React.FC<GpuDetailPopoverProps> = ({ stats }) => 
       {/* Per-process breakdown */}
       <div className="pt-2 border-t border-slate-800">
         <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-          Active Compute Tasks
-        </div>
+          {ui("ui_active_compute_tasks")}</div>
         {stats.processes.length === 0 ? (
           <div className="text-[11px] text-slate-500 italic py-1">
-            No dedicated compute processes running
-          </div>
+            {ui("ui_no_dedicated_compute_processes_running")}</div>
         ) : (
           <div className="space-y-1 bg-slate-950/60 rounded-lg p-2 border border-slate-800/60 max-h-32 overflow-y-auto">
             {stats.processes.map((proc) => {
               const procMb = proc.vram_used_mb;
               const procDisplay =
-                procMb >= 1024 ? `${(procMb / 1024).toFixed(1)} GB` : `${procMb} MB`;
+                procMb >= 1024 ? `${formatNumber((procMb / 1024), 1, 1)} GB` : `${procMb} MB`;
               return (
                 <div
                   key={proc.pid}

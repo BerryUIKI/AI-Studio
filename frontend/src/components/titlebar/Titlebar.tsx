@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import React, { useEffect, useState } from 'react';
 import {
   Sparkles,
@@ -80,6 +81,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
   onMaximizeChange,
   onCloseRequested,
 }) => {
+  const ui = useUiText();
   const [isDesktop, setIsDesktop] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -203,11 +205,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden md:inline font-semibold text-xs tracking-wide text-slate-100">
-            Berry AI Studio
-          </span>
+            {ui("ui_berry_ai_studio")}</span>
           <span className="hidden xl:inline text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-            v0.1.0
-          </span>
+            {ui("ui_v0_1_0")}</span>
         </div>
       </div>
 
@@ -215,12 +215,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       <div className="flex items-center gap-1.5 ml-3" data-no-drag>
         <button
           onClick={onOpenProjectManager ? onOpenProjectManager : () => setIsManagerModalOpen(true)}
-          title="Open Project Manager (Switch, Create, or Rename Projects)"
+          title={ui("ui_open_project_manager_switch_create_or_rename_projects")}
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm max-w-[170px]"
           data-testid="project-manager-btn"
         >
           <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="truncate">{currentProject ? currentProject.name : 'Projects'}</span>
+          <span className="truncate">{currentProject ? currentProject.name : ui("ui_projects")}</span>
         </button>
 
         <button
@@ -228,12 +228,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           disabled={autosaveStatus === 'saving'}
           title={
             autosaveStatus === 'saving'
-              ? 'Saving project...'
+              ? ui("ui_saving_project")
               : autosaveStatus === 'dirty'
-              ? 'Unsaved changes (Click to Save or Ctrl+S)'
+              ? ui("ui_unsaved_changes_click_to_save_or_ctrl_s")
               : autosaveStatus === 'error'
-              ? 'Save failed (Click to retry)'
-              : 'Project saved'
+              ? ui("ui_save_failed_click_to_retry")
+              : ui("ui_project_saved")
           }
           className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition shadow-sm ${
             autosaveStatus === 'dirty'
@@ -257,12 +257,12 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           )}
           <span className="text-[11px]">
             {autosaveStatus === 'saving'
-              ? 'Saving'
+              ? ui("ui_saving")
               : autosaveStatus === 'dirty'
-              ? 'Save'
+              ? ui("ui_save")
               : autosaveStatus === 'error'
-              ? 'Error'
-              : 'Saved'}
+              ? ui("ui_error")
+              : ui("ui_saved")}
           </span>
         </button>
       </div>
@@ -272,43 +272,43 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         {/* Import Image Button */}
         <button
           onClick={onImportImage}
-          title="Import an image directly onto the canvas"
+          title={ui("ui_import_an_image_directly_onto_the_canvas")}
           className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
         >
           <Upload className="w-3 h-3 text-indigo-400" />
-          <span>Import</span>
+          <span>{ui("ui_import")}</span>
         </button>
 
         {/* Cloud BYOK Settings Button */}
         <button
           onClick={onOpenCloud}
-          aria-label="Cloud BYOK"
-          title="Configure BYOK Cloud Providers (OpenAI, Fal.ai, SiliconFlow)"
+          aria-label={ui("ui_cloud_byok")}
+          title={ui("ui_configure_byok_cloud_providers_openai_fal_ai_siliconflow")}
           className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
         >
           <Cloud className="w-3 h-3 text-sky-400" />
-          <span className="hidden xl:inline">Cloud BYOK</span>
+          <span className="hidden xl:inline">{ui("ui_cloud_byok")}</span>
         </button>
 
         {/* Environment Manager Button */}
         <button
           onClick={onOpenManager}
-          aria-label="Environment"
-          title="Open Environment Manager (Engines, Models, Updates, Core)"
+          aria-label={ui("ui_environment")}
+          title={ui("ui_open_environment_manager_engines_models_updates_core")}
           className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
         >
           <Server className="w-3 h-3 text-purple-400" />
-          <span className="hidden xl:inline">Environment</span>
+          <span className="hidden xl:inline">{ui("ui_environment")}</span>
         </button>
 
         <details className="relative" data-no-drag>
-          <summary aria-label="Advanced tools" className="cursor-pointer rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs">Advanced</summary>
+          <summary aria-label={ui("ui_advanced_tools")} className="cursor-pointer rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs">{ui("ui_advanced")}</summary>
           <div className="absolute right-0 top-full mt-2 flex w-56 flex-col gap-2 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl z-50">
-            <p className="text-xs text-amber-200">Experimental workflows and Agent</p>
+            <p className="text-xs text-amber-200">{ui("ui_experimental_workflows_and_agent")}</p>
         {/* Toggle Node Palette for Power Users */}
         <button
           onClick={onToggleNodePalette}
-          title="Toggle Node Palette (Node Graph Mode)"
+          title={ui("ui_toggle_node_palette_node_graph_mode")}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border transition shadow-sm ${
             showNodePalette
               ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40'
@@ -316,7 +316,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           }`}
         >
           <Layers className="w-3 h-3" />
-          <span>Nodes</span>
+          <span>{ui("ui_nodes")}</span>
         </button>
 
         {/* Graph Execution Runner */}
@@ -327,7 +327,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium shadow-md shadow-indigo-600/20 transition"
           >
             <Play className={`w-3 h-3 fill-current ${isExecuting ? 'animate-pulse' : ''}`} />
-            <span>{isExecuting ? 'Running...' : 'Run Graph'}</span>
+            <span>{isExecuting ? ui("ui_running_3") : ui("ui_run_graph")}</span>
           </button>
         )}
 
@@ -335,7 +335,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         <div className="flex items-center ml-1 border-l border-white/[0.06] pl-1.5" data-no-drag>
           <button
             onClick={onToggleAgent}
-            title="Toggle AI Creative Agent (Natural language workflows & Comfy assistant)"
+            title={ui("ui_toggle_ai_creative_agent_natural_language_workflows_comfy")}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 shadow-sm ${
               showAgentPanel
                 ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-indigo-500/20 ring-1 ring-indigo-500/30'
@@ -343,7 +343,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             }`}
           >
             <Sparkles className={`w-3.5 h-3.5 ${showAgentPanel ? 'text-amber-400 animate-spin-slow' : 'text-amber-400'}`} />
-            <span>Agent</span>
+            <span>{ui("ui_agent")}</span>
             <PanelRight className={`w-3 h-3 ml-0.5 transition-transform duration-150 ${showAgentPanel ? 'text-indigo-300 rotate-180' : 'text-slate-400'}`} />
           </button>
         </div>
@@ -355,7 +355,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
         <button
           onClick={onClearCanvas}
           disabled={!hasNodes || isExecuting}
-          title="Clear canvas objects"
+          title={ui("ui_clear_canvas_objects")}
           className="p-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 disabled:opacity-40 disabled:cursor-not-allowed text-slate-400 hover:text-rose-400 border border-slate-700/60 transition shadow-sm"
         >
           <Trash2 className="w-3 h-3" />
@@ -369,31 +369,31 @@ export const Titlebar: React.FC<TitlebarProps> = ({
           {/* Backend Connection */}
           <div
             className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/70 border border-white/[0.06] text-[11px]"
-            title={`Backend Service: ${backendOnline ? 'Online (Ready)' : 'Connecting or Offline'}`}
+            title={ui("ui_backend_service_value", { value1: backendOnline ? 'Online (Ready)' : 'Connecting or Offline' })}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
                 backendOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-rose-400 animate-pulse'
               }`}
             />
-            <span className="hidden lg:inline text-slate-300 font-medium">Backend</span>
+            <span className="hidden lg:inline text-slate-300 font-medium">{ui("ui_backend")}</span>
           </div>
 
           {/* ComfyUI Indicator */}
           <div
             className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/70 border border-white/[0.06] text-[11px]"
-            title={`ComfyUI Engine: ${comfyStatus?.online ? 'Online' : 'Standby'}`}
+            title={ui("ui_comfyui_engine_value", { value1: comfyStatus?.online ? 'Online' : 'Standby' })}
           >
             <Cpu className={`w-3 h-3 ${comfyStatus?.online ? 'text-emerald-400' : 'text-slate-400'}`} />
             <span className="hidden lg:inline text-slate-300">
-              {comfyStatus?.online ? 'Engine Active' : 'Standby'}
+              {comfyStatus?.online ? ui("ui_engine_active") : ui("ui_standby")}
             </span>
             {comfyStatus?.online && nativeComfyUrl && (
               <a
                 href={nativeComfyUrl}
                 target="_blank"
                 rel="noreferrer"
-                title="Open ComfyUI native web interface in a new tab"
+                title={ui("ui_open_comfyui_native_web_interface_in_a_new")}
                 className="p-0.5 rounded text-slate-400 hover:text-indigo-400 transition"
               >
                 <ExternalLink className="w-2.5 h-2.5" />
@@ -402,7 +402,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             {runtimeStatus?.installed && (
               <button
                 onClick={toggleRuntime}
-                title={runtimeStatus.running ? 'Stop isolated engine' : 'Start isolated engine'}
+                title={runtimeStatus.running ? ui("ui_stop_isolated_engine") : ui("ui_start_isolated_engine")}
                 className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-indigo-400 transition"
               >
                 <Power className={`w-2.5 h-2.5 ${runtimeStatus.running ? 'text-emerald-400' : 'text-slate-400'}`} />
@@ -420,7 +420,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             {/* Minimize */}
             <button
               onClick={handleMinimize}
-              title="Minimize"
+              title={ui("ui_minimize")}
               className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors"
             >
               <Minus className="w-3.5 h-3.5" />
@@ -429,7 +429,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             {/* Maximize / Restore */}
             <button
               onClick={handleToggleMaximize}
-              title={isMaximized ? 'Restore Down' : 'Maximize'}
+              title={isMaximized ? ui("ui_restore_down") : ui("ui_maximize")}
               className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors"
             >
               {isMaximized ? (
@@ -442,7 +442,7 @@ export const Titlebar: React.FC<TitlebarProps> = ({
             {/* Close */}
             <button
               onClick={handleClose}
-              title="Close"
+              title={ui("ui_close")}
               className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-600 active:bg-rose-700 transition-colors"
             >
               <X className="w-3.5 h-3.5" />

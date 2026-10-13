@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import React from 'react';
 import {
   Home,
@@ -45,6 +46,7 @@ export const GlobalNavRail: React.FC<GlobalNavRailProps> = ({
   webuiRunning = false,
   isGenerating = false,
 }) => {
+  const ui = useUiText();
   const { activeView, isRailCollapsed, setActiveView, toggleRail } = useNavigationStore();
 
   const getEngineStatus = (id: ViewType) => {
@@ -105,7 +107,7 @@ export const GlobalNavRail: React.FC<GlobalNavRailProps> = ({
         {isRailCollapsed && (
           <div className="absolute left-full ml-2 px-2 py-1 bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-150 z-50 whitespace-nowrap">
             {item.label}
-            {status?.isRunning && <span className="ml-1.5 text-emerald-400 font-semibold">(Running)</span>}
+            {status?.isRunning && <span className="ml-1.5 text-emerald-400 font-semibold">{ui("ui_running_2")}</span>}
           </div>
         )}
       </button>
@@ -123,14 +125,14 @@ export const GlobalNavRail: React.FC<GlobalNavRailProps> = ({
         {/* Rail expand/collapse button */}
         <button
           onClick={toggleRail}
-          aria-label={isRailCollapsed ? 'Expand navigation rail' : 'Collapse navigation rail'}
+          aria-label={isRailCollapsed ? ui("ui_expand_navigation_rail") : ui("ui_collapse_navigation_rail")}
           className="flex items-center justify-center w-full h-9 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors mb-2"
         >
           {isRailCollapsed ? (
             <Menu className="w-5 h-5" />
           ) : (
             <div className="flex items-center justify-between w-full px-2">
-              <span className="text-xs font-bold text-slate-300 tracking-wider uppercase">Workspace</span>
+              <span className="text-xs font-bold text-slate-300 tracking-wider uppercase">{ui("ui_workspace")}</span>
               <ChevronLeft className="w-4 h-4 text-slate-400" />
             </div>
           )}
@@ -140,7 +142,7 @@ export const GlobalNavRail: React.FC<GlobalNavRailProps> = ({
         <nav className="flex flex-col space-y-1">
           {mainNavItems.filter((item) => !item.isEngine).map(renderNavItem)}
           <details className="rounded border-t border-slate-800 pt-2">
-            <summary className="cursor-pointer px-1 py-2 text-xs text-slate-400" aria-label="Advanced native engines">{isRailCollapsed ? 'More' : 'Native engines'}</summary>
+            <summary className="cursor-pointer px-1 py-2 text-xs text-slate-400" aria-label={ui("ui_advanced_native_engines")}>{isRailCollapsed ? ui("ui_more") : ui("ui_native_engines")}</summary>
             {mainNavItems.filter((item) => item.isEngine).map(renderNavItem)}
           </details>
         </nav>
