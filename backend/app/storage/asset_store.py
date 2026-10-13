@@ -3,6 +3,8 @@
 import hashlib
 import json
 import os
+import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +14,13 @@ import httpx
 from app.schemas.project import AssetRecord
 from app.storage.db import DatabaseManager, db_manager, get_default_data_dir
 from app.core.media_validator import inspect_media_metadata
+from app.core.content_identity import hash_file
 from app.core.workers import run_blocking
+
+
+# Bounded stripes serialize identical owned paths, including separate store
+# instances, so Windows writers do not replace a file another writer is hashing.
+_asset_write_locks = tuple(threading.Lock() for _ in range(64))
 
 
 def _metadata_for_bytes(data: bytes) -> dict[str, Any]:
@@ -71,10 +79,28 @@ class AssetStore:
         return d
 
     def _persist_bytes(self, data: bytes, content_hash: str, extension: str) -> str:
+        with _asset_write_locks[int(content_hash[:2], 16) % len(_asset_write_locks)]:
+            return self._persist_bytes_locked(data, content_hash, extension)
+
+    def _persist_bytes_locked(self, data: bytes, content_hash: str, extension: str) -> str:
         target_path = self.assets_dir / content_hash[:2] / f"{content_hash}{extension}"
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        if not target_path.exists():
-            target_path.write_bytes(data)
+        if target_path.is_file() and hash_file(target_path) == content_hash:
+            return str(target_path.relative_to(self.assets_dir))
+
+        # A retry must repair corrupt owned content, and readers must never observe
+        # a partial new output. Publish only after the complete file is flushed.
+        descriptor, staging_name = tempfile.mkstemp(prefix=f".{content_hash}-", suffix=".tmp",
+                                                    dir=target_path.parent)
+        staging_path = Path(staging_name)
+        try:
+            with os.fdopen(descriptor, "wb") as staging:
+                staging.write(data)
+                staging.flush()
+                os.fsync(staging.fileno())
+            os.replace(staging_path, target_path)
+        finally:
+            staging_path.unlink(missing_ok=True)
         return str(target_path.relative_to(self.assets_dir))
 
     async def save_bytes(
