@@ -26,6 +26,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import urlparse
 
 from app.core.cache import cache_store
+from app.core.cloud_media import adopt_cloud_image
 from app.core.creative_identity import creative_execution_identity
 from app.core.content_identity import managed_asset_identity
 from app.core.task_registry import task_registry
@@ -58,6 +59,7 @@ from app.runners.mask_converter import (
     validate_mask_dimensions,
 )
 from app.runners.webui_runner import WebUIRunner
+from app.runners.volcengine_runner import SEEDREAM_MODEL, request_ark_image
 from app.runtime.credentials import credentials_manager
 from app.schemas.cloud import CloudProviderId
 from app.schemas.creative import (
@@ -86,7 +88,7 @@ def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
     """
     engine_id = (req.engine_id or "").lower()
     if req.connection_id:
-        if req.connection_id in {"cloud", "fal_ai", "siliconflow", "openai"}:
+        if req.connection_id in {"cloud", "fal_ai", "siliconflow", "openai", "volcengine"}:
             engine_id = req.connection_id
         else:
             selected = engine_manager.get_engine(req.connection_id)
@@ -115,6 +117,12 @@ def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
         )
 
     # Cloud Engine resolution
+    if engine_id == "volcengine":
+        if action not in (CreativeActionType.TXT2IMG, CreativeActionType.IMG2IMG):
+            raise ValueError(f"Volcengine Ark does not support {action.value} in this adapter.")
+        if req.model != SEEDREAM_MODEL:
+            raise ValueError("Select the configured Seedream 4.0 model; automatic model substitution is disabled.")
+        return CreativeExecutionPlan(engine="cloud", provider_id="volcengine", target_model=req.model, action=action)
     # 1. Explicit cloud provider requested
     if engine_id in ("fal_ai", "fal", "cloud_fal"):
         target_model = req.model
@@ -238,6 +246,11 @@ def compute_creative_cache_hash(
         "motion_bucket_id": req.motion_bucket_id,
         "duration_seconds": req.duration_seconds,
     }
+    if effective_provider == "volcengine":
+        for ignored in ("negative_prompt", "steps", "cfg_scale", "denoise", "upscale_factor", "upscaler_name", "fps", "num_frames", "motion_bucket_id", "duration_seconds"):
+            canonical_payload.pop(ignored, None)
+        canonical_payload["variation_nonce"] = canonical_payload.pop("seed")
+        canonical_payload.update({"watermark": True, "sequential_image_generation": "disabled"})
     raw = json.dumps(canonical_payload, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -350,7 +363,7 @@ class CreativeRunner:
 
         # Cloud task cancellation disclaimer
         engine_id = task_info.get("engine", "")
-        is_cloud = "cloud" in engine_id or engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai")
+        is_cloud = "cloud" in engine_id or engine_id in ("fal_ai", "fal", "siliconflow", "silicon", "openai", "volcengine")
         disclaimer = ("External cloud providers may continue work and incur charges; remote cancellation is not confirmed."
                       if is_cloud else "This engine has no task-scoped active abort; awaiting the actual outcome to avoid interrupting other jobs.")
 
@@ -400,6 +413,7 @@ class CreativeRunner:
 
     async def _execute(self, req: CreativeActionRequest, task_id: str, persisted: TaskRecord) -> CreativeActionResult:
         start_time = time.monotonic()
+        explicit_dimensions = bool({"width", "height"} & req.model_fields_set)
         cancel_event = task_registry.get_cancel_event(task_id) or asyncio.Event()
         is_video = req.action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO)
 
@@ -497,6 +511,17 @@ class CreativeRunner:
         try:
             # 1. Resolve unified execution plan before cache check & dispatch
             plan = resolve_execution_plan(req)
+            if plan.provider_id == "volcengine":
+                if not explicit_dimensions:
+                    dimensions = {"1:1": (2048, 2048), "16:9": (2560, 1440), "9:16": (1440, 2560),
+                                  "4:3": (2304, 1728), "3:4": (1728, 2304)}
+                    if req.aspect_ratio not in dimensions:
+                        raise ValueError("Choose a supported Ark aspect ratio or explicit dimensions.")
+                    req.width, req.height = dimensions[req.aspect_ratio]
+                else:
+                    req.width, req.height = persisted.params.get("width", 512), persisted.params.get("height", 512)
+                if not 921600 <= req.width * req.height <= 16777216 or req.height <= 0 or not 1 / 16 <= req.width / req.height <= 16:
+                    raise ValueError("Seedream output must contain 921600–16777216 pixels with aspect ratio 1:16–16:1.")
             persisted.params = req.model_dump()
             persisted.metadata = {"engine": plan.engine, "provider_id": plan.provider_id, "model": plan.target_model}
             await task_store.save_task(persisted)
@@ -619,16 +644,16 @@ class CreativeRunner:
             provenance = GenerationProvenance(
                 action=req.action,
                 prompt=req.prompt,
-                negative_prompt=req.negative_prompt,
+                negative_prompt=None if plan.provider_id == "volcengine" else req.negative_prompt,
                 model=effective_model,
                 model_revision=model_hash,
                 model_hash=model_hash,
                 connection_id=connection_id,  # Issue #127
                 engine_id=plan.provider_id if plan.engine == "cloud" else plan.engine,
                 provider_id=plan.provider_id,
-                seed=req.seed,
-                steps=req.steps,
-                cfg_scale=req.cfg_scale,
+                seed=None if plan.provider_id == "volcengine" else req.seed,
+                steps=None if plan.provider_id == "volcengine" else req.steps,
+                cfg_scale=None if plan.provider_id == "volcengine" else req.cfg_scale,
                 dimensions=f"{out_w}x{out_h}",
                 created_at=datetime.now(timezone.utc).isoformat(),
                 source_asset_id=req.input_image_id,
@@ -638,7 +663,7 @@ class CreativeRunner:
                 num_frames=req.num_frames if is_video else None,
                 duration_seconds=req.duration_seconds if is_video else None,
                 motion_bucket_id=req.motion_bucket_id if is_video else None,
-                parameters=req.model_dump(),
+                parameters=action_data.get("effective_parameters", req.model_dump()),
             )
 
             result = CreativeActionResult(
@@ -868,6 +893,22 @@ class CreativeRunner:
         out_w = req.width
         out_h = req.height
         remote_url: Optional[str] = None
+
+        if plan.provider_id == "volcengine":
+            if req.action == CreativeActionType.IMG2IMG and not image_b64:
+                raise ValueError("Source image is required for Ark reference editing.")
+            output = await request_ark_image(prompt=req.prompt, model=plan.target_model,
+                width=req.width, height=req.height, api_key=credentials_manager.get_key(CloudProviderId.VOLCENGINE) or "",
+                image_data_uri=f"data:image/png;base64,{image_b64}" if image_b64 else None)
+            asset = await adopt_cloud_image(store=asset_store, url=output.url, content=output.content, project_id=req.project_id)
+            return {"asset_id": asset.id, "image_url": f"/api/v1/assets/{asset.id}/content",
+                "width": asset.width, "height": asset.height, "effective_model": output.effective_model,
+                "effective_parameters": {"prompt": req.prompt, "width": req.width, "height": req.height,
+                    "model": plan.target_model, "requested_model": output.requested_model, "response_model": output.effective_model,
+                    "model_identity_source": "response" if output.effective_model else "requested",
+                    "variation_nonce": req.seed, "input_image_id": req.input_image_id,
+                    "watermark": True, "sequential_image_generation": "disabled", "response_format": "url",
+                    "request_id": output.request_id}}
 
         if req.action == CreativeActionType.INPAINT:
             if not image_bytes or not mask_bytes:
