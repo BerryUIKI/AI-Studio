@@ -4,10 +4,14 @@ import React, { useEffect, useRef } from 'react';
 import { useHardwareStore } from '../../stores/useHardwareStore';
 import { GpuDetailPopover } from './GpuDetailPopover';
 import { Cloud, Cpu } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 export const GpuStatusIndicator: React.FC = () => {
   const ui = useUiText();
-  const { stats, isPopoverOpen, setIsPopoverOpen, fetchGpuStats } = useHardwareStore();
+  const { stats, error, isPopoverOpen, setIsPopoverOpen, fetchGpuStats } = useHardwareStore(useShallow((state) => ({
+    stats: state.stats, error: state.error, isPopoverOpen: state.isPopoverOpen,
+    setIsPopoverOpen: state.setIsPopoverOpen, fetchGpuStats: state.fetchGpuStats,
+  })));
   const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -42,8 +46,15 @@ export const GpuStatusIndicator: React.FC = () => {
     }, 150);
   };
 
-  // If no dedicated GPU detected or telemetry offline, show Cloud Mode
-  if (!stats || !stats.has_gpu) {
+  if (error || !stats) {
+    return <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-400 select-none"
+      role="status" title={ui(error ? "ui_gpu_telemetry_unavailable" : "ui_gpu_checking")} data-no-drag>
+      <Cpu className="w-3 h-3 text-slate-500" />
+      <span>{ui(error ? "ui_gpu_telemetry_unavailable" : "ui_gpu_checking")}</span>
+    </div>;
+  }
+
+  if (!stats.has_gpu) {
     return (
       <div
         className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-400 select-none"
