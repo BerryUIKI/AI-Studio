@@ -148,10 +148,11 @@ class CredentialManager:
             logger.error(f"Error saving credentials: {e}")
             raise OSError(f"Failed to persist credentials: {e}") from e
 
-    def get_key(self, provider_id: CloudProviderId) -> Optional[str]:
+    def get_key(self, provider_id: CloudProviderId | str) -> Optional[str]:
         """Resolve API key from stored BYOK credentials or environment variable."""
         # 1. Check user-stored BYOK key
-        stored = self._memory_creds.get(provider_id.value)
+        identifier = provider_id.value if isinstance(provider_id, CloudProviderId) else provider_id
+        stored = self._memory_creds.get(identifier)
         if stored:
             return stored
 
@@ -165,16 +166,47 @@ class CredentialManager:
 
         return None
 
-    def set_key(self, provider_id: CloudProviderId, api_key: str) -> None:
+    def set_key(self, provider_id: CloudProviderId | str, api_key: str) -> None:
         """Store an API key for a cloud provider."""
-        self._memory_creds[provider_id.value] = api_key.strip()
-        self._save()
-
-    def delete_key(self, provider_id: CloudProviderId) -> None:
-        """Remove stored API key."""
-        if provider_id.value in self._memory_creds:
-            del self._memory_creds[provider_id.value]
+        identifier = provider_id.value if isinstance(provider_id, CloudProviderId) else provider_id
+        old = self._memory_creds.get(identifier)
+        revision_key = f"_revision:{identifier}"
+        old_revision = self._memory_creds.get(revision_key)
+        revision = self.key_revision(provider_id)
+        self._memory_creds[identifier] = api_key.strip()
+        if old != api_key.strip():
+            self._memory_creds[revision_key] = str(revision + 1)
+        try:
             self._save()
+        except Exception:
+            if old is None:
+                self._memory_creds.pop(identifier, None)
+            else:
+                self._memory_creds[identifier] = old
+            if old_revision is None:
+                self._memory_creds.pop(revision_key, None)
+            else:
+                self._memory_creds[revision_key] = old_revision
+            raise
+
+    def key_revision(self, provider_id: CloudProviderId | str) -> int:
+        """Durable cache namespace for credential replacement without hashing secrets."""
+        identifier = provider_id.value if isinstance(provider_id, CloudProviderId) else provider_id
+        try:
+            return int(self._memory_creds.get(f"_revision:{identifier}", "0"))
+        except (ValueError, TypeError):
+            return 0
+
+    def delete_key(self, provider_id: CloudProviderId | str) -> None:
+        """Remove stored API key."""
+        identifier = provider_id.value if isinstance(provider_id, CloudProviderId) else provider_id
+        if identifier in self._memory_creds:
+            old = self._memory_creds.pop(identifier)
+            try:
+                self._save()
+            except Exception:
+                self._memory_creds[identifier] = old
+                raise
 
     def list_providers(self) -> List[CloudProviderInfo]:
         """List cloud providers with capability matrices and redacted keys."""
@@ -245,6 +277,15 @@ class CredentialManager:
                 website_url="https://cloud.siliconflow.cn/account/ak",
             ),
         ]
+        from app.runtime.custom_providers import CustomProviderRegistry
+        for record in CustomProviderRegistry(self.data_dir).list():
+            spec = record.spec
+            available = spec.mode in ("rest", "javascript") or record.execution_trusted
+            providers.append(CloudProviderInfo(id=spec.id, name=spec.name, description=f"Custom platform ({spec.mode}).",
+                is_configured=available and (spec.auth == "none" or bool(self.get_key(spec.id))),
+                redacted_key=redact_key(self.get_key(spec.id) or ""), supported_models=spec.models,
+                action_models={action: spec.models for action in spec.actions}, capabilities=spec.actions,
+                upload_disclosure=spec.upload_disclosure, website_url=spec.endpoint, key_test_supported=False))
         return providers
 
     def get_llm_config(self) -> LLMConfig:
@@ -336,11 +377,11 @@ class CredentialManager:
                     message=f"Could not connect to {base_url}:{err_hint} ({e})",
                 )
 
-    async def test_key(self, provider_id: CloudProviderId, api_key: Optional[str] = None) -> TestKeyResult:
+    async def test_key(self, provider_id: CloudProviderId | str, api_key: Optional[str] = None) -> TestKeyResult:
         """Validate key against the provider's authentication endpoint."""
-        if provider_id == CloudProviderId.VOLCENGINE:
+        if provider_id == CloudProviderId.VOLCENGINE or str(provider_id).startswith("custom-"):
             return TestKeyResult(provider_id=provider_id, valid=False,
-                message="Ark has no verified non-billable connection check in this adapter. Save the key and explicitly create an image to test model access; generation may incur charges.")
+                message="This adapter has no verified non-billable connection check. Save the key and explicitly create an image to test model access; generation may incur charges.")
         key = api_key or self.get_key(provider_id)
         if not key and provider_id not in (CloudProviderId.LLAMA_SERVER,):
             return TestKeyResult(
