@@ -1,6 +1,7 @@
 import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
+import { useCreationSetupStore } from '../../stores/useCreationSetupStore';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Cloud, ExternalLink, Key, Loader2, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
 
@@ -14,6 +15,7 @@ interface CloudProviderInfo {
   capabilities: string[];
   upload_disclosure: string;
   website_url: string;
+  key_test_supported?: boolean;
 }
 
 interface CloudSettingsModalProps {
@@ -33,6 +35,7 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
       const res = await fetch('/api/v1/cloud/providers');
       if (res.ok) {
         const data = await res.json();
+        useCreationSetupStore.setState({ providers: data });
         setProviders(data.filter((provider: CloudProviderInfo) => provider.capabilities.some((action) => ['txt2img', 'img2img', 'inpaint', 'upscale'].includes(action))));
       }
     } catch {
@@ -199,6 +202,7 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
                     <Key className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="password"
+                      aria-label={ui("ui_provider_api_key", { provider: p.name })}
                       value={inputKeys[p.id] || ''}
                       onChange={(e) =>
                         setInputKeys((prev) => ({ ...prev, [p.id]: e.target.value }))
@@ -220,7 +224,8 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
 
                   <button
                     onClick={() => handleTestKey(p.id)}
-                    disabled={(!p.is_configured && !inputKeys[p.id]) || test?.loading}
+                    disabled={p.key_test_supported === false || (!p.is_configured && !inputKeys[p.id]) || test?.loading}
+                    title={p.key_test_supported === false ? ui("ui_no_free_key_test") : undefined}
                     className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5 whitespace-nowrap"
                   >
                     {test?.loading && <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />}
@@ -237,6 +242,8 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
                     </button>
                   )}
                 </div>
+
+                {p.key_test_supported === false && <p className="text-xs text-amber-200">{ui("ui_no_free_key_test")}</p>}
 
                 {/* Test Feedback Result */}
                 {test && !test.loading && (

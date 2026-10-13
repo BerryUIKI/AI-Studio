@@ -9,12 +9,12 @@ export function creativeRequestFromProvenance(
   return {
     action: provenance.action,
     prompt: provenance.prompt,
-    negative_prompt: provenance.negative_prompt,
+    negative_prompt: provenance.negative_prompt ?? undefined,
     model: provenance.model,
     connection_id: provenance.connection_id,
     engine_id: provenance.engine_id,
-    steps: provenance.steps,
-    cfg_scale: provenance.cfg_scale,
+    steps: provenance.steps ?? undefined,
+    cfg_scale: provenance.cfg_scale ?? undefined,
     aspect_ratio: undefined,
     width: width || undefined,
     height: height || undefined,
@@ -25,6 +25,6 @@ export function creativeRequestFromProvenance(
     duration_seconds: provenance.duration_seconds,
     motion_bucket_id: provenance.motion_bucket_id,
     ...provenance.parameters,
-    seed: variation ? -1 : provenance.seed,
+    seed: variation ? -1 : provenance.seed ?? (typeof provenance.parameters?.variation_nonce === 'number' ? provenance.parameters.variation_nonce : -1),
   };
 }

@@ -11,6 +11,12 @@ const provenance: GenerationProvenance = {
 };
 
 describe('creative replay', () => {
+  it('reuses a cloud variation nonce without claiming it is a provider seed', () => {
+    const cloud: GenerationProvenance = { ...provenance, provider_id: 'volcengine', seed: null, steps: null,
+      cfg_scale: null, negative_prompt: null, parameters: { variation_nonce: 731 } };
+    expect(creativeRequestFromProvenance(cloud)).toMatchObject({ seed: 731, steps: undefined, cfg_scale: undefined, negative_prompt: undefined });
+    expect(creativeRequestFromProvenance(cloud, true).seed).toBe(-1);
+  });
   it('restores saved settings and source assets rather than the current dock values', () => {
     expect(creativeRequestFromProvenance(provenance)).toMatchObject({
       model: 'original-alias', input_image_id: 'source', mask_image_id: 'mask',

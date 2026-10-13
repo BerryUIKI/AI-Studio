@@ -364,9 +364,9 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
               <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
                 {p.action}
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+              {p.seed != null && <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
                 {ui("ui_seed")}{p.seed}
-              </span>
+              </span>}
               {p.fps && (
                 <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40">
                   {p.fps} {ui("ui_fps")}</span>
