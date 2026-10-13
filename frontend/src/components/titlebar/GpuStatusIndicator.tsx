@@ -1,9 +1,11 @@
+import { useUiText } from '../../i18n/useUiText';
 import React, { useEffect, useRef } from 'react';
 import { useHardwareStore } from '../../stores/useHardwareStore';
 import { GpuDetailPopover } from './GpuDetailPopover';
 import { Cloud, Cpu } from 'lucide-react';
 
 export const GpuStatusIndicator: React.FC = () => {
+  const ui = useUiText();
   const { stats, isPopoverOpen, setIsPopoverOpen, fetchGpuStats } = useHardwareStore();
   const enterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,11 +46,11 @@ export const GpuStatusIndicator: React.FC = () => {
     return (
       <div
         className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/40 border border-white/[0.04] text-[11px] text-slate-400 select-none"
-        title="Running in Cloud-First Mode (No dedicated NVIDIA GPU detected)"
+        title={ui("ui_running_in_cloud_first_mode_no_dedicated_nvidia")}
         data-no-drag
       >
         <Cloud className="w-3 h-3 text-slate-500" />
-        <span className="text-slate-400 font-medium">Cloud Mode</span>
+        <span className="text-slate-400 font-medium">{ui("ui_cloud_mode")}</span>
       </div>
     );
   }
@@ -77,13 +79,13 @@ export const GpuStatusIndicator: React.FC = () => {
       <button
         onClick={() => setIsPopoverOpen(!isPopoverOpen)}
         className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-800/70 hover:bg-slate-700/80 border border-white/[0.08] hover:border-slate-600 transition-colors text-[11px] text-slate-200 select-none shadow-sm cursor-pointer"
-        title="View live GPU temperature, utilization, and process VRAM distribution"
+        title={ui("ui_view_live_gpu_temperature_utilization_and_process_vram")}
       >
         <span className={`w-1.5 h-1.5 rounded-full shadow-sm ${dotColor}`} />
         <Cpu className="w-3 h-3 text-indigo-400" />
         <span className="font-semibold text-slate-100">{shortName}</span>
         <span className="hidden lg:inline text-slate-400 font-mono">
-          {usedGb}G / {totalGb}G ({pct}%)
+          {usedGb}{ui("ui_g")}{totalGb}{ui("ui_g_2")}{pct}%)
         </span>
       </button>
 
