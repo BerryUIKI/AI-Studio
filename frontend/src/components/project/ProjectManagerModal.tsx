@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { Dialog } from '../ui/Dialog';
 import React, { useState } from 'react';
 import {
@@ -19,6 +20,7 @@ export interface ProjectManagerModalProps {
 }
 
 export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen, onClose }) => {
+  const ui = useUiText();
   const {
     currentProject,
     projects,
@@ -91,10 +93,10 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
   };
 
   return (
-    <Dialog title="Projects" onClose={handleClose}
+    <Dialog title={ui("ui_projects")} onClose={handleClose}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm animate-fade-in"
       onClick={handleClose}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
     >
       <div
         className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
@@ -107,13 +109,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
               <FolderOpen className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-slate-100">Project Library</h2>
-              <p className="text-xs text-slate-400">Manage and switch between your durable creative canvases</p>
+              <h2 className="text-lg font-semibold text-slate-100">{ui("ui_project_library")}</h2>
+              <p className="text-xs text-slate-400">{ui("ui_manage_and_switch_between_your_durable_creative_canvases")}</p>
             </div>
           </div>
           <button
             onClick={handleClose}
-            aria-label="Close dialog"
+            aria-label={ui("ui_close_dialog")}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
           >
             <X className="w-5 h-5" />
@@ -127,7 +129,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search projects..."
+                placeholder={ui("ui_search_projects")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
@@ -139,7 +141,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                 className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-xl flex items-center gap-1.5 transition shadow"
               >
                 <Plus className="w-4 h-4" />
-                <span>New Project</span>
+                <span>{ui("ui_new_project")}</span>
               </button>
             )}
           </div>
@@ -149,7 +151,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
             <form onSubmit={handleCreate} className="flex items-center gap-2 p-3 bg-slate-950/50 border border-indigo-500/30 rounded-xl">
               <input
                 type="text"
-                placeholder="Project name..."
+                placeholder={ui("ui_project_name")}
                 autoFocus
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
@@ -159,15 +161,13 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                 type="submit"
                 className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg transition"
               >
-                Create
-              </button>
+                {ui("ui_create")}</button>
               <button
                 type="button"
                 onClick={() => setIsCreating(false)}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition"
               >
-                Cancel
-              </button>
+                {ui("ui_cancel")}</button>
             </form>
           )}
         </div>
@@ -177,7 +177,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
           {filteredProjects.length === 0 ? (
             <div className="py-12 text-center text-slate-500">
               <Layers className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm">No projects found</p>
+              <p className="text-sm">{ui("ui_no_projects_found")}</p>
             </div>
           ) : (
             filteredProjects.map((proj) => {
@@ -227,10 +227,9 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                         <span className="font-medium text-sm text-slate-200 truncate">{proj.name}</span>
                         {isActive && (
                           <span className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full">
-                            Active
-                          </span>
+                            {ui("ui_active")}</span>
                         )}
-                        <span className="text-[10px] font-mono text-slate-500">v{proj.version || 1}</span>
+                        <span className="text-[10px] font-mono text-slate-500">{ui("ui_v")}{proj.version || 1}</span>
                       </div>
                     )}
 
@@ -242,8 +241,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                       <span>•</span>
                       <span className="flex items-center gap-1">
                         <Layers className="w-3 h-3" />
-                        {nodeCount} items
-                      </span>
+                        {nodeCount} {ui("ui_items")}</span>
                     </div>
                   </div>
 
@@ -251,19 +249,17 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     {isConfirmingDelete ? (
                       <div className="flex items-center gap-1">
-                        <span className="text-xs text-rose-400">Delete?</span>
+                        <span className="text-xs text-rose-400">{ui("ui_delete")}</span>
                         <button
                           onClick={() => handleDelete(proj.id)}
                           className="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-xs font-medium"
                         >
-                          Yes
-                        </button>
+                          {ui("ui_yes")}</button>
                         <button
                           onClick={() => setConfirmDeleteId(null)}
                           className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs"
                         >
-                          No
-                        </button>
+                          {ui("ui_no")}</button>
                       </div>
                     ) : (
                       <>
@@ -275,20 +271,19 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                             }}
                             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition"
                           >
-                            Open
-                          </button>
+                            {ui("ui_open")}</button>
                         )}
                         <button
                           onClick={() => handleStartRename(proj.id, proj.name)}
                           className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-                          title="Rename"
+                          title={ui("ui_rename")}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(proj.id)}
                           className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition"
-                          title="Delete project"
+                          title={ui("ui_delete_project")}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

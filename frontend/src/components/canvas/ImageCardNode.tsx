@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { memo, useEffect, useRef, useState } from 'react';
 import { NodeProps } from '@xyflow/react';
 import {
@@ -22,6 +23,7 @@ import { CardMedia } from './CardMedia';
 import { FloatingCardToolbar } from './FloatingCardToolbar';
 
 export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
+  const ui = useUiText();
   const cardData = data as unknown as ImageCardData;
   const setReferenceImage = useCreativeStore((state) => state.setReferenceImage);
   const openInpaint = useCreativeStore((state) => state.openInpaint);
@@ -101,7 +103,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
     e.stopPropagation();
     setExportError(null);
     void downloadOriginalMedia(cardData).catch((error: unknown) =>
-      setExportError(error instanceof Error ? error.message : 'Could not export media'));
+      setExportError(error instanceof Error ? error.message : ui("ui_could_not_export_media")));
   };
 
   const handleRemove = (e: React.MouseEvent) => {
@@ -156,28 +158,28 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
               <>
                 <button
                   onClick={handleAnimate}
-                  title="Animate (Image-to-Video)"
+                  title={ui("ui_animate_image_to_video")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-purple-400 hover:bg-slate-800 transition"
                 >
                   <Video className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={handleVary}
-                  title="Vary (Image-to-Image)"
+                  title={ui("ui_vary_image_to_image")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-indigo-400 hover:bg-slate-800 transition"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={handleInpaint}
-                  title="Inpaint / Mask"
+                  title={ui("ui_inpaint_mask")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-amber-400 hover:bg-slate-800 transition"
                 >
                   <Paintbrush className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={handleUpscale}
-                  title="Upscale Image"
+                  title={ui("ui_upscale_image_2")}
                   className="p-1.5 rounded-lg text-slate-300 hover:text-emerald-400 hover:bg-slate-800 transition"
                 >
                   <Maximize2 className="w-3.5 h-3.5" />
@@ -186,14 +188,14 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
             )}
             <button
               onClick={handleExport}
-              title="Export / Download"
+              title={ui("ui_export_download")}
               className="p-1.5 rounded-lg text-slate-300 hover:text-blue-400 hover:bg-slate-800 transition"
             >
               <Download className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={handleRemove}
-              title="Remove from Canvas"
+              title={ui("ui_remove_from_canvas")}
               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -224,9 +226,9 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
 
                 <div className="space-y-1 w-full">
                   <span className="text-xs font-semibold text-slate-200 block">
-                    {cardData.generationStage || 'Generating...'}
+                    {cardData.generationStage || ui("ui_generating")}
                   </span>
-                  <p className="text-[10px] text-slate-400">Waiting for an execution outcome</p>
+                  <p className="text-[10px] text-slate-400">{ui("ui_waiting_for_an_execution_outcome")}</p>
                 </div>
               </div>
             </div>
@@ -239,13 +241,13 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
               <div className="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-2">
                 <AlertTriangle className="w-5 h-5" />
               </div>
-              <span className="text-xs font-semibold text-rose-200">Asset File Missing</span>
+              <span className="text-xs font-semibold text-rose-200">{ui("ui_asset_file_missing")}</span>
               <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 max-w-[240px]">
-                {cardData.label || 'Referenced file cannot be found on disk.'}
+                {cardData.label || ui("ui_referenced_file_cannot_be_found_on_disk")}
               </p>
               {cardData.assetId && (
                 <span className="text-[10px] text-slate-500 font-mono mt-0.5 truncate max-w-[220px]">
-                  ID: {cardData.assetId}
+                  {ui("ui_id")}{cardData.assetId}
                 </span>
               )}
 
@@ -269,12 +271,12 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                   {isReuploading ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Uploading...</span>
+                      <span>{ui("ui_uploading")}</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-3.5 h-3.5" />
-                      <span>Locate / Replace File</span>
+                      <span>{ui("ui_locate_replace_file")}</span>
                     </>
                   )}
                 </button>
@@ -289,7 +291,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                     className="flex-1 py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition border border-slate-700"
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span>Retry</span>
+                    <span>{ui("ui_retry")}</span>
                   </button>
 
                   {p && (
@@ -301,7 +303,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                       className="flex-1 py-1 px-2 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 rounded-lg text-xs font-medium flex items-center justify-center gap-1 transition border border-indigo-800"
                     >
                       <Sparkles className="w-3 h-3" />
-                      <span>Regenerate</span>
+                      <span>{ui("ui_regenerate")}</span>
                     </button>
                   )}
 
@@ -311,7 +313,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                       removeNode(id);
                     }}
                     className="py-1 px-2 bg-rose-950/60 hover:bg-rose-900/60 text-rose-300 rounded-lg text-xs font-medium flex items-center justify-center transition border border-rose-800/60"
-                    title="Remove missing card"
+                    title={ui("ui_remove_missing_card")}
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -325,16 +327,15 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                 onError={() => setIsMissingAsset(true)} />
               {cardData.isAnimated && (
                 <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-purple-950/80 text-[10px] text-purple-300">
-                  Animated image
-                </div>
+                  {ui("ui_animated_image")}</div>
               )}
               {exportError && <p role="alert" className="absolute bottom-2 right-2 text-xs text-red-300">{exportError}</p>}
 
               {p && (
                 <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/75 backdrop-blur text-[10px] font-mono text-slate-300 border border-slate-800">
                   {p.dimensions}
-                  {p.fps ? ` · ${p.fps}fps` : ''}
-                  {p.duration_seconds ? ` · ${p.duration_seconds}s` : ''}
+                  {p.fps ? ui("ui_valuefps", { value1: p.fps }) : ''}
+                  {p.duration_seconds ? ui("ui_values", { value1: p.duration_seconds }) : ''}
                 </div>
               )}
             </>
@@ -345,7 +346,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
         <div className="p-3 bg-slate-900 border-t border-slate-800/80">
           <div className="flex items-start justify-between gap-2">
             <p className="text-xs text-slate-200 font-medium line-clamp-2 leading-relaxed flex-1">
-              {cardData.label || 'Untitled Asset'}
+              {cardData.label || ui("ui_untitled_asset")}
             </p>
             {hasLineage && (
               <button
@@ -353,7 +354,7 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                   e.stopPropagation();
                   arrangeBranchTree(id);
                 }}
-                title="Lineage variation (Click to align branch tree)"
+                title={ui("ui_lineage_variation_click_to_align_branch_tree")}
                 className="p-1 rounded-md bg-indigo-950/60 text-indigo-400 hover:text-indigo-200 border border-indigo-800/50 hover:bg-indigo-900/60 transition"
               >
                 <GitBranch className="w-3 h-3" />
@@ -370,17 +371,16 @@ export const ImageCardNode = memo(({ id, data, selected }: NodeProps) => {
                 {p.action}
               </span>
               <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                seed: {p.seed}
+                {ui("ui_seed")}{p.seed}
               </span>
               {p.fps && (
                 <span className="px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/40">
-                  {p.fps} fps
-                </span>
+                  {p.fps} {ui("ui_fps")}</span>
               )}
             </div>
           ) : (
             <div className="mt-2 text-[10px] text-slate-500">
-              {isGenerating ? 'Synthesizing...' : 'Imported asset'}
+              {isGenerating ? ui("ui_synthesizing") : ui("ui_imported_asset")}
             </div>
           )}
         </div>

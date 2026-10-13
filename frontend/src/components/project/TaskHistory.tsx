@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { mediaCardFields } from '../../utils/media';
 import { useCallback, useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
@@ -9,6 +10,7 @@ import { CreativeActionRequest } from '../../types/creative';
 import { nextResultPosition } from '../../utils/canvasPlacement';
 
 export function TaskHistory() {
+  const ui = useUiText();
   const projectId = useProjectStore((state) => state.currentProject?.id);
   const generating = useCreativeStore((state) => state.isGenerating);
   const [open, setOpen] = useState(false);
@@ -19,13 +21,13 @@ export function TaskHistory() {
     if (!projectId) return;
     try {
       const response = await fetch(`/api/v1/tasks/history?project_id=${encodeURIComponent(projectId)}`, { signal });
-      if (!response.ok) throw new Error(`Could not load history (${response.status})`);
+      if (!response.ok) throw new Error(ui("ui_could_not_load_history_value", { value1: response.status }));
       const history: GenerationTask[] = await response.json();
       if (signal?.aborted || useProjectStore.getState().currentProject?.id !== projectId) return;
       setTasks(history);
       setError(null);
     } catch (cause) {
-      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : 'Could not load history');
+      if (!signal?.aborted) setError(cause instanceof Error ? cause.message : ui("ui_could_not_load_history"));
     }
   }, [projectId]);
 
@@ -54,18 +56,18 @@ export function TaskHistory() {
 
   const retry = async (task: GenerationTask) => {
     if (generating || useProjectStore.getState().currentProject?.id !== projectId) return;
-    if (task.status === 'outcome-unknown' && !window.confirm('The previous provider job may still be running or already completed. A new submission may incur duplicate charges. Submit a new task anyway?')) return;
+    if (task.status === 'outcome-unknown' && !window.confirm(ui("ui_the_previous_provider_job_may_still_be_running"))) return;
     await useCreativeStore.getState().executeCreativeAction({ ...task.params as Partial<CreativeActionRequest>, project_id: projectId });
     await refresh();
   };
 
   return (
     <details className="absolute right-4 top-4 z-20 w-80 rounded-xl border border-slate-700 bg-slate-900 text-slate-200 shadow-xl" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">Project generation history</summary>
+      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">{ui("ui_project_generation_history")}</summary>
       <div className="max-h-80 space-y-3 overflow-auto px-4 pb-4">
-        <button type="button" className="rounded border border-slate-600 px-3 py-1 text-xs" onClick={() => void refresh()}>Refresh</button>
+        <button type="button" className="rounded border border-slate-600 px-3 py-1 text-xs" onClick={() => void refresh()}>{ui("ui_refresh")}</button>
         {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        {!error && tasks.length === 0 && <p className="text-sm text-slate-400">No recorded tasks in this project.</p>}
+        {!error && tasks.length === 0 && <p className="text-sm text-slate-400">{ui("ui_no_recorded_tasks_in_this_project")}</p>}
         {tasks.map((task) => (
           <article key={task.id} className="space-y-1 border-t border-slate-700 pt-2 text-sm">
             <p className="font-medium">{task.node_type} · {task.status}</p>
@@ -74,8 +76,8 @@ export function TaskHistory() {
             {task.error && <p className="text-xs text-amber-300">{task.error}</p>}
             {['failed', 'cancelled', 'interrupted', 'outcome-unknown'].includes(task.status)
               && ['txt2img', 'img2img', 'inpaint', 'upscale', 'txt2video', 'img2video'].includes(String(task.params.action))
-              && <button type="button" disabled={generating} className="rounded border border-slate-600 px-2 py-1 text-xs disabled:opacity-50" onClick={() => void retry(task)}>{task.status === 'outcome-unknown' ? 'Review and retry uncertain task' : 'Retry as a new task'}</button>}
-            {(task.outputs.image_url || task.outputs.video_url) && <button type="button" className="block rounded border border-slate-600 px-2 py-1 text-xs" onClick={() => placeResult(task)}>Place result on canvas</button>}
+              && <button type="button" disabled={generating} className="rounded border border-slate-600 px-2 py-1 text-xs disabled:opacity-50" onClick={() => void retry(task)}>{task.status === 'outcome-unknown' ? ui("ui_review_and_retry_uncertain_task") : ui("ui_retry_as_a_new_task")}</button>}
+            {(task.outputs.image_url || task.outputs.video_url) && <button type="button" className="block rounded border border-slate-600 px-2 py-1 text-xs" onClick={() => placeResult(task)}>{ui("ui_place_result_on_canvas")}</button>}
           </article>
         ))}
       </div>

@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import {
   Download,
   GitBranch,
@@ -20,6 +21,7 @@ interface FloatingCardToolbarProps {
 }
 
 export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId, data }) => {
+  const ui = useUiText();
   const { setReferenceImage, openInpaint, openUpscale, openImg2Video } = useCreativeStore();
   const { duplicateNode, removeNode, arrangeBranchTree } = useCanvasStore();
   const isGenerating = useCreativeStore((state) => state.isGenerating);
@@ -53,38 +55,38 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
         <>
           <button
             onClick={() => setReferenceImage(data)}
-            title="Vary (Image-to-Image reference)"
+            title={ui("ui_vary_image_to_image_reference")}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-indigo-300 hover:text-white hover:bg-indigo-600/30 transition"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Vary</span>
+            <span>{ui("ui_vary")}</span>
           </button>
 
           <button
             onClick={() => openInpaint(data)}
-            title="Inpaint / Mask"
+            title={ui("ui_inpaint_mask")}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-amber-300 hover:text-white hover:bg-amber-600/30 transition"
           >
             <Paintbrush className="w-3.5 h-3.5 text-amber-400" />
-            <span>Inpaint</span>
+            <span>{ui("ui_inpaint")}</span>
           </button>
 
           <button
             onClick={() => openUpscale(data)}
-            title="Upscale Resolution"
+            title={ui("ui_upscale_resolution")}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-300 hover:text-white hover:bg-emerald-600/30 transition"
           >
             <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Upscale</span>
+            <span>{ui("ui_upscale")}</span>
           </button>
 
           <button
             onClick={() => openImg2Video(data)}
-            title="Animate to Video"
+            title={ui("ui_animate_to_video")}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-purple-300 hover:text-white hover:bg-purple-600/30 transition"
           >
             <Video className="w-3.5 h-3.5 text-purple-400" />
-            <span>Animate</span>
+            <span>{ui("ui_animate")}</span>
           </button>
 
           <div className="w-[1px] h-4 bg-slate-800 mx-0.5" />
@@ -94,7 +96,7 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
       {/* Tree / Lineage branch alignment */}
       <button
         onClick={handleArrangeTree}
-        title="Arrange Branch Tree (Auto-align lineage hierarchy)"
+        title={ui("ui_arrange_branch_tree_auto_align_lineage_hierarchy")}
         className="p-1.5 rounded-xl text-slate-300 hover:text-indigo-400 hover:bg-slate-800 transition"
       >
         <GitBranch className="w-3.5 h-3.5" />
@@ -103,11 +105,11 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
       {/* Duplicate */}
       <button
         onClick={handleDuplicate}
-        title="Reuse this result without generation (Ctrl+D)"
+        title={ui("ui_reuse_this_result_without_generation_ctrl_d")}
         className="p-1.5 rounded-xl text-slate-300 hover:text-slate-100 hover:bg-slate-800 transition"
       >
         <Copy className="w-3.5 h-3.5" />
-        <span className="text-xs ml-1">Reuse</span>
+        <span className="text-xs ml-1">{ui("ui_reuse")}</span>
       </button>
 
       {data.provenance && (
@@ -116,18 +118,17 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
           onClick={() => {
             if (data.provenance) void executeCreativeAction(creativeRequestFromProvenance(data.provenance, true));
           }}
-          title="Generate with saved settings and a new random seed"
+          title={ui("ui_generate_with_saved_settings_and_a_new_random")}
           className="flex items-center gap-1 p-1.5 rounded-xl text-xs text-indigo-300 hover:bg-slate-800 disabled:opacity-50"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          New Variation
-        </button>
+          {ui("ui_new_variation")}</button>
       )}
 
       {/* Download */}
       <button
         onClick={handleExport}
-        title="Export Asset"
+        title={ui("ui_export_asset")}
         className="p-1.5 rounded-xl text-slate-300 hover:text-slate-100 hover:bg-slate-800 transition"
       >
         <Download className="w-3.5 h-3.5" />
@@ -136,7 +137,7 @@ export const FloatingCardToolbar: React.FC<FloatingCardToolbarProps> = ({ nodeId
       {/* Delete */}
       <button
         onClick={() => removeNode(nodeId)}
-        title="Delete (Backspace / Del)"
+        title={ui("ui_delete_backspace_del")}
         className="p-1.5 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
       >
         <Trash2 className="w-3.5 h-3.5" />

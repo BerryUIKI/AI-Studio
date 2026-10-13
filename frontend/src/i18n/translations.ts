@@ -1,3 +1,5 @@
+import { UI_ENGLISH, UI_CHINESE_PREVIEW } from './uiMessages';
+
 /**
  * Multi-Language Internationalization (i18n) Dictionary & Resolver
  * Supports 8 languages with "Follow System" and English default fallback.
@@ -53,6 +55,7 @@ export function resolveEffectiveLanguage(setting: LanguageSetting): SupportedLan
 
 export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
   en: {
+    ...UI_ENGLISH,
     settings_title: 'Settings',
     settings_subtitle: 'Configure application preferences, multi-language, cloud keys, and engine environments.',
     tab_general: 'General & Language',
@@ -130,6 +133,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     tier_cpu_mode: 'CPU Mode',
   },
   'zh-CN': {
+    ...UI_CHINESE_PREVIEW,
     settings_title: '系统设置',
     settings_subtitle: '配置应用首选项、多语言界面、云端密钥与推理引擎环境。',
     tab_general: '通用与语言',
