@@ -73,7 +73,15 @@ async def request_ark_image(
     except httpx.RequestError:
         raise ArkError("Ark connection interrupted; the remote outcome is unknown. Check provider history before an explicit retry.") from None
     if response.status_code != 200:
-        raise ArkError(f"Ark image request failed (HTTP {response.status_code}). Check authentication, model access, quota and supported parameters.")
+        code = None
+        try:
+            error = response.json().get("error", {})
+            if isinstance(error, dict) and isinstance(error.get("code"), str):
+                code = _identifier(error["code"], api_key)
+        except (ValueError, AttributeError):
+            pass
+        diagnostic = f"; code {code}" if code else ""
+        raise ArkError(f"Ark image request failed (HTTP {response.status_code}{diagnostic}). Check authentication, model access, quota and supported parameters.")
     try:
         body = _Response.model_validate(response.json())
         image = body.data[0]

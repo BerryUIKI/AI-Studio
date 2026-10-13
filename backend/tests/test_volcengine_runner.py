@@ -81,3 +81,18 @@ async def test_invalid_output_is_not_success(body: dict[str, object]) -> None:
         with pytest.raises(ArkError):
             await request_ark_image(prompt="fixture", model=SEEDREAM_MODEL, width=1024, height=1024,
                 api_key="fixture-secret", client=client)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code,expected", [("ModelNotOpen", "ModelNotOpen"), ("fixture-secret", None),
+    ("ark-fixture", None), ("<html>unsafe</html>", None)])
+async def test_only_safe_error_codes_are_reported(code: str, expected: str | None) -> None:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(404,
+        json={"error": {"code": code, "message": "fixture-secret"}}))) as client:
+        with pytest.raises(ArkError) as failure:
+            await request_ark_image(prompt="fixture", model=SEEDREAM_MODEL, width=1024, height=1024,
+                api_key="fixture-secret", client=client)
+    assert "fixture-secret" not in str(failure.value)
+    assert ("; code " in str(failure.value)) == (expected is not None)
+    if expected:
+        assert expected in str(failure.value)
