@@ -1,6 +1,7 @@
 import { useUiText } from '../../i18n/useUiText';
 import { useShallow } from 'zustand/react/shallow';
 import React, { useState } from 'react';
+import type { Node } from '@xyflow/react';
 import {
   Dices,
   Sparkles,
@@ -12,6 +13,9 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
+import { useCanvasStore } from '../../stores/useCanvasStore';
+import type { ImageCardData } from '../../types/creative';
+import { FloatingCardToolbar } from './FloatingCardToolbar';
 import { CreationSetup, useCreationReadiness } from './CreationSetup';
 
 type CreativeTaskStatusProps = Pick<ReturnType<typeof useCreativeStore.getState>,
@@ -43,6 +47,9 @@ export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationS
 
 export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = () => undefined }: { onCloudSetup?: () => void; onLocalSetup?: () => void }) => {
   const ui = useUiText();
+  const selectedImage = useCanvasStore((state) => state.nodes.find(
+    (node): node is Node<ImageCardData> => node.id === state.selectedNodeId && node.type === 'imageCard',
+  ));
   const {
     prompt,
     setPrompt,
@@ -117,6 +124,9 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
   return (
     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 w-full max-w-3xl max-h-[70vh] overflow-y-auto px-4 pointer-events-none">
       <div className="bg-slate-900/95 backdrop-blur-2xl border border-slate-800/90 rounded-2xl p-3 shadow-2xl shadow-slate-950/80 pointer-events-auto flex flex-col gap-2.5">
+        {selectedImage && !selectedImage.data.isGenerating && (
+          <FloatingCardToolbar nodeId={selectedImage.id} data={selectedImage.data} />
+        )}
         {/* Error message if any */}
         {error && (
           <div className="px-3 py-1.5 rounded-lg bg-rose-950/60 border border-rose-800/50 text-rose-300 text-xs flex items-center justify-between">
