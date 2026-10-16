@@ -48,6 +48,10 @@ async def python_adapter(spec: dict[str, Any]) -> None:
             emit({"kind": "wait", "milliseconds": milliseconds})
             await asyncio.to_thread(receive)
 
+        async def job_id(self, job_id: str) -> None:
+            emit({"kind": "job_id", "job_id": job_id})
+            await asyncio.to_thread(receive)
+
     namespace: dict[str, Any] = {}
     # Python is trusted code, not a security sandbox. Suppress arbitrary stdout.
     with contextlib.redirect_stdout(_DiscardOutput()):
@@ -77,6 +81,7 @@ def javascript_adapter(spec: dict[str, Any]) -> None:
         }
         const ctx = Object.freeze({
           request(request) { return __message('request', {request}); },
+          job_id(job_id) { return __message('job_id', {job_id}); },
           wait(milliseconds) { return __message('wait', {milliseconds}); }
         });
         function __reply(reply) {

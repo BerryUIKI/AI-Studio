@@ -1,5 +1,6 @@
 """Shared REST/script execution with revision approval and host-owned credentials."""
 
+import asyncio
 import sys
 from importlib.metadata import version
 from typing import Any
@@ -10,7 +11,12 @@ from app.core.provider_broker import (
     render_template,
 )
 from app.core.workers import run_blocking
-from app.runners.adapter_executor import AdapterError, AdapterOutput, execute_adapter
+from app.runners.adapter_executor import (
+    AdapterError,
+    AdapterOutput,
+    _contains_secret,
+    execute_adapter,
+)
 from app.runtime.credentials import CredentialManager
 from app.runtime.custom_providers import CustomProviderRegistry
 from app.runtime.sdk_environment import (
@@ -20,6 +26,17 @@ from app.runtime.sdk_environment import (
     sdk_ready,
 )
 from app.schemas.custom_provider import CustomProviderRecord
+from app.storage.task_store import record_remote_job
+
+
+class AdapterCancelled(AdapterError):
+    def __init__(self, outcome_unknown: bool) -> None:
+        self.outcome_unknown = outcome_unknown
+        super().__init__(
+            "Local adapter stopped. Remote work may continue and incur charges; its outcome is unknown. No automatic retry was sent."
+            if outcome_unknown
+            else "Adapter cancelled before dispatch; no provider request was sent."
+        )
 
 
 class CustomProviderService:
@@ -72,6 +89,7 @@ class CustomProviderService:
         inputs: dict[str, Any],
         fixture: Any = None,
         expected_identity: dict[str, Any] | None = None,
+        cancel_event: asyncio.Event | None = None,
     ) -> tuple[AdapterOutput, int]:
         record, identity, key = await run_blocking(
             self.snapshot, identifier, inputs, require_key=fixture is None
@@ -86,12 +104,20 @@ class CustomProviderService:
                 "Credentials must use protected platform settings, not calling-code inputs"
             )
         broker = ProviderBroker(spec, key, fixture=fixture)
-        if spec.mode == "rest":
-            body = render_template(spec.body_template, inputs)
-            response = await broker.request({"body": body})
-            result = mapped_image_output(spec, response)
-            result.applied_parameters = {"request_body": body}
-        else:
+
+        async def on_job(job_id: str) -> None:
+            if key and _contains_secret(job_id, key):
+                raise AdapterError("Provider job ID contains a credential")
+            if fixture is None:
+                await record_remote_job(job_id)
+
+        async def invoke() -> AdapterOutput:
+            if spec.mode == "rest":
+                body = render_template(spec.body_template, inputs)
+                response = await broker.request({"body": body})
+                result = mapped_image_output(spec, response)
+                result.applied_parameters = {"request_body": body}
+                return result
             if not spec.source.strip():
                 raise AdapterError("Calling code is missing")
             module_paths = None
@@ -106,7 +132,7 @@ class CustomProviderService:
                 )
                 if fixture is None and spec.sdk_allow_credentials:
                     sdk_key = key
-            result = await execute_adapter(
+            return await execute_adapter(
                 language=spec.mode,
                 source=spec.source,
                 inputs={**inputs, "endpoint": spec.endpoint},
@@ -115,10 +141,32 @@ class CustomProviderService:
                 max_requests=spec.max_requests,
                 module_paths=module_paths,
                 sdk_key=sdk_key,
+                on_job=on_job,
             )
-        # Script output and provenance must not echo even broker-owned credentials.
-        from app.runners.adapter_executor import _contains_secret
 
+        if cancel_event is None:
+            result = await invoke()
+        else:
+            if cancel_event.is_set():
+                raise AdapterCancelled(False)
+            work = asyncio.create_task(invoke())
+            cancellation = asyncio.create_task(cancel_event.wait())
+            try:
+                await asyncio.wait(
+                    {work, cancellation}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if work.done():
+                    result = await work
+                else:
+                    work.cancel()
+                    await asyncio.gather(work, return_exceptions=True)
+                    raise AdapterCancelled(broker.dispatched or spec.mode != "rest")
+            finally:
+                cancellation.cancel()
+                if not work.done():
+                    work.cancel()
+                await asyncio.gather(work, cancellation, return_exceptions=True)
+        # Script output and provenance must not echo even broker-owned credentials.
         if key and _contains_secret(result.model_dump(mode="json"), key):
             raise AdapterError("Calling-code output contains a credential")
         if expected_identity is not None:

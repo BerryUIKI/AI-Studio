@@ -12,9 +12,11 @@ import {
   X,
 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
+import { useCreationReadiness } from './CreationSetup';
 
 export const InpaintModal = () => {
   const ui = useUiText();
+  const { ready } = useCreationReadiness('inpaint');
   const { inpaintModalOpen, referenceImage, closeModals, executeCreativeAction, isGenerating } =
     useCreativeStore();
   const [inpaintPrompt, setInpaintPrompt] = useState('');
@@ -126,7 +128,7 @@ export const InpaintModal = () => {
 
   const handleSubmit = async () => {
     const canvas = canvasRef.current;
-    if (!canvas || !referenceImage?.assetId || isGenerating) return;
+    if (!canvas || !referenceImage?.assetId || isGenerating || !ready) return;
 
     canvas.toBlob(async (blob) => {
       if (!blob) return;
@@ -312,7 +314,7 @@ export const InpaintModal = () => {
             />
             <button
               onClick={handleSubmit}
-              disabled={isGenerating || !inpaintPrompt.trim()}
+              disabled={isGenerating || !inpaintPrompt.trim() || !ready}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-white text-sm font-medium shadow-lg shadow-amber-600/20 transition whitespace-nowrap"
             >
               {isGenerating ? (

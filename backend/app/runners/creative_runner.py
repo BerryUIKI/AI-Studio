@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 from app.core.cache import cache_store
 from app.core.cloud_media import adopt_cloud_image
-from app.core.custom_provider_service import CustomProviderService
+from app.core.custom_provider_service import AdapterCancelled, CustomProviderService
 from app.core.workers import run_blocking
 from app.core.creative_identity import creative_execution_identity
 from app.core.content_identity import managed_asset_identity
@@ -408,6 +408,8 @@ class CreativeRunner:
             task.outputs = result.model_dump()
             task.error = result.error_message
             task.status = "cached" if result.is_cached else ("succeeded" if result.success else "failed")
+            if task.metadata.get("adapter_cancelled"):
+                task.status = "outcome-unknown" if task.metadata.get("remote_outcome_unknown") else "cancelled"
             if result.error_message == "Task cancelled by user.":
                 task.status = "cancelled"
             if result.provenance:
@@ -718,6 +720,9 @@ class CreativeRunner:
 
             return result
 
+        except AdapterCancelled as error:
+            persisted.metadata.update({"adapter_cancelled": True, "remote_outcome_unknown": error.outcome_unknown})
+            return CreativeActionResult(success=False, task_id=task_id, error_message=str(error))
         except Exception as e:
             logger.error(f"Creative action {req.action} failed: {e}")
             return CreativeActionResult(
@@ -918,9 +923,11 @@ class CreativeRunner:
             inputs = {**req.model_dump(mode="json"), "model": plan.target_model,
                 "variation_nonce": req.seed,
                 "input_image": f"data:image/png;base64,{image_b64}" if image_b64 else "",
-                "mask_image": f"data:image/png;base64,{base64.b64encode(await run_blocking(normalize_source_png, mask_bytes)).decode()}" if mask_bytes else ""}
+                "mask_image": f"data:image/png;base64,{base64.b64encode(await run_blocking(normalize_mask_for_webui, mask_bytes)).decode()}" if mask_bytes else ""}
+            context = execution_task.get()
+            cancel_event = task_registry.get_cancel_event(context[1].id) if context else None
             output, count = await CustomProviderService(credentials_manager).execute(
-                plan.provider_id, inputs, expected_identity=plan.custom_identity)
+                plan.provider_id, inputs, expected_identity=plan.custom_identity, cancel_event=cancel_event)
             if output.type.value != "image":
                 raise ValueError("Image actions require an image output from the custom adapter")
             value = {"url": output.value} if isinstance(output.value, str) else output.value
