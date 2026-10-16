@@ -67,7 +67,7 @@ it('can select an upscale-only custom platform and run its image action without 
   expect(useCreativeStore.getState().model).toBe('upscale-model');
   expect(screen.getByRole('button', { name: 'Generate Image' }).hasAttribute('disabled')).toBe(true);
   expect(screen.getByText(/use a supported action from its toolbar/)).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: 'Upscale', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Upscale' }));
   expect(screen.getByRole('button', { name: /Upscale to/ }).hasAttribute('disabled')).toBe(false);
   expect(screen.queryByText('RealESRGAN 4x+ (Photorealistic)')).toBeNull();
 });
