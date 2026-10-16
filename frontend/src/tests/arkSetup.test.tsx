@@ -5,6 +5,8 @@ import { CloudSettingsModal } from '../components/cloud/CloudSettingsModal';
 import { CreationDock } from '../components/canvas/CreationDock';
 import { useCreationSetupStore } from '../stores/useCreationSetupStore';
 import { useCreativeStore } from '../stores/useCreativeStore';
+import { UpscaleModal } from '../components/canvas/UpscaleModal';
+import { FloatingCardToolbar } from '../components/canvas/FloatingCardToolbar';
 
 const provider = {
   id: 'volcengine', name: 'Volcengine Ark', description: 'Fixture', is_configured: true,
@@ -53,4 +55,19 @@ it('selects Ark and exposes a variation control without a provider seed claim', 
   expect(screen.getByRole('button', { name: 'Generate Image' }).hasAttribute('disabled')).toBe(false);
   expect(screen.getByRole('button', { name: 'New Variation' })).toBeTruthy();
   expect(screen.queryByText('Advanced')).toBeNull();
+});
+
+it('can select an upscale-only custom platform and run its image action without advertising generation', async () => {
+  const custom = { ...provider, id: 'custom-upscale', name: 'Upscale fixture', supported_models: ['upscale-model'], capabilities: ['upscale'] };
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('providers') ? [custom] : [] })));
+  const image = { assetId: 'fixture-image', imageUrl: '/fixture.jpg', width: 320, height: 240 };
+  render(<><CreationDock /><FloatingCardToolbar nodeId="fixture" data={image} /><UpscaleModal /></>);
+  await screen.findByRole('option', { name: 'Upscale fixture' });
+  fireEvent.change(screen.getByLabelText('Create with'), { target: { value: custom.id } });
+  expect(useCreativeStore.getState().model).toBe('upscale-model');
+  expect(screen.getByRole('button', { name: 'Generate Image' }).hasAttribute('disabled')).toBe(true);
+  expect(screen.getByText(/use a supported action from its toolbar/)).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Upscale', exact: true }));
+  expect(screen.getByRole('button', { name: /Upscale to/ }).hasAttribute('disabled')).toBe(false);
+  expect(screen.queryByText('RealESRGAN 4x+ (Photorealistic)')).toBeNull();
 });

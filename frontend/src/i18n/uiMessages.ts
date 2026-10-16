@@ -1,6 +1,7 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
   "ui_custom_platforms": "Custom platforms",
+  "ui_custom_selected_image_actions": "This platform does not support the current generation action. Select an image and use a supported action from its toolbar.",
   "ui_custom_add": "Add platform",
   "ui_custom_edit": "Edit {name}",
   "ui_custom_id": "Platform ID (custom- prefix)",

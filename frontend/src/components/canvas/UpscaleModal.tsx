@@ -3,9 +3,11 @@ import { Dialog } from '../ui/Dialog';
 import { useState } from 'react';
 import { Loader2, Maximize2, Sparkles, X } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
+import { useCreationReadiness } from './CreationSetup';
 
 export const UpscaleModal = () => {
   const ui = useUiText();
+  const { ready, provider } = useCreationReadiness('upscale');
   const { upscaleModalOpen, referenceImage, closeModals, executeCreativeAction, isGenerating } =
     useCreativeStore();
   const [scaleFactor, setScaleFactor] = useState<number>(2.0);
@@ -20,7 +22,7 @@ export const UpscaleModal = () => {
   const targetH = Math.round(currentH * scaleFactor);
 
   const handleUpscale = async () => {
-    if (!referenceImage?.assetId || isGenerating) return;
+    if (!referenceImage?.assetId || isGenerating || !ready) return;
 
     const res = await executeCreativeAction({
       action: 'upscale',
@@ -106,7 +108,7 @@ export const UpscaleModal = () => {
           </div>
 
           {/* Upscaler Model */}
-          <div className="flex flex-col gap-1.5 text-xs">
+          {!provider && <div className="flex flex-col gap-1.5 text-xs">
             <span className="text-slate-300 font-medium">{ui("ui_upscaler_algorithm")}</span>
             <select
               value={upscalerName}
@@ -116,7 +118,7 @@ export const UpscaleModal = () => {
               <option value="R-ESRGAN 4x+">{ui("ui_realesrgan_4x_photorealistic")}</option>
               <option value="4x-UltraSharp">{ui("ui_4x_ultrasharp_sharp_edges")}</option>
             </select>
-          </div>
+          </div>}
         </div>
 
         {/* Footer Actions */}
@@ -129,7 +131,7 @@ export const UpscaleModal = () => {
             {ui("ui_cancel")}</button>
           <button
             onClick={handleUpscale}
-            disabled={isGenerating}
+            disabled={isGenerating || !ready}
             className="flex items-center gap-2 px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-xs font-medium shadow-lg transition"
           >
             {isGenerating ? (
