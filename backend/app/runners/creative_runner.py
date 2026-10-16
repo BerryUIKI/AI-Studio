@@ -923,7 +923,7 @@ class CreativeRunner:
             inputs = {**req.model_dump(mode="json"), "model": plan.target_model,
                 "variation_nonce": req.seed,
                 "input_image": f"data:image/png;base64,{image_b64}" if image_b64 else "",
-                "mask_image": f"data:image/png;base64,{base64.b64encode(await run_blocking(normalize_source_png, mask_bytes)).decode()}" if mask_bytes else ""}
+                "mask_image": f"data:image/png;base64,{base64.b64encode(await run_blocking(normalize_mask_for_webui, mask_bytes)).decode()}" if mask_bytes else ""}
             context = execution_task.get()
             cancel_event = task_registry.get_cancel_event(context[1].id) if context else None
             output, count = await CustomProviderService(credentials_manager).execute(
