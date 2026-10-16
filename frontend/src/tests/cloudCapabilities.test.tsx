@@ -45,4 +45,6 @@ it('does not advertise editing for a txt2img-only provider or an unknown cloud c
   expect(screen.getByRole('button', { name: 'Vary' }).hasAttribute('disabled')).toBe(true);
   act(() => useCreativeStore.setState({ connectionId: 'comfyui-managed' }));
   expect(screen.getByRole('button', { name: 'Inpaint' }).hasAttribute('disabled')).toBe(false);
+  act(() => useCreativeStore.setState({ connectionId: 'custom-missing-catalog' }));
+  expect(screen.getByRole('button', { name: 'Inpaint' }).hasAttribute('disabled')).toBe(true);
 });

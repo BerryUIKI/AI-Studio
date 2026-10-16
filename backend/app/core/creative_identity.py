@@ -16,6 +16,8 @@ def adapter_identity() -> str:
     digest = hashlib.sha256()
     for name in ("creative_runner.py", "api_runner.py", "comfy_runner.py", "webui_runner.py", "macro_compiler.py", "mask_converter.py", "volcengine_runner.py"):
         digest.update(hash_file(runners / name).encode())
+    for relative in ("runners/adapter_executor.py", "runners/custom_worker.py", "core/custom_provider_service.py", "core/provider_broker.py", "core/cloud_media.py", "runtime/sdk_environment.py", "schemas/custom_provider.py"):
+        digest.update(hash_file(runners.parent / relative).encode())
     return digest.hexdigest()
 
 
@@ -27,6 +29,9 @@ async def creative_execution_identity(plan: CreativeExecutionPlan, connection: E
         return identity
     action = plan.action
     provider = plan.provider_id
+    if plan.custom_identity is not None:
+        identity.update({"custom_execution": plan.custom_identity, "endpoint": plan.custom_identity["endpoint"], "model_revision": None})
+        return identity
     if provider == "fal_ai":
         models = {CreativeActionType.INPAINT: "fal-ai/flux-general/inpainting",
                   CreativeActionType.IMG2IMG: "fal-ai/flux/dev/image-to-image",

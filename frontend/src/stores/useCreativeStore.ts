@@ -4,6 +4,7 @@ import { observeCreativeTask } from '../api/creativeTasks';
 import { CreativeActionRequest, CreativeActionResult, ImageCardData } from '../types/creative';
 import { useCanvasStore } from './useCanvasStore';
 import { useProjectStore } from './useProjectStore';
+import { providerConnection, useCreationSetupStore } from './useCreationSetupStore';
 
 interface CreativeState {
   prompt: string;
@@ -164,6 +165,11 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
       duration_seconds: s.durationSeconds,
       ...override,
     };
+    const provider = useCreationSetupStore.getState().providers.find((item) => providerConnection(item.id) === payload.connection_id);
+    if (provider?.id.startsWith('custom-')) {
+      payload.provider_revision ??= provider.provider_revision;
+      payload.credential_revision ??= provider.credential_revision;
+    }
 
     if (isSourceDependent && s.connectionId !== 'volcengine' && !override?.aspect_ratio) {
       delete payload.aspect_ratio;

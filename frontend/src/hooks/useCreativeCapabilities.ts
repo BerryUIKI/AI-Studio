@@ -8,7 +8,7 @@ export function useCreativeCapabilities() {
   const capabilities = useCreationSetupStore((state) => {
     const provider = state.providers.find((item) => providerConnection(item.id) === connection);
     if (provider) return provider.capabilities.join(',');
-    return ['cloud', 'cloud_default', 'volcengine', 'openai', 'fal_ai', 'siliconflow'].includes(connection) || connection.startsWith('custom/') ? '' : null;
+    return ['cloud', 'cloud_default', 'volcengine', 'openai', 'fal_ai', 'siliconflow'].includes(connection) || connection.startsWith('custom-') ? '' : null;
   });
   return (action: CreativeActionType) => capabilities === null || capabilities.split(',').includes(action);
 }

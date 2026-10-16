@@ -46,6 +46,9 @@ class CloudProviderInfo(BaseModel):
     upload_disclosure: str
     website_url: str
     key_test_supported: bool = True
+    provider_revision: str | None = None
+    credential_revision: int | None = None
+    setup_guidance: str = ""
 
 
 class _ProviderRequest(BaseModel):

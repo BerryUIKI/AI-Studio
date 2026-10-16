@@ -36,6 +36,9 @@ export interface CreativeActionRequest {
   negative_prompt?: string;
   model?: string;
   connection_id?: string;  // Stable engine connection identifier (e.g., "comfyui-managed", "studio-comfy-a100")
+  provider_revision?: string;
+  credential_revision?: number;
+  dependency_revision?: string;
   engine_id?: string;      // Legacy fallback - deprecated in favor of connection_id
   aspect_ratio?: string;
   width?: number;

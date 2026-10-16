@@ -45,6 +45,13 @@ class CreativeTaskService:
         if len(self._cancellations) >= self.capacity:
             raise CreativeQueueFull("Creation queue is full. Wait for an active task or cancel queued work before retrying.")
         request = request.model_copy(deep=True)
+        if (request.connection_id or request.engine_id).startswith("custom-"):
+            from app.core.workers import run_blocking
+            from app.runners.creative_runner import resolve_execution_plan
+
+            plan = await run_blocking(resolve_execution_plan, request)
+            for field in ("provider_revision", "credential_revision", "dependency_revision"):
+                setattr(request, field, plan.custom_identity[field])
         task_id = f"task_{uuid.uuid4()}"
         cancel = asyncio.Event()
         task_registry.register_task(task_id, "creative_action", cancel, {"action": request.action.value}, status="queued")

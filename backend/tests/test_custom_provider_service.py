@@ -60,3 +60,35 @@ async def test_unapproved_code_or_wrong_model_never_executes(tmp_path: Path) -> 
         await service.execute(spec.id, {"model": "model"}, fixture={})
     with pytest.raises(AdapterError, match="model or action"):
         await service.execute(spec.id, {"model": "other"}, fixture={})
+
+
+@pytest.mark.asyncio
+async def test_descriptor_and_key_changes_refuse_stale_execution(
+    tmp_path: Path,
+) -> None:
+    service = CustomProviderService(CredentialManager(tmp_path))
+    spec = CustomProviderSpec(
+        id="custom-revisions",
+        name="Fixture",
+        endpoint="https://fixture.invalid",
+        models=["model"],
+        actions=["txt2img"],
+        auth="none",
+    )
+    service.registry.save(spec)
+    inputs = {"model": "model", "prompt": "fixture", "width": 64, "height": 64}
+    _, identity, _ = service.snapshot(spec.id, inputs)
+    await service.execute(
+        spec.id,
+        inputs,
+        fixture={"data": [{"url": "https://fixture.invalid/a.jpg"}]},
+        expected_identity=identity,
+    )
+    service.credentials.set_key(spec.id, "synthetic-key-revision-one")
+    with pytest.raises(AdapterError, match="changed"):
+        await service.execute(spec.id, inputs, fixture={}, expected_identity=identity)
+    _, updated, _ = service.snapshot(spec.id, inputs)
+    assert updated != identity and "synthetic-key-revision-one" not in str(updated)
+    service.registry.save(spec.model_copy(update={"endpoint": "https://other.invalid"}))
+    with pytest.raises(AdapterError, match="changed"):
+        await service.execute(spec.id, inputs, fixture={}, expected_identity=updated)

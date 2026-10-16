@@ -52,7 +52,7 @@ export function CreationSetup({ onCloudSetup, onLocalSetup }: CreationSetupProps
       <option value="">{ui("ui_choose_provider_or_engine")}</option>
       {!providers.some((item) => providerConnection(item.id) === readiness.connection) && !instances.some((item) => (item.connection_id || item.id) === readiness.connection)
         && readiness.connection && <option value={readiness.connection}>{ui("ui_setup_required")}</option>}
-      {providers.filter((provider) => modelsForProvider(provider, action).length > 0).map((provider) => <option key={provider.id} value={providerConnection(provider.id)}>{provider.name}{provider.is_configured ? '' : ui("ui_key_needed")}</option>)}
+      {providers.filter((provider) => modelsForProvider(provider, action).length > 0).map((provider) => <option key={provider.id} value={providerConnection(provider.id)}>{provider.name}{provider.is_configured ? '' : provider.id.startsWith('custom-') ? ` — ${ui("ui_setup_required")}` : ui("ui_key_needed")}</option>)}
       {instances.filter((instance) => ['comfyui', 'webui'].includes(instance.type)).map((instance) => <option key={instance.id} value={instance.connection_id || instance.id}>{instance.name} — {instance.status}</option>)}
     </select>
     <label htmlFor="creation-model">{ui("ui_model")}</label>
@@ -63,7 +63,7 @@ export function CreationSetup({ onCloudSetup, onLocalSetup }: CreationSetupProps
     </select>
     <button type="button" onClick={() => void refresh()} className="rounded border border-slate-700 px-2 py-1">{ui("ui_refresh_readiness")}</button>
     {!readiness.ready && <div role="status" className="w-full text-amber-200">
-      {readiness.loading ? ui("ui_checking_setup") : readiness.error || ui("ui_choose_a_configured_cloud_provider_or_start_an")}
+      {readiness.loading ? ui("ui_checking_setup") : readiness.error || readiness.provider?.setup_guidance || ui("ui_choose_a_configured_cloud_provider_or_start_an")}
       <div className="mt-1 flex gap-3">
         <button type="button" className="underline" onClick={onCloudSetup}>{ui("ui_set_up_cloud_no_gpu_required")}</button>
         <button type="button" className="underline" onClick={onLocalSetup}>{ui("ui_set_up_local_engine_and_models")}</button>
