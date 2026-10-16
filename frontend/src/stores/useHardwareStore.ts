@@ -41,13 +41,13 @@ export const useHardwareStore = create<HardwareState>((set) => ({
 
   fetchGpuStats: async () => {
     try {
-      set({ isLoading: true, error: null });
+      set({ isLoading: true });
       const res = await fetch('/api/v1/hardware/gpu-stats');
       if (!res.ok) {
         throw new Error(`Failed to fetch GPU stats: ${res.statusText}`);
       }
       const data: GpuStats = await res.json();
-      set({ stats: data, isLoading: false });
+      set({ stats: data, isLoading: false, error: null });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown hardware telemetry error';
       set({ error: msg, isLoading: false });
