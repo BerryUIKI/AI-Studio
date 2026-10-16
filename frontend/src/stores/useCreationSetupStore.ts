@@ -24,6 +24,9 @@ export interface CreationProvider {
   action_models?: Record<string, string[]>;
   capabilities: string[];
   upload_disclosure: string;
+  provider_revision?: string;
+  credential_revision?: number;
+  setup_guidance?: string;
 }
 
 interface CreationSetupState {

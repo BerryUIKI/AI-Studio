@@ -280,7 +280,7 @@ class CredentialManager:
         from app.runtime.custom_providers import CustomProviderRegistry
         for record in CustomProviderRegistry(self.data_dir).list():
             spec = record.spec
-            available = spec.mode == "rest" or record.execution_trusted
+            available = spec.mode == "rest" or (record.execution_trusted and bool(spec.source.strip()))
             if spec.mode == "python_sdk":
                 from app.runtime.sdk_environment import sdk_ready
                 available = available and sdk_ready(spec, self.data_dir)
@@ -288,7 +288,9 @@ class CredentialManager:
                 is_configured=available and (spec.auth == "none" or bool(self.get_key(spec.id))),
                 redacted_key=redact_key(self.get_key(spec.id) or ""), supported_models=spec.models,
                 action_models={action: spec.models for action in spec.actions}, capabilities=spec.actions,
-                upload_disclosure=spec.upload_disclosure, website_url=spec.endpoint, key_test_supported=False))
+                upload_disclosure=spec.upload_disclosure, website_url=spec.endpoint, key_test_supported=False,
+                provider_revision=spec.revision, credential_revision=self.key_revision(spec.id),
+                setup_guidance="" if available else "Review and approve the current calling code; SDK mode also needs its isolated environment prepared."))
         return providers
 
     def get_llm_config(self) -> LLMConfig:

@@ -200,3 +200,17 @@ def test_custom_plan_rejects_unknown_platform_model_and_action(tmp_path: Path) -
                         action=action, model=model, connection_id=spec.id
                     )
                 )
+
+
+def test_custom_catalog_exposes_revisions_and_setup_prerequisites(tmp_path: Path) -> None:
+    credentials = CredentialManager(tmp_path)
+    service = CustomProviderService(credentials)
+    spec = CustomProviderSpec(id="custom-setup", name="Fixture", endpoint="https://fixture.invalid",
+        models=["fixture"], actions=["txt2img"], auth="none", mode="python", source=PY)
+    service.registry.save(spec)
+    provider = next(item for item in credentials.list_providers() if item.id == spec.id)
+    assert not provider.is_configured and provider.setup_guidance
+    assert provider.provider_revision == spec.revision
+    service.registry.save(spec, approve_execution=True)
+    provider = next(item for item in credentials.list_providers() if item.id == spec.id)
+    assert provider.is_configured and not provider.setup_guidance
