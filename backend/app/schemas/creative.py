@@ -21,6 +21,9 @@ class CreativeActionRequest(BaseModel):
     negative_prompt: str = "low quality, blurry, deformed, bad anatomy"
     model: str = "v1-5-pruned-emaonly.safetensors"
     connection_id: Optional[str] = None  # Stable engine connection identifier (e.g., "comfyui-managed", "studio-comfy-a100")
+    provider_revision: str | None = Field(default=None, max_length=64)
+    credential_revision: int | None = Field(default=None, ge=0)
+    dependency_revision: str | None = Field(default=None, max_length=64)
     engine_id: str = "managed_comfyui"  # Legacy fallback - deprecated in favor of connection_id
     aspect_ratio: str = "1:1"  # 1:1, 16:9, 9:16, 4:3
     width: int = 512
@@ -67,6 +70,7 @@ class GenerationProvenance(BaseModel):
 
 
 class CreativeExecutionPlan(BaseModel):
+    custom_identity: Dict[str, Any] | None = None
     engine: str  # "comfyui", "webui", or "cloud"
     provider_id: str  # "comfyui", "webui", "fal_ai", "siliconflow", "openai"
     target_model: str

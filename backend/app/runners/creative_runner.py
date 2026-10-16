@@ -27,6 +27,8 @@ from urllib.parse import urlparse
 
 from app.core.cache import cache_store
 from app.core.cloud_media import adopt_cloud_image
+from app.core.custom_provider_service import CustomProviderService
+from app.core.workers import run_blocking
 from app.core.creative_identity import creative_execution_identity
 from app.core.content_identity import managed_asset_identity
 from app.core.task_registry import task_registry
@@ -88,7 +90,7 @@ def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
     """
     engine_id = (req.engine_id or "").lower()
     if req.connection_id:
-        if req.connection_id in {"cloud", "fal_ai", "siliconflow", "openai", "volcengine"}:
+        if req.connection_id.startswith("custom-") or req.connection_id in {"cloud", "fal_ai", "siliconflow", "openai", "volcengine"}:
             engine_id = req.connection_id
         else:
             selected = engine_manager.get_engine(req.connection_id)
@@ -97,6 +99,19 @@ def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
             engine_id = selected.engine_type.value
     model = (req.model or "").lower()
     action = req.action
+
+    if engine_id.startswith("custom-"):
+        try:
+            _, identity, _ = CustomProviderService(credentials_manager).snapshot(
+                engine_id, {"model": req.model, "action": action.value})
+            for field in ("provider_revision", "credential_revision", "dependency_revision"):
+                expected = getattr(req, field)
+                if expected is not None and expected != identity[field]:
+                    raise ValueError("Custom platform changed; refresh setup and review it before creating again")
+        except (RuntimeError, LookupError) as error:
+            raise ValueError(str(error)) from None
+        return CreativeExecutionPlan(engine="cloud", provider_id=engine_id,
+            target_model=req.model, action=action, custom_identity=identity)
 
     if "webui" in engine_id:
         if action in (CreativeActionType.TXT2VIDEO, CreativeActionType.IMG2VIDEO):
@@ -510,7 +525,12 @@ class CreativeRunner:
 
         try:
             # 1. Resolve unified execution plan before cache check & dispatch
-            plan = resolve_execution_plan(req)
+            plan = await run_blocking(resolve_execution_plan, req)
+            if plan.custom_identity is not None:
+                if explicit_dimensions:
+                    req.width, req.height = persisted.params["width"], persisted.params["height"]
+                if not 1 <= req.width <= 16384 or not 1 <= req.height <= 16384:
+                    raise ValueError("Custom image dimensions must be between 1 and 16384 pixels")
             if plan.provider_id == "volcengine":
                 if not explicit_dimensions:
                     dimensions = {"1:1": (2048, 2048), "16:9": (2560, 1440), "9:16": (1440, 2560),
@@ -644,16 +664,16 @@ class CreativeRunner:
             provenance = GenerationProvenance(
                 action=req.action,
                 prompt=req.prompt,
-                negative_prompt=None if plan.provider_id == "volcengine" else req.negative_prompt,
+                negative_prompt=None if plan.provider_id == "volcengine" or plan.custom_identity is not None else req.negative_prompt,
                 model=effective_model,
                 model_revision=model_hash,
                 model_hash=model_hash,
                 connection_id=connection_id,  # Issue #127
                 engine_id=plan.provider_id if plan.engine == "cloud" else plan.engine,
                 provider_id=plan.provider_id,
-                seed=None if plan.provider_id == "volcengine" else req.seed,
-                steps=None if plan.provider_id == "volcengine" else req.steps,
-                cfg_scale=None if plan.provider_id == "volcengine" else req.cfg_scale,
+                seed=None if plan.provider_id == "volcengine" or plan.custom_identity is not None else req.seed,
+                steps=None if plan.provider_id == "volcengine" or plan.custom_identity is not None else req.steps,
+                cfg_scale=None if plan.provider_id == "volcengine" or plan.custom_identity is not None else req.cfg_scale,
                 dimensions=f"{out_w}x{out_h}",
                 created_at=datetime.now(timezone.utc).isoformat(),
                 source_asset_id=req.input_image_id,
@@ -893,6 +913,38 @@ class CreativeRunner:
         out_w = req.width
         out_h = req.height
         remote_url: Optional[str] = None
+
+        if plan.custom_identity is not None:
+            inputs = {**req.model_dump(mode="json"), "model": plan.target_model,
+                "variation_nonce": req.seed,
+                "input_image": f"data:image/png;base64,{image_b64}" if image_b64 else "",
+                "mask_image": f"data:image/png;base64,{base64.b64encode(await run_blocking(normalize_source_png, mask_bytes)).decode()}" if mask_bytes else ""}
+            output, count = await CustomProviderService(credentials_manager).execute(
+                plan.provider_id, inputs, expected_identity=plan.custom_identity)
+            if output.type.value != "image":
+                raise ValueError("Image actions require an image output from the custom adapter")
+            value = {"url": output.value} if isinstance(output.value, str) else output.value
+            if not isinstance(value, dict) or set(value) not in ({"url"}, {"b64_json"}):
+                raise ValueError("Custom image output must contain exactly url or b64_json")
+            content = None
+            url = value.get("url")
+            if "b64_json" in value:
+                try:
+                    content = base64.b64decode(value["b64_json"], validate=True)
+                except (ValueError, TypeError):
+                    raise ValueError("Custom adapter returned invalid base64 image data") from None
+            if url is not None and not isinstance(url, str):
+                raise ValueError("Custom image URL must be a string")
+            asset = await adopt_cloud_image(store=asset_store, url=url, content=content, project_id=req.project_id)
+            return {"asset_id": asset.id, "image_url": f"/api/v1/assets/{asset.id}/content",
+                "width": asset.width, "height": asset.height, "effective_model": plan.target_model,
+                "effective_parameters": {"prompt": req.prompt, "model": plan.target_model,
+                    "requested_model": plan.target_model, "response_model": output.reported_model,
+                    "model_identity_source": "requested", "variation_nonce": req.seed,
+                    "width": req.width, "height": req.height, "input_image_id": req.input_image_id,
+                    "mask_image_id": req.mask_image_id, "provider_revision": plan.custom_identity["provider_revision"],
+                    "credential_revision": plan.custom_identity["credential_revision"],
+                    "dependency_revision": plan.custom_identity["dependency_revision"], "broker_requests": count}}
 
         if plan.provider_id == "volcengine":
             if req.action == CreativeActionType.IMG2IMG and not image_b64:
