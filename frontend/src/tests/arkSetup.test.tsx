@@ -20,13 +20,13 @@ beforeEach(() => {
 });
 
 it('does not submit a paid inference behind Test Connection', async () => {
-  const fetch = vi.fn(async () => ({ ok: true, json: async () => [provider] }));
+  const fetch = vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('custom-providers') ? [] : [provider] }));
   vi.stubGlobal('fetch', fetch);
   render(<CloudSettingsModal isOpen onClose={() => undefined} />);
   const test = await screen.findByRole('button', { name: 'Test Connection' });
   expect(test.hasAttribute('disabled')).toBe(true);
   fireEvent.click(test);
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls.every(([url]) => url.endsWith('/providers') || url.endsWith('/custom-providers'))).toBe(true);
   expect(screen.getByText(/no verified free connection check/)).toBeTruthy();
 });
 
@@ -34,7 +34,7 @@ it('refreshes canvas provider readiness after saving a fixture credential', asyn
   let configured = false;
   vi.stubGlobal('fetch', vi.fn(async (_url: string, options?: RequestInit) => {
     if (options?.method === 'POST') configured = true;
-    return { ok: true, json: async () => options?.method === 'POST' ? {} : [{ ...provider, is_configured: configured }] };
+    return { ok: true, json: async () => _url.includes('custom-providers') ? [] : options?.method === 'POST' ? {} : [{ ...provider, is_configured: configured }] };
   }));
   render(<CloudSettingsModal isOpen onClose={() => undefined} />);
   const input = await screen.findByLabelText('Volcengine Ark API key');

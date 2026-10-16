@@ -2,6 +2,7 @@ import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import { useCreationSetupStore } from '../../stores/useCreationSetupStore';
+import { CustomPlatformSettings } from './CustomPlatformSettings';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Cloud, ExternalLink, Key, Loader2, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
 
@@ -154,6 +155,7 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
 
         {/* Providers List */}
         <div className="p-6 overflow-y-auto flex flex-col gap-4">
+          <CustomPlatformSettings onChanged={fetchProviders} />
           {providers.map((p) => {
             const test = testResults[p.id];
             return (
