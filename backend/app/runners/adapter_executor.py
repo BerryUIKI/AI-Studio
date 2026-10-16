@@ -55,6 +55,7 @@ async def execute_adapter(
     max_requests: int = 4,
     module_paths: list[str] | None = None,
     sdk_key: str | None = None,
+    on_job: Callable[[str], Awaitable[None]] | None = None,
 ) -> AdapterOutput:
     """Only the host executes HTTP; Python SDK access is separately trusted."""
     if language not in {"javascript", "python", "python_sdk"}:
@@ -132,6 +133,19 @@ async def execute_adapter(
                     if not isinstance(message.get("request"), dict):
                         raise AdapterError("Invalid calling-code broker request")
                     reply["result"] = await broker(message["request"])
+                elif kind == "job_id":
+                    job_id = message.get("job_id")
+                    if (
+                        not isinstance(job_id, str)
+                        or not 1 <= len(job_id) <= 256
+                        or any(ord(char) < 32 for char in job_id)
+                    ):
+                        raise AdapterError(
+                            "Provider job ID must be a nonempty string of at most 256 characters"
+                        )
+                    if on_job:
+                        await on_job(job_id)
+                    reply["result"] = None
                 elif kind == "wait":
                     milliseconds = message.get("milliseconds")
                     if (
