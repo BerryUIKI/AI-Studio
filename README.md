@@ -24,6 +24,13 @@ validates it without installing packages into that environment. Installation can
 be cancelled and retried. The guide supports all eight application languages and
 follows the system language initially. Advanced diagnostics remain collapsible.
 
+Setup checks available space on the actual installation volume (at least 1 GiB
+of free space), rather than assuming drive C. Network/proxy, space, permissions,
+file verification and service-start errors have distinct messages. Downloads
+and package installation use the current Windows system proxy configuration
+without changing it. Incompatible per-host PAC routes for the package hosts are
+reported explicitly instead of silently falling back to a direct connection.
+
 ### 2. Development Commands
 
 ```bash

@@ -116,3 +116,20 @@ it('reports measured free space on the actual installation drive', async () => {
   expect(screen.getByRole('status').textContent).not.toContain('Internet');
   expect(screen.getByRole('status').textContent).not.toContain('C:');
 });
+
+it('does not report an installation failure after intentional cancellation', async () => {
+  let rejectPreparation: (() => void) | undefined;
+  let cancelled = false;
+  mocks.invoke.mockImplementation((command: string) => {
+    if (command === 'startup_status') return Promise.resolve({ phase: cancelled ? 'cancelled' : 'needs_environment', can_install: true, details: '' });
+    if (command === 'prepare_environment') return new Promise((_resolve, reject) => { rejectPreparation = () => reject(new Error('cancelled')); });
+    if (command === 'cancel_environment_setup') { cancelled = true; rejectPreparation?.(); }
+    return Promise.resolve();
+  });
+  render(<StartupScreen />);
+  await waitFor(() => expect((screen.getByText('Install and continue') as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByText('Install and continue'));
+  fireEvent.click(screen.getByText('Cancel'));
+  await screen.findByText('Setup stopped. You can retry when you are ready.', {}, { timeout: 2000 });
+  expect(screen.getByRole('status').textContent).not.toContain('could not finish');
+});

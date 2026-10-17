@@ -31,7 +31,9 @@ fn permits_setup(url: &tauri::Url) -> bool {
         && url.scheme() == "http"
         && url.port() == Some(5173)
         && ["localhost", "127.0.0.1"].contains(&url.host_str().unwrap_or(""));
-    url.path() == "/startup.html" && (bundled || development)
+    url.username().is_empty()
+        && url.path() == "/startup.html"
+        && ((bundled && url.port().is_none()) || development)
 }
 
 #[cfg(test)]
@@ -49,6 +51,8 @@ mod tests {
             "http://127.0.0.1:8000/startup.html",
             "https://example.com/startup.html",
             "tauri://localhost/index.html",
+            "http://tauri.localhost:8000/startup.html",
+            "tauri://untrusted@localhost/startup.html",
         ] {
             assert!(!permits_setup(&tauri::Url::parse(url).unwrap()));
         }
