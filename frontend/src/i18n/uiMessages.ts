@@ -1,5 +1,9 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  setupProgressIndeterminate: "Working… progress cannot be measured for this step.",
+  setupDownloadProgress: "{received} / {total} MiB",
+  setupDownloadReceived: "{received} MiB downloaded",
+
   setupErrorNetwork: "The download service could not be reached. Check your Internet connection and Windows system proxy, then retry.",
   setupErrorProxy: "The enabled Windows system proxy could not be reached or requires authentication. Check that your proxy app is running and its settings are correct.",
   setupErrorProxyConfiguration: "Windows system proxy settings could not be applied to these downloads. Check the proxy configuration; no direct connection was substituted.",
@@ -824,6 +828,10 @@ export const UI_ENGLISH = {
 } as const;
 
 export const UI_CHINESE_PREVIEW: Record<string, string> = {
+  setupProgressIndeterminate: "正在处理，此步骤暂无可测量的进度。",
+  setupDownloadProgress: "{received} / {total} MiB",
+  setupDownloadReceived: "已下载 {received} MiB",
+
   setupErrorNetwork: "无法连接下载服务。请检查网络连接和 Windows 系统代理后重试。",
   setupErrorProxy: "无法连接已启用的 Windows 系统代理，或代理需要身份验证。请确认代理软件正在运行，并检查代理设置。",
   setupErrorProxyConfiguration: "无法将 Windows 系统代理配置应用于下载。请检查代理设置；应用没有改为直接连接。",

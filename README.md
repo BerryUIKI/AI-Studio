@@ -21,7 +21,9 @@ components into Berry application data (Windows x64, Internet required). Local
 AI engines, GPU libraries and model weights remain optional. Alternatively, use
 **Use an existing environment** to discover or browse for Python 3.10+; Berry
 validates it without installing packages into that environment. Installation can
-be cancelled and retried. The guide supports all eight application languages and
+be cancelled and retried. A progress bar shows measured download bytes and a
+percentage when the server provides a total; installation and other unmeasured
+steps use an indeterminate bar. The guide supports all eight application languages and
 follows the system language initially. Advanced diagnostics remain collapsible.
 
 Setup checks available space on the actual installation volume (at least 1 GiB

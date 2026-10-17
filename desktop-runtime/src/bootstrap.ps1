@@ -47,7 +47,10 @@ try {
     $Failure = 'proxy'
     Assert-BerryProxyReachable $DownloadProxy
     $Failure = 'network'
-    Save-BerryDownload ([Uri]$RuntimeUrl) $Archive
+    Save-BerryDownload ([Uri]$RuntimeUrl) $Archive -OnProgress {
+        param($Received, $Total)
+        Write-Output (@{stage='downloading'; downloaded_bytes=$Received; total_bytes=$Total} | ConvertTo-Json -Compress)
+    }
     Progress 'verifying'
     $Failure = 'validation'
     $DownloadedHash = Get-BerryFileHash $Archive

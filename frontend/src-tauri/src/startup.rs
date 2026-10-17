@@ -13,6 +13,8 @@ pub struct StartupStatus {
     pub volume: String,
     pub available_bytes: Option<u64>,
     pub required_bytes: Option<u64>,
+    pub downloaded_bytes: Option<u64>,
+    pub total_bytes: Option<u64>,
 }
 
 fn local_page(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -128,7 +130,12 @@ pub async fn prepare_environment(
         return Err("Environment setup is already running".into());
     }
     state.setup_cancel.store(false, Ordering::SeqCst);
-    state.startup.lock().unwrap().phase = "validating".into();
+    {
+        let mut status = state.startup.lock().unwrap();
+        status.phase = "validating".into();
+        status.downloaded_bytes = None;
+        status.total_bytes = None;
+    }
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let app = handle;
@@ -139,8 +146,11 @@ pub async fn prepare_environment(
                 return Err("The application service is still running. Retry startup before changing its environment.".into());
             }
             if action == "install" {
-                berry_runtime::bootstrap::install(&state.root_dir, &state.setup_cancel, |phase| {
-                    state.startup.lock().unwrap().phase = phase.to_owned();
+                berry_runtime::bootstrap::install_with_progress(&state.root_dir, &state.setup_cancel, |progress| {
+                    let mut status = state.startup.lock().unwrap();
+                    status.phase = progress.stage.clone();
+                    status.downloaded_bytes = progress.downloaded_bytes;
+                    status.total_bytes = progress.total_bytes;
                 })?;
                 berry_runtime::environments::clear(&state.root_dir)?;
             } else if action == "existing" {
@@ -194,6 +204,8 @@ pub async fn prepare_environment(
             status.volume = error.volume.clone();
             status.available_bytes = error.available_bytes;
             status.required_bytes = error.required_bytes;
+            status.downloaded_bytes = None;
+            status.total_bytes = None;
         }
         state.setup_running.store(false, Ordering::SeqCst);
         result.map_err(|error| error.detail)

@@ -137,6 +137,8 @@ pub fn run() {
             volume: String::new(),
             available_bytes: None,
             required_bytes: None,
+            downloaded_bytes: None,
+            total_bytes: None,
         }),
         root_dir,
         setup_running: std::sync::atomic::AtomicBool::new(false),

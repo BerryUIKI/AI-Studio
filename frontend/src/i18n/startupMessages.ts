@@ -54,7 +54,10 @@ export const STARTUP_TRANSLATIONS = {
     "setupErrorChecksum": "ダウンロードファイルの検証に失敗しました。このファイルはインストールしません。再度ダウンロードしてください。",
     "setupErrorDependencies": "必要なコンポーネントのインストールまたは検証に失敗しました。再試行するか、互換性のある環境を選択してください。技術情報で原因を確認できます。",
     "setupErrorStorage": "{volume} に環境を保存または展開できません。技術情報でファイルエラーを確認してください。",
-    "setupErrorService": "環境の準備は完了しましたが、Berry を起動できません。起動を再試行してください。再インストールは不要です。"
+    "setupErrorService": "環境の準備は完了しましたが、Berry を起動できません。起動を再試行してください。再インストールは不要です。",
+    "setupProgressIndeterminate": "処理中です。この手順の進行率は計測できません。",
+    "setupDownloadProgress": "{received} / {total} MiB",
+    "setupDownloadReceived": "{received} MiB ダウンロード済み"
   },
   "ko": {
     "setupNotFound": "환경을 찾지 못했습니다. Python 파일을 선택하거나 자동 설치를 사용하세요.",
@@ -105,7 +108,10 @@ export const STARTUP_TRANSLATIONS = {
     "setupErrorChecksum": "다운로드 파일 검증에 실패했습니다. 해당 파일은 설치하지 않습니다. 다시 다운로드하세요.",
     "setupErrorDependencies": "필수 구성 요소를 설치하거나 검증하지 못했습니다. 설치를 다시 시도하거나 호환되는 환경을 선택하세요. 기술 정보에서 원인을 확인할 수 있습니다.",
     "setupErrorStorage": "{volume}에 환경을 저장하거나 압축을 풀 수 없습니다. 기술 정보에서 파일 오류를 확인하세요.",
-    "setupErrorService": "환경은 준비되었지만 Berry를 시작하지 못했습니다. 시작을 다시 시도하세요. 재설치는 필요하지 않습니다."
+    "setupErrorService": "환경은 준비되었지만 Berry를 시작하지 못했습니다. 시작을 다시 시도하세요. 재설치는 필요하지 않습니다.",
+    "setupProgressIndeterminate": "처리 중입니다. 이 단계의 진행률은 측정할 수 없습니다.",
+    "setupDownloadProgress": "{received} / {total} MiB",
+    "setupDownloadReceived": "{received} MiB 다운로드됨"
   },
   "fr": {
     "setupNotFound": "Aucun environnement trouvé. Choisissez un fichier Python ou utilisez l’installation automatique.",
@@ -156,7 +162,10 @@ export const STARTUP_TRANSLATIONS = {
     "setupErrorChecksum": "Le fichier téléchargé a échoué à la vérification. Il ne sera pas installé. Réessayez le téléchargement.",
     "setupErrorDependencies": "Les composants requis n’ont pas pu être installés ou validés. Réessayez ou choisissez un environnement compatible. Consultez les détails techniques.",
     "setupErrorStorage": "Impossible d’enregistrer ou d’extraire l’environnement sur {volume}. Consultez les détails techniques pour connaître l’erreur de fichier.",
-    "setupErrorService": "L’environnement est prêt, mais Berry n’a pas démarré. Réessayez le démarrage ; une réinstallation est inutile."
+    "setupErrorService": "L’environnement est prêt, mais Berry n’a pas démarré. Réessayez le démarrage ; une réinstallation est inutile.",
+    "setupProgressIndeterminate": "Traitement en cours… la progression de cette étape ne peut pas être mesurée.",
+    "setupDownloadProgress": "{received} / {total} Mio",
+    "setupDownloadReceived": "{received} Mio téléchargés"
   },
   "de": {
     "setupNotFound": "Keine Umgebung gefunden. Wählen Sie eine Python-Datei oder die automatische Installation.",
@@ -207,7 +216,10 @@ export const STARTUP_TRANSLATIONS = {
     "setupErrorChecksum": "Die heruntergeladene Datei hat die Überprüfung nicht bestanden und wird nicht installiert. Wiederholen Sie den Download.",
     "setupErrorDependencies": "Die benötigten Komponenten konnten nicht installiert oder überprüft werden. Wiederholen Sie die Installation oder wählen Sie eine kompatible Umgebung. Weitere Angaben stehen in den technischen Details.",
     "setupErrorStorage": "Die Umgebung konnte auf {volume} nicht gespeichert oder entpackt werden. Den Dateifehler finden Sie in den technischen Details.",
-    "setupErrorService": "Die Umgebung ist bereit, aber Berry konnte nicht starten. Wiederholen Sie den Start. Eine Neuinstallation ist nicht erforderlich."
+    "setupErrorService": "Die Umgebung ist bereit, aber Berry konnte nicht starten. Wiederholen Sie den Start. Eine Neuinstallation ist nicht erforderlich.",
+    "setupProgressIndeterminate": "In Bearbeitung… der Fortschritt dieses Schritts ist nicht messbar.",
+    "setupDownloadProgress": "{received} / {total} MiB",
+    "setupDownloadReceived": "{received} MiB heruntergeladen"
   },
   "es": {
     "setupNotFound": "No se encontraron entornos. Elige un archivo Python o utiliza la instalación automática.",
@@ -258,7 +270,10 @@ export const STARTUP_TRANSLATIONS = {
     "setupErrorChecksum": "El archivo descargado no superó la verificación y no se instalará. Reintenta la descarga.",
     "setupErrorDependencies": "No se pudieron instalar o validar los componentes necesarios. Reintenta la instalación o elige un entorno compatible. Consulta los detalles técnicos.",
     "setupErrorStorage": "No se pudo guardar o extraer el entorno en {volume}. Consulta el error de archivo en los detalles técnicos.",
-    "setupErrorService": "El entorno está listo, pero Berry no pudo iniciarse. Reintenta el inicio; no es necesario reinstalar."
+    "setupErrorService": "El entorno está listo, pero Berry no pudo iniciarse. Reintenta el inicio; no es necesario reinstalar.",
+    "setupProgressIndeterminate": "En curso… no se puede medir el progreso de este paso.",
+    "setupDownloadProgress": "{received} / {total} MiB",
+    "setupDownloadReceived": "{received} MiB descargados"
   },
   "ru": {
     "setupNotFound": "Среды не найдены. Выберите файл Python или автоматическую установку.",
@@ -309,6 +324,9 @@ export const STARTUP_TRANSLATIONS = {
     "setupErrorChecksum": "Загруженный файл не прошёл проверку и не будет установлен. Повторите загрузку.",
     "setupErrorDependencies": "Не удалось установить или проверить необходимые компоненты. Повторите установку или выберите совместимую среду. См. технические сведения.",
     "setupErrorStorage": "Не удалось сохранить или распаковать среду на {volume}. См. ошибку файла в технических сведениях.",
-    "setupErrorService": "Среда готова, но Berry не запустилась. Повторите запуск. Переустановка не требуется."
+    "setupErrorService": "Среда готова, но Berry не запустилась. Повторите запуск. Переустановка не требуется.",
+    "setupProgressIndeterminate": "Выполняется… прогресс этого этапа нельзя измерить.",
+    "setupDownloadProgress": "{received} / {total} МиБ",
+    "setupDownloadReceived": "Загружено {received} МиБ"
   }
 } satisfies Record<Exclude<SupportedLanguage, 'en' | 'zh-CN'>, Record<SetupKey, string>>;

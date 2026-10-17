@@ -2,6 +2,7 @@
 pub mod bootstrap;
 pub mod environments;
 pub mod setup_error;
+pub mod setup_progress;
 mod setup_process;
 use std::fs::OpenOptions;
 use std::io::Write;

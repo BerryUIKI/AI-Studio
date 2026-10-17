@@ -5,8 +5,9 @@ import { CheckCircle2, Download, Loader2, Minus, X } from 'lucide-react';
 import { useUiText, type UiMessageKey } from '../../i18n/useUiText';
 import { LANGUAGE_OPTIONS, resolveEffectiveLanguage } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/useSettingsStore';
+import { ProgressBar } from '../ui/ProgressBar';
 
-interface Status { phase: string; details: string; environment_path: string; can_install: boolean; error_code?: string; volume?: string; available_bytes?: number | null; required_bytes?: number | null }
+interface Status { phase: string; details: string; environment_path: string; can_install: boolean; error_code?: string; volume?: string; available_bytes?: number | null; required_bytes?: number | null; downloaded_bytes?: number | null; total_bytes?: number | null }
 interface Environment { path: string; version: string | null; ready: boolean; reason: string; missing: string[] }
 const stages: Record<string, UiMessageKey> = {
   downloading: 'setupDownloading', verifying: 'setupVerifying', installing: 'setupInstalling',
@@ -49,6 +50,7 @@ export function StartupScreen() {
 
   const prepare = async (action: 'install' | 'existing' | 'retry') => {
     cancelRequested.current = false;
+    setStatus((value) => value ? { ...value, phase: 'validating', downloaded_bytes: null, total_bytes: null } : value);
     setBusy(true); setNotice(false); setCancelling(false);
     try {
       await invoke('prepare_environment', { action, path: action === 'existing' ? selected : null, language });
@@ -80,6 +82,13 @@ export function StartupScreen() {
   };
   const failed = status?.phase === 'failed';
   const cancelled = status?.phase === 'cancelled';
+  const received = status?.phase === 'downloading' && typeof status.downloaded_bytes === 'number'
+    && Number.isFinite(status.downloaded_bytes) && status.downloaded_bytes >= 0 ? status.downloaded_bytes : undefined;
+  const total = typeof status?.total_bytes === 'number' && Number.isFinite(status.total_bytes)
+    && status.total_bytes > 0 && received !== undefined && received <= status.total_bytes ? status.total_bytes : undefined;
+  const percentage = received !== undefined && total !== undefined ? received / total * 100 : undefined;
+  const numberFormat = new Intl.NumberFormat(resolveEffectiveLanguage(language), { maximumFractionDigits: 2 });
+  const percentFormat = new Intl.NumberFormat(resolveEffectiveLanguage(language), { style: 'percent', maximumFractionDigits: 0 });
   const formatSpace = (bytes: number | null | undefined) => bytes == null ? '—'
     : new Intl.NumberFormat(resolveEffectiveLanguage(language), { maximumFractionDigits: 2 }).format(bytes / 1024 ** 3);
   const failure = t(failed ? failureMessages[status?.error_code ?? ''] ?? 'setupFailed' : 'setupFailed', {
@@ -118,7 +127,17 @@ export function StartupScreen() {
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-400">{t('setupOptional')}</p>
           <div className="mt-6" role="status" aria-live="polite">
-            {busy && <p className="flex items-center gap-3 text-violet-300"><Loader2 size={18} className="animate-spin" />{cancelling ? t('setupCancelling') : t(stages[status?.phase ?? ''] ?? 'setupValidating')}</p>}
+            {busy && <div className="space-y-3">
+              <p className="flex items-center gap-3 text-violet-300"><Loader2 size={18} className="animate-spin motion-reduce:animate-none" />{cancelling ? t('setupCancelling') : t(stages[status?.phase ?? ''] ?? 'setupValidating')}</p>
+              <div className="h-2.5 overflow-hidden rounded-full bg-slate-800">
+                <ProgressBar value={percentage} label={t(stages[status?.phase ?? ''] ?? 'setupValidating')} className="text-violet-500" indeterminateText={t('setupProgressIndeterminate')} />
+              </div>
+              {received !== undefined && <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-slate-400">
+                <span>{total === undefined ? t('setupDownloadReceived', { received: numberFormat.format(received / 1024 ** 2) })
+                  : t('setupDownloadProgress', { received: numberFormat.format(received / 1024 ** 2), total: numberFormat.format(total / 1024 ** 2) })}</span>
+                {percentage !== undefined && <span>{percentFormat.format(percentage / 100)}</span>}
+              </div>}
+            </div>}
             {!busy && (notice || failed) && <p className="text-amber-300">{failure}</p>}
             {!busy && cancelled && <p className="text-slate-300">{t('setupCancelled')}</p>}
           </div>

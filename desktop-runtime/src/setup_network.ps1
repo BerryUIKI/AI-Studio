@@ -25,7 +25,7 @@ function Assert-BerryProxyReachable([Uri]$ProxyUri) {
     } finally { $client.Dispose() }
 }
 
-function Save-BerryDownload([Uri]$Uri, [string]$Destination, [Net.IWebProxy]$Proxy = $script:BerrySystemProxy) {
+function Save-BerryDownload([Uri]$Uri, [string]$Destination, [Net.IWebProxy]$Proxy = $script:BerrySystemProxy, [scriptblock]$OnProgress = $null) {
     $request = [Net.HttpWebRequest]::Create($Uri)
     $request.Proxy = $Proxy
     $request.Timeout = 180000
@@ -37,7 +37,20 @@ function Save-BerryDownload([Uri]$Uri, [string]$Destination, [Net.IWebProxy]$Pro
         $response = $request.GetResponse()
         $inputStream = $response.GetResponseStream()
         $outputStream = [IO.File]::Create($Destination)
-        $inputStream.CopyTo($outputStream)
+        $total = if ($response.ContentLength -gt 0) { $response.ContentLength } else { $null }
+        [long]$received = 0
+        $timer = [Diagnostics.Stopwatch]::StartNew()
+        $buffer = New-Object byte[] 65536
+        if ($null -ne $OnProgress) { & $OnProgress $received $total }
+        while (($count = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $outputStream.Write($buffer, 0, $count)
+            $received += $count
+            if ($null -ne $OnProgress -and $timer.ElapsedMilliseconds -ge 250) {
+                & $OnProgress $received $total
+                $timer.Restart()
+            }
+        }
+        if ($null -ne $OnProgress) { & $OnProgress $received $total }
     } finally {
         if ($null -ne $outputStream) { $outputStream.Dispose() }
         if ($null -ne $inputStream) { $inputStream.Dispose() }
