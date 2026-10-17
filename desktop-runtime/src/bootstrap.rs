@@ -1,5 +1,6 @@
 //! App-owned core runtime setup; no host Python installation or engine packages.
 use crate::setup_error::{check_space, volume, SetupError};
+use crate::setup_progress::SetupProgress;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::io::{BufRead, BufReader};
@@ -18,6 +19,14 @@ pub fn install(
     cancel: &AtomicBool,
     progress: impl Fn(&str),
 ) -> Result<(), SetupError> {
+    install_with_progress(root, cancel, |event| progress(&event.stage))
+}
+
+pub fn install_with_progress(
+    root: &Path,
+    cancel: &AtomicBool,
+    progress: impl Fn(&SetupProgress),
+) -> Result<(), SetupError> {
     if !supported() {
         return Err("Automatic environment setup supports Windows x64 only".into());
     }
@@ -25,7 +34,7 @@ pub fn install(
         return Err("Environment setup cancelled".into());
     }
     if managed_python(root).is_some_and(|python| runtime_usable(&python)) {
-        progress("validating");
+        progress(&SetupProgress::stage("validating"));
         return Ok(());
     }
     let directory = runtime_dir(root);
@@ -44,7 +53,12 @@ pub fn install(
     std::fs::create_dir_all(&directory).map_err(|_| {
         SetupError::new("permission", "Application runtime storage is not writable")
     })?;
-    for file in ["setup.lock", "bootstrap.ps1", "setup_network.ps1", "verify_core.py"] {
+    for file in [
+        "setup.lock",
+        "bootstrap.ps1",
+        "setup_network.ps1",
+        "verify_core.py",
+    ] {
         verify_storage_path(&directory.join(file))?;
     }
     let lock = std::fs::OpenOptions::new()
@@ -61,8 +75,11 @@ pub fn install(
         include_str!("setup_network.ps1"),
     )
     .map_err(|_| SetupError::new("permission", "Cannot write the network setup helper"))?;
-    std::fs::write(directory.join("verify_core.py"), include_str!("verify_core.py"))
-        .map_err(|_| SetupError::new("permission", "Cannot write the runtime verification helper"))?;
+    std::fs::write(
+        directory.join("verify_core.py"),
+        include_str!("verify_core.py"),
+    )
+    .map_err(|_| SetupError::new("permission", "Cannot write the runtime verification helper"))?;
     let script = directory.join("bootstrap.ps1");
     std::fs::write(&script, include_str!("bootstrap.ps1"))
         .map_err(|_| "Cannot prepare environment setup")?;
@@ -98,9 +115,7 @@ pub fn install(
     let reader = thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
-                if let Some(stage) = value["stage"].as_str() {
-                    let _ = send.send(stage.to_owned());
-                }
+                let _ = send.send(value);
             }
         }
     });
@@ -113,12 +128,13 @@ pub fn install(
         if started.elapsed() > Duration::from_secs(1200) {
             return Err("Environment setup timed out; retry when connected".into());
         }
-        if let Ok(stage) = receive.recv_timeout(Duration::from_millis(100)) {
+        if let Ok(value) = receive.recv_timeout(Duration::from_millis(100)) {
+            let stage = value["stage"].as_str().unwrap_or_default();
             if stage.starts_with("failed_") {
-                failure = stage.clone();
+                failure = stage.to_owned();
             }
-            if ["downloading", "verifying", "installing", "validating"].contains(&stage.as_str()) {
-                progress(&stage);
+            if let Some(event) = SetupProgress::from_value(&value) {
+                progress(&event);
             }
         }
         if let Some(status) = process
@@ -127,9 +143,13 @@ pub fn install(
             .map_err(|_| "Cannot observe environment setup")?
         {
             let _ = reader.join();
-            for stage in receive.try_iter() {
+            for value in receive.try_iter() {
+                let stage = value["stage"].as_str().unwrap_or_default();
                 if stage.starts_with("failed_") {
-                    failure = stage;
+                    failure = stage.to_owned();
+                }
+                if let Some(event) = SetupProgress::from_value(&value) {
+                    progress(&event);
                 }
             }
             if !status.success() {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import subprocess
 import sys
 import threading
@@ -27,7 +28,8 @@ def transport() -> Iterator[tuple[str, list[str]]]:
         def do_GET(self) -> None:
             requests.append(self.path)
             self.send_response(200)
-            self.send_header("Content-Length", str(len(PAYLOAD)))
+            if not self.path.endswith("unknown"):
+                self.send_header("Content-Length", str(len(PAYLOAD)))
             self.end_headers()
             self.wfile.write(PAYLOAD)
 
@@ -156,3 +158,32 @@ Write-Output 'core-validated'
 """,
     )
     assert output == "core-validated"
+
+
+@pytest.mark.parametrize("known_total", [True, False])
+def test_download_progress_reports_real_bytes_and_optional_total(
+    tmp_path: Path, transport: tuple[str, list[str]], known_total: bool
+) -> None:
+    url, _ = transport
+    target = tmp_path / "measured.bin"
+    suffix = "known" if known_total else "unknown"
+    output = run_script(
+        tmp_path,
+        f"""
+Save-BerryDownload ([Uri]'{url}/{suffix}') '{target}' $null -OnProgress {{
+    param($Received, $Total)
+    Write-Output (@{{stage='downloading'; downloaded_bytes=$Received; total_bytes=$Total}} | ConvertTo-Json -Compress)
+}}
+""",
+    )
+    frames = [json.loads(line) for line in output.splitlines()]
+    assert len(frames) >= 2
+    assert frames[0]["downloaded_bytes"] == 0
+    assert frames[-1]["downloaded_bytes"] == len(PAYLOAD)
+    counters = [frame["downloaded_bytes"] for frame in frames]
+    assert counters == sorted(counters)
+    assert all(
+        frame["total_bytes"] == (len(PAYLOAD) if known_total else None)
+        for frame in frames
+    )
+    assert target.read_bytes() == PAYLOAD
