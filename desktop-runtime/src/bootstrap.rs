@@ -44,6 +44,9 @@ pub fn install(
     std::fs::create_dir_all(&directory).map_err(|_| {
         SetupError::new("permission", "Application runtime storage is not writable")
     })?;
+    for file in ["setup.lock", "bootstrap.ps1", "setup_network.ps1", "verify_core.py"] {
+        verify_storage_path(&directory.join(file))?;
+    }
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -58,6 +61,8 @@ pub fn install(
         include_str!("setup_network.ps1"),
     )
     .map_err(|_| SetupError::new("permission", "Cannot write the network setup helper"))?;
+    std::fs::write(directory.join("verify_core.py"), include_str!("verify_core.py"))
+        .map_err(|_| SetupError::new("permission", "Cannot write the runtime verification helper"))?;
     let script = directory.join("bootstrap.ps1");
     std::fs::write(&script, include_str!("bootstrap.ps1"))
         .map_err(|_| "Cannot prepare environment setup")?;

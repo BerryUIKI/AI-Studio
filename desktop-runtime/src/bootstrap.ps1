@@ -69,8 +69,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Application dependency installation failed.' }
     Progress 'validating'
     $Failure = 'validation'
-    $Probe = 'import sys,pathlib; assert sys.version_info >= (3,10); assert pathlib.Path(sys.prefix).resolve()==pathlib.Path(sys.executable).resolve().parent; import uvicorn,fastapi,pydantic,httpx,aiosqlite,PIL,multipart,quickjs; assert "torch" not in sys.modules'
-    & $Python -I -c $Probe *>> $Log
+    $Probe = Join-Path $PSScriptRoot 'verify_core.py'
+    & $Python -I $Probe "$Stage\python" *>> $Log
     if ($LASTEXITCODE -ne 0) { throw 'Core environment validation failed.' }
     $Ready = @{ requirements_sha256=(Get-BerryFileHash $Requirements); python_version='3.12.14'; archive_sha256=$RuntimeSha256 }
     [IO.File]::WriteAllText("$Stage\python\berry-core-ready.json", ($Ready | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
@@ -80,7 +80,7 @@ try {
     if (Test-Path -LiteralPath $Target) { Move-Item -LiteralPath $Target -Destination $Backup }
     try {
         Move-Item -LiteralPath "$Stage\python" -Destination $Target
-        & "$Target\python.exe" -I -c $Probe *>> $Log
+        & "$Target\python.exe" -I $Probe $Target *>> $Log
         if ($LASTEXITCODE -ne 0) { throw 'Core environment relocation failed.' }
     } catch {
         # Retain failed and previous installations for diagnosis; never overwrite user data.

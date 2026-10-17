@@ -139,3 +139,20 @@ Write-Output 'proxy-unreachable'
 """,
     )
     assert output == "proxy-unreachable"
+
+
+def test_core_validation_survives_windows_powershell_argument_passing(
+    tmp_path: Path,
+) -> None:
+    verification = HELPER.with_name("verify_core.py")
+    python = sys.executable.replace("'", "''")
+    prefix = sys.prefix.replace("'", "''")
+    output = run_script(
+        tmp_path,
+        f"""
+& '{python}' -I '{verification}' '{prefix}'
+if ($LASTEXITCODE -ne 0) {{ throw 'Core validation failed' }}
+Write-Output 'core-validated'
+""",
+    )
+    assert output == "core-validated"
