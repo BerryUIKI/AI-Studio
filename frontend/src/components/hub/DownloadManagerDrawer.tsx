@@ -1,4 +1,4 @@
-import { formatNumber } from '../../i18n/format';
+import { formatDownloadDuration, formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Dialog } from '../ui/Dialog';
@@ -55,13 +55,6 @@ export const DownloadManagerDrawer: React.FC = () => {
     return `${bps} B/s`;
   };
 
-  const formatEta = (sec?: number | null) => {
-    if (sec === undefined || sec === null) return '';
-    if (sec < 60) return `${sec}s left`;
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}m ${s}s left`;
-  };
 
   return (
     <Dialog title={ui("ui_downloads")} onClose={() => setDrawerOpen(false)} className="fixed inset-0 z-50 flex justify-end">
@@ -104,6 +97,7 @@ export const DownloadManagerDrawer: React.FC = () => {
               const isPaused = task.status === 'paused';
               const isDownloading = task.status === 'downloading';
               const isFailed = task.status === 'failed';
+              const remaining = formatDownloadDuration(task.eta_seconds);
 
               return (
                 <div
@@ -183,8 +177,8 @@ export const DownloadManagerDrawer: React.FC = () => {
                         {isDownloading && (
                           <>
                             <span className="text-emerald-400 font-medium">{formatSpeed(task.speed_bps)}</span>
-                            {task.eta_seconds !== null && task.eta_seconds !== undefined && (
-                              <span className="text-neutral-500">({formatEta(task.eta_seconds)})</span>
+                            {remaining && (
+                              <span className="text-neutral-500">({ui('downloadRemaining', { duration: remaining })})</span>
                             )}
                           </>
                         )}

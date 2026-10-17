@@ -1,5 +1,6 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  downloadRemaining: "{duration} remaining",
   downloadRemoveError: "Could not remove the download. Check file permissions and your connection, then retry.",
   downloadRemoveHistory: "Remove from list (keep installed model)",
   downloadCancelRemove: "Cancel and remove incomplete download",
@@ -831,6 +832,7 @@ export const UI_ENGLISH = {
 } as const;
 
 export const UI_CHINESE_PREVIEW: Record<string, string> = {
+  downloadRemaining: "剩余 {duration}",
   setupProgressIndeterminate: "正在处理，此步骤暂无可测量的进度。",
   setupDownloadProgress: "{received} / {total} MiB",
   setupDownloadReceived: "已下载 {received} MiB",
