@@ -5,6 +5,7 @@ import { DownloadManagerDrawer } from '../components/hub/DownloadManagerDrawer';
 import { FloatingDownloadWidget } from '../components/hub/FloatingDownloadWidget';
 import { DOWNLOAD_TRANSLATIONS } from '../i18n/downloadMessages';
 import { uiText } from '../i18n/useUiText';
+import { formatDownloadDuration } from '../i18n/format';
 import { type SupportedLanguage } from '../i18n/translations';
 import { useDownloadStore, type DownloadTask } from '../stores/useDownloadStore';
 import { useSettingsStore } from '../stores/useSettingsStore';
@@ -33,6 +34,7 @@ it.each(languages)('renders every download state and action in %s', (language) =
   for (const label of [catalog.ui_paused, catalog.ui_installed, catalog.ui_failed, catalog.downloadPending, catalog.downloadCancelled, catalog.downloadDetails, catalog.downloadFailedMessage]) {
     expect(screen.getByText(label)).toBeTruthy();
   }
+  expect(screen.getByText(`(${uiText('downloadRemaining', language, { duration: formatDownloadDuration(3661) })})`)).toBeTruthy();
   expect(screen.getByText('HTTP 503 service response')).toBeTruthy();
   expect(screen.getAllByText('Model identifier')).toHaveLength(6);
   expect(screen.getAllByText(/COMFYUI.*\/owned\/model.safetensors/)).toHaveLength(6);
@@ -63,10 +65,10 @@ it('updates mounted downloads when switching from system language', () => {
   vi.restoreAllMocks();
 });
 
-it('shows localized pause failures instead of silently ignoring them', async () => {
-  useSettingsStore.getState().setLanguage('es');
+it.each(languages)('shows localized pause failures in %s', async (language) => {
+  useSettingsStore.getState().setLanguage(language);
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 409 })));
   render(<DownloadManagerDrawer />);
-  fireEvent.click(screen.getByRole('button', { name: DOWNLOAD_TRANSLATIONS.es.ui_pause }));
-  expect((await screen.findByRole('alert')).textContent).toBe(DOWNLOAD_TRANSLATIONS.es.downloadActionError);
+  fireEvent.click(screen.getByRole('button', { name: DOWNLOAD_TRANSLATIONS[language].ui_pause }));
+  expect((await screen.findByRole('alert')).textContent).toBe(DOWNLOAD_TRANSLATIONS[language].downloadActionError);
 });
