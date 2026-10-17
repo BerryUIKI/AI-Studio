@@ -25,15 +25,20 @@ export const DownloadManagerDrawer: React.FC = () => {
   const cancelTask = useDownloadStore((state) => state.cancelTask);
 
   const [removing, setRemoving] = useState<string[]>([]);
-  const [actionError, setActionError] = useState(false);
+  const [actionError, setActionError] = useState<'downloadRemoveError' | 'downloadActionError' | null>(null);
   const removeTask = async (taskId: string) => {
     setRemoving((ids) => [...ids, taskId]);
-    setActionError(false);
+    setActionError(null);
     try {
-      if (!await cancelTask(taskId)) setActionError(true);
+      if (!await cancelTask(taskId)) setActionError('downloadRemoveError');
     } finally {
       setRemoving((ids) => ids.filter((id) => id !== taskId));
     }
+  };
+
+  const controlTask = async (action: (id: string) => Promise<boolean>, taskId: string) => {
+    setActionError(null);
+    if (!await action(taskId)) setActionError('downloadActionError');
   };
 
   if (!isDrawerOpen) return null;
@@ -72,7 +77,7 @@ export const DownloadManagerDrawer: React.FC = () => {
             <Download className="w-5 h-5 text-blue-400" />
             <h2 className="text-base font-semibold text-neutral-100">{ui("ui_downloads")}</h2>
             <span className="text-xs text-neutral-400 bg-neutral-800 px-2 py-0.5 rounded-full border border-neutral-700">
-              {activeCount} {ui("ui_active_2")}{completedCount} {ui("ui_completed")}</span>
+              {ui('downloadCounts', { active: formatNumber(activeCount, 0), completed: formatNumber(completedCount, 0) })}</span>
           </div>
           <button
             onClick={() => setDrawerOpen(false)}
@@ -85,7 +90,7 @@ export const DownloadManagerDrawer: React.FC = () => {
 
         {/* Task List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {actionError && <p role="alert" className="text-sm text-rose-400">{ui('downloadRemoveError')}</p>}
+          {actionError && <p role="alert" className="text-sm text-rose-400">{ui(actionError)}</p>}
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-neutral-500 gap-2">
               <Download className="w-8 h-8 opacity-40" />
@@ -126,8 +131,9 @@ export const DownloadManagerDrawer: React.FC = () => {
                     <div className="flex items-center gap-1.5 shrink-0">
                       {isDownloading && (
                         <button
-                          onClick={() => pauseTask(task.task_id)}
+                          onClick={() => void controlTask(pauseTask, task.task_id)}
                           title={ui("ui_pause")}
+                          aria-label={ui("ui_pause")}
                           className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-700 rounded-lg transition-colors"
                         >
                           <Pause className="w-4 h-4" />
@@ -135,8 +141,9 @@ export const DownloadManagerDrawer: React.FC = () => {
                       )}
                       {isPaused && (
                         <button
-                          onClick={() => resumeTask(task.task_id)}
+                          onClick={() => void controlTask(resumeTask, task.task_id)}
                           title={ui("ui_resume")}
+                          aria-label={ui("ui_resume")}
                           className="p-1.5 text-neutral-400 hover:text-emerald-400 hover:bg-neutral-700 rounded-lg transition-colors"
                         >
                           <Play className="w-4 h-4" />
@@ -171,7 +178,7 @@ export const DownloadManagerDrawer: React.FC = () => {
                     {/* Progress Info Footer */}
                     <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
                       <span>
-                        {task.progress_pct}% · {formatBytes(task.downloaded_bytes)} / {formatBytes(task.total_bytes)}
+                        {formatNumber(task.progress_pct)}% · {formatBytes(task.downloaded_bytes)} / {formatBytes(task.total_bytes)}
                       </span>
                       <div className="flex items-center gap-2">
                         {isDownloading && (
@@ -182,6 +189,8 @@ export const DownloadManagerDrawer: React.FC = () => {
                             )}
                           </>
                         )}
+                        {task.status === 'pending' && <span>{ui('downloadPending')}</span>}
+                        {task.status === 'cancelled' && <span>{ui('downloadCancelled')}</span>}
                         {isPaused && <span className="text-amber-400 font-medium">{ui("ui_paused")}</span>}
                         {isFinished && <span className="text-emerald-400 font-medium">{ui("ui_installed")}</span>}
                         {isFailed && <span className="text-rose-400 font-medium">{ui("ui_failed")}</span>}
@@ -192,9 +201,13 @@ export const DownloadManagerDrawer: React.FC = () => {
                   {/* Failure details if any */}
                   {isFailed && task.error_message && (
                     <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md p-2">
-                      {task.error_message}
+                      {ui('downloadFailedMessage')}
                     </p>
                   )}
+                  {isFailed && task.error_message && <details className="text-xs text-neutral-400 break-words">
+                    <summary>{ui('downloadDetails')}</summary>
+                    <p className="mt-2">{task.error_message}</p>
+                  </details>}
                 </div>
               );
             })
