@@ -1,3 +1,4 @@
+import { STARTUP_TRANSLATIONS } from './startupMessages';
 import { UI_ENGLISH, UI_CHINESE_PREVIEW } from './uiMessages';
 
 /**
@@ -211,6 +212,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     tier_cpu_mode: 'CPU运行 (无独立显卡)',
   },
   ja: {
+    ...STARTUP_TRANSLATIONS.ja,
     settings_title: '設定',
     settings_subtitle: 'アプリの設定、言語、クラウドキー、およびエンジン環境を構成します。',
     tab_general: '一般・言語',
@@ -249,6 +251,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     launcher_badge_hw_setup: '⚡ ハードウェア診断とモデル設定',
   },
   ko: {
+    ...STARTUP_TRANSLATIONS.ko,
     settings_title: '설정',
     settings_subtitle: '앱 환경설정, 언어, 클라우드 키 및 엔진 환경을 구성합니다.',
     tab_general: '일반 및 언어',
@@ -287,6 +290,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     launcher_badge_hw_setup: '⚡ 하드웨어 진단 및 로컬 모델 배포',
   },
   fr: {
+    ...STARTUP_TRANSLATIONS.fr,
     settings_title: 'Paramètres',
     settings_subtitle: "Configurez les préférences, la langue, les clés cloud et l'environnement.",
     tab_general: 'Général & Langue',
@@ -325,6 +329,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     launcher_badge_hw_setup: '⚡ Diagnostic matériel et modèles',
   },
   de: {
+    ...STARTUP_TRANSLATIONS.de,
     settings_title: 'Einstellungen',
     settings_subtitle: 'Konfigurieren Sie App-Einstellungen, Sprache, Cloud-Schlüssel und Engines.',
     tab_general: 'Allgemein & Sprache',
@@ -363,6 +368,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     launcher_badge_hw_setup: '⚡ Hardware-Diagnose & Modell-Setup',
   },
   es: {
+    ...STARTUP_TRANSLATIONS.es,
     settings_title: 'Configuración',
     settings_subtitle: 'Configure preferencias, idioma, claves en la nube y motores de inferencia.',
     tab_general: 'General e Idioma',
@@ -401,6 +407,7 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
     launcher_badge_hw_setup: '⚡ Diagnóstico de hardware y modelos',
   },
   ru: {
+    ...STARTUP_TRANSLATIONS.ru,
     settings_title: 'Настройки',
     settings_subtitle: 'Настройка параметров приложения, языка, облачных ключей и движков.',
     tab_general: 'Общие и Язык',
