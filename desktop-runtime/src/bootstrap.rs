@@ -4,9 +4,70 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+use std::sync::{atomic::{AtomicBool, Ordering}, mpsc};
+use std::io::{BufRead, BufReader};
+use fs2::FileExt;
+
+/// Install only after an explicit UI action; downloads are not inference calls.
+pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Result<(), String> {
+    if !supported() { return Err("Automatic environment setup supports Windows x64 only".into()); }
+    let directory = runtime_dir(root);
+    verify_storage_path(&directory)?;
+    std::fs::create_dir_all(&directory).map_err(|_| "Application runtime storage is not writable")?;
+    let lock = std::fs::OpenOptions::new().create(true).truncate(false).read(true).write(true)
+        .open(directory.join("setup.lock")).map_err(|_| "Cannot open setup lock")?;
+    lock.try_lock_exclusive().map_err(|_| "Environment setup is already running in another Berry window")?;
+    let script = directory.join("bootstrap.ps1");
+    std::fs::write(&script, include_str!("bootstrap.ps1")).map_err(|_| "Cannot prepare environment setup")?;
+    let shell = PathBuf::from(std::env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into()))
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let mut command = Command::new(shell);
+    command.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
+        .arg(&script).arg("-SourceRoot").arg(root).arg("-DataRoot").arg(data_dir())
+        .arg("-RuntimeDir").arg(&directory).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+    let mut process = crate::setup_process::SetupProcess::spawn(&mut command)?;
+    let stdout = process.child.stdout.take().ok_or("Cannot read setup status")?;
+    let (send, receive) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                if let Some(stage) = value["stage"].as_str() { let _ = send.send(stage.to_owned()); }
+            }
+        }
+    });
+    let started = Instant::now();
+    loop {
+        if cancel.load(Ordering::SeqCst) { return Err("Environment setup cancelled".into()); }
+        if started.elapsed() > Duration::from_secs(1200) { return Err("Environment setup timed out; retry when connected".into()); }
+        if let Ok(stage) = receive.recv_timeout(Duration::from_millis(100)) {
+            if ["downloading", "verifying", "installing", "validating"].contains(&stage.as_str()) { progress(&stage); }
+        }
+        if let Some(status) = process.child.try_wait().map_err(|_| "Cannot observe environment setup")? {
+            if !status.success() { return Err("Environment setup failed. Check network access to GitHub and PyPI, then retry.".into()); }
+            break;
+        }
+    }
+    if !managed_python(root).is_some_and(|python| runtime_usable(&python)) {
+        return Err("The created environment did not pass validation".into());
+    }
+    Ok(())
+}
 
 pub fn supported() -> bool {
     cfg!(all(windows, target_arch = "x86_64"))
+}
+
+fn verify_storage_path(path: &Path) -> Result<(), String> {
+    for ancestor in path.ancestors() {
+        if let Ok(metadata) = ancestor.symlink_metadata() {
+            #[cfg(windows)]
+            let redirected = { use std::os::windows::fs::MetadataExt; metadata.file_attributes() & 0x400 != 0 };
+            #[cfg(not(windows))]
+            let redirected = metadata.file_type().is_symlink();
+            if redirected { return Err("Runtime storage must not redirect through links or junctions".into()); }
+        }
+    }
+    Ok(())
 }
 
 pub fn data_dir() -> PathBuf {
