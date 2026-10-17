@@ -13,14 +13,41 @@ pub struct StartupStatus {
 
 fn local_page(window: &tauri::WebviewWindow) -> Result<(), String> {
     let url = window.url().map_err(|_| "Cannot verify setup page")?;
-    if url.path().ends_with("/startup.html")
-        && (url.scheme() == "tauri"
-            || ["localhost", "tauri.localhost", "127.0.0.1"]
-                .contains(&url.host_str().unwrap_or("")))
-    {
+    if permits_setup(&url) {
         Ok(())
     } else {
         Err("Environment setup is available only from the local startup page".into())
+    }
+}
+
+fn permits_setup(url: &tauri::Url) -> bool {
+    let bundled = (url.scheme() == "tauri" && url.host_str() == Some("localhost"))
+        || (url.scheme() == "http" && url.host_str() == Some("tauri.localhost"));
+    let development = cfg!(debug_assertions)
+        && url.scheme() == "http"
+        && url.port() == Some(5173)
+        && ["localhost", "127.0.0.1"].contains(&url.host_str().unwrap_or(""));
+    url.path() == "/startup.html" && (bundled || development)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::permits_setup;
+    #[test]
+    fn setup_commands_cannot_be_called_from_backend_or_external_pages() {
+        for url in [
+            "tauri://localhost/startup.html",
+            "http://tauri.localhost/startup.html",
+        ] {
+            assert!(permits_setup(&tauri::Url::parse(url).unwrap()));
+        }
+        for url in [
+            "http://127.0.0.1:8000/startup.html",
+            "https://example.com/startup.html",
+            "tauri://localhost/index.html",
+        ] {
+            assert!(!permits_setup(&tauri::Url::parse(url).unwrap()));
+        }
     }
 }
 
@@ -144,7 +171,7 @@ pub async fn prepare_environment(
             drop(status);
             if let Some(window) = app.get_webview_window("main") {
                 let mut url = tauri::Url::parse(&format!("http://127.0.0.1:{}", state.port)).unwrap();
-                if let Some(locale) = language.filter(|value| ["system", "en", "zh-CN"].contains(&value.as_str())) {
+                if let Some(locale) = language.filter(|value| ["system", "en", "zh-CN", "ja", "ko", "fr", "de", "es", "ru"].contains(&value.as_str())) {
                     url.query_pairs_mut().append_pair("setupLanguage", &locale);
                 }
                 window.navigate(url).map_err(|_| "Could not open the workspace")?;

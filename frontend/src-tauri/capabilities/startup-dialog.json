@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "startup-dialog",
+  "description": "File selection for bundled environment onboarding only",
+  "local": true,
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "dialog:allow-open"
+  ]
+}
