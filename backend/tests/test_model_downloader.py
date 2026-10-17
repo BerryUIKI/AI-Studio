@@ -62,7 +62,7 @@ def test_download_worker_info_progress():
         task_id="dl_test123",
         model=model,
         target_engine="comfyui",
-        target_path=Path("/tmp/test/4x-UltraSharp.pth"),
+        target_path=tmp_path / "4x-UltraSharp.pth",
         source_url="https://example.com/4x-UltraSharp.pth",
     )
 
@@ -85,7 +85,7 @@ def test_download_worker_info_progress():
 
 
 @pytest.mark.asyncio
-async def test_downloader_task_lifecycle_controls():
+async def test_downloader_task_lifecycle_controls(tmp_path: Path) -> None:
     """Verify task pause, resume, and cancellation tracking in ModelDownloader."""
     downloader = ModelDownloader()
     model = HubCatalog.get_model("esrgan-4x-ultrasharp")
@@ -112,7 +112,7 @@ async def test_downloader_task_lifecycle_controls():
     assert worker._pause_event.is_set()
 
     # Cancel
-    with patch("app.runtime.model_downloader.installer.engine_dir", Path("/tmp/test")):
+    with patch("app.runtime.model_downloader.installer.engine_dir", tmp_path):
         assert await downloader.cancel_task("dl_lifecycle_1") is True
     assert downloader.list_tasks() == []
     assert worker._cancel_flag is True
