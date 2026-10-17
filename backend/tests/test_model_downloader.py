@@ -53,7 +53,7 @@ def test_mirror_source_selection():
     assert "hf-mirror.com" in cn_url or "Mirror" in cn_url
 
 
-def test_download_worker_info_progress():
+def test_download_worker_info_progress(tmp_path: Path) -> None:
     """Verify DownloadWorker calculation of progress percentage and task info."""
     model = HubCatalog.get_model("esrgan-4x-ultrasharp")
     assert model is not None
@@ -95,7 +95,7 @@ async def test_downloader_task_lifecycle_controls(tmp_path: Path) -> None:
         task_id="dl_lifecycle_1",
         model=model,
         target_engine="comfyui",
-        target_path=Path("/tmp/test/4x-UltraSharp.pth"),
+        target_path=tmp_path / "4x-UltraSharp.pth",
         source_url="https://example.com/4x-UltraSharp.pth",
     )
     worker.status = "downloading"
