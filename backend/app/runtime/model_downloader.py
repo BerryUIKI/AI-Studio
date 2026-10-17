@@ -133,11 +133,6 @@ class DownloadWorker:
                                 async for chunk in response.aiter_bytes(chunk_size=65536):
                                     if self._cancel_flag:
                                         self.status = "cancelled"
-                                        if self.part_path.exists():
-                                            try:
-                                                self.part_path.unlink()
-                                            except Exception:
-                                                pass
                                         return False
 
                                     while not self._pause_event.is_set():
@@ -392,16 +387,41 @@ class ModelDownloader:
             return True
         return False
 
-    def cancel_task(self, task_id: str) -> bool:
+    async def cancel_task(self, task_id: str) -> bool:
+        """Stop the writer, discard its partial file, and remove task history.
+
+        Completed model files are deliberately retained: this endpoint removes
+        download records, not models that may be shared by multiple engines.
+        """
         worker = self._workers.get(task_id)
-        if worker:
-            worker._cancel_flag = True
-            worker._pause_event.set()
-            if worker._task and not worker._task.done():
-                worker._task.cancel()
-            worker.status = "cancelled"
-            return True
-        return False
+        if worker is None:
+            return False
+        worker._cancel_flag = True
+        worker._pause_event.set()
+        if worker._task and not worker._task.done():
+            worker._task.cancel()
+            await asyncio.gather(worker._task, return_exceptions=True)
+        worker.speed_bps = 0
+        worker.eta_seconds = None
+        try:
+            if worker.status != "completed":
+                root = installer.engine_dir.resolve()
+                part = worker.part_path
+                if part.is_symlink() or not part.resolve().is_relative_to(root):
+                    raise OSError("Partial download is outside the managed model directory")
+                if any(
+                    other is not worker and other.part_path == part
+                    and other.status in ("pending", "downloading", "paused")
+                    for other in self._workers.values()
+                ):
+                    raise OSError("Another download is using this partial file")
+                await asyncio.to_thread(part.unlink, missing_ok=True)
+        except OSError:
+            worker.status = "failed"
+            worker.error_message = "Could not remove the partial download. Check file permissions and retry."
+            raise
+        self._workers.pop(task_id, None)
+        return True
 
 
 model_downloader = ModelDownloader()

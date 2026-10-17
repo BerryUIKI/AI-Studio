@@ -84,7 +84,8 @@ def test_download_worker_info_progress():
     assert info_progress.eta_seconds == 13
 
 
-def test_downloader_task_lifecycle_controls():
+@pytest.mark.asyncio
+async def test_downloader_task_lifecycle_controls():
     """Verify task pause, resume, and cancellation tracking in ModelDownloader."""
     downloader = ModelDownloader()
     model = HubCatalog.get_model("esrgan-4x-ultrasharp")
@@ -111,8 +112,9 @@ def test_downloader_task_lifecycle_controls():
     assert worker._pause_event.is_set()
 
     # Cancel
-    assert downloader.cancel_task("dl_lifecycle_1") is True
-    assert worker.status == "cancelled"
+    with patch("app.runtime.model_downloader.installer.engine_dir", Path("/tmp/test")):
+        assert await downloader.cancel_task("dl_lifecycle_1") is True
+    assert downloader.list_tasks() == []
     assert worker._cancel_flag is True
 
 
@@ -245,3 +247,62 @@ async def test_download_worker_atomic_promotion_success(tmp_path):
     assert target_file.exists()
     assert target_file.read_bytes() == valid_content
 
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["pending", "downloading", "paused", "failed", "cancelled", "completed"])
+async def test_remove_download_cleans_only_partial_bytes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str) -> None:
+    downloader = ModelDownloader()
+    monkeypatch.setattr("app.runtime.model_downloader.installer.engine_dir", tmp_path)
+    model = HubCatalog.get_model("esrgan-4x-ultrasharp")
+    worker = DownloadWorker("remove", model, "comfyui", tmp_path / "model.pth", "")
+    downloader._workers[worker.task_id] = worker
+    worker.status = status
+    worker.target_path.write_bytes(b"installed model")
+    worker.part_path.write_bytes(b"partial")
+    unrelated = tmp_path / "other.pth"
+    unrelated.write_bytes(b"unrelated")
+    assert await downloader.cancel_task(worker.task_id)
+    assert downloader.list_tasks() == []
+    assert worker.target_path.read_bytes() == b"installed model"
+    assert unrelated.read_bytes() == b"unrelated"
+    assert worker.part_path.exists() == (status == "completed")
+    assert not await downloader.cancel_task(worker.task_id)
+
+
+@pytest.mark.asyncio
+async def test_remove_waits_until_writer_is_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    downloader = ModelDownloader()
+    monkeypatch.setattr("app.runtime.model_downloader.installer.engine_dir", tmp_path)
+    worker = DownloadWorker("writer", HubCatalog.get_model("esrgan-4x-ultrasharp"), "comfyui", tmp_path / "model.pth", "")
+    downloader._workers[worker.task_id] = worker
+    opened = asyncio.Event()
+    closed = asyncio.Event()
+
+    async def writer() -> None:
+        try:
+            with worker.part_path.open("wb") as stream:
+                stream.write(b"partial")
+                opened.set()
+                await asyncio.Event().wait()
+        finally:
+            closed.set()
+
+    worker._task = asyncio.create_task(writer())
+    await opened.wait()
+    assert await downloader.cancel_task(worker.task_id)
+    assert closed.is_set()
+    assert not worker.part_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_remove_rejects_external_partial_and_retains_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    downloader = ModelDownloader()
+    monkeypatch.setattr("app.runtime.model_downloader.installer.engine_dir", tmp_path / "owned")
+    worker = DownloadWorker("external", HubCatalog.get_model("esrgan-4x-ultrasharp"), "comfyui", tmp_path / "external.pth", "")
+    downloader._workers[worker.task_id] = worker
+    worker.part_path.write_bytes(b"do not delete")
+    with pytest.raises(OSError):
+        await downloader.cancel_task(worker.task_id)
+    assert worker.part_path.read_bytes() == b"do not delete"
+    assert downloader.list_tasks()[0].status == "failed"
