@@ -118,3 +118,18 @@ jobs:
           cargo build --release
           cargo test
           cargo test --manifest-path ../desktop-runtime/Cargo.toml --locked
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Build bundled onboarding assets
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Compile and test the native desktop onboarding
+        run: cargo test --manifest-path frontend/src-tauri/Cargo.toml --locked --features custom-protocol

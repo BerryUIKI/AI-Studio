@@ -1,4 +1,8 @@
 //! Shared backend supervision for the desktop app and command-line launcher.
+pub mod bootstrap;
+pub mod environments;
+pub mod setup_error;
+mod setup_process;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -44,8 +48,12 @@ pub fn detect_root_dir() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-/// Locate Python executable (bundled hermetic runtime, local virtualenv, or system fallback).
+/// Locate an app-owned runtime or explicit development virtual environment.
 pub fn find_python_executable(root_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(python) = environments::selected(root_dir)? { return Ok(python); }
+    if let Some(python) = bootstrap::managed_python(root_dir) {
+        return Ok(python);
+    }
     let candidates = [
         root_dir.join("runtime").join("python").join("Scripts").join("python.exe"),
         root_dir.join("runtime").join("python").join("python.exe"),
@@ -58,17 +66,6 @@ pub fn find_python_executable(root_dir: &Path) -> Result<PathBuf, String> {
         if candidate.is_file() {
             log_msg(&format!("Found python executable: {:?}", candidate));
             return Ok(candidate.clone());
-        }
-    }
-
-    // Host Python is a source-checkout convenience, never a release fallback.
-    let sys_name = if cfg!(windows) { "python" } else { "python3" };
-    if root_dir.join(".git").is_dir() {
-        if let Ok(output) = Command::new(sys_name).arg("--version").output() {
-            if output.status.success() {
-                log_msg(&format!("Using development PATH python: {}", sys_name));
-                return Ok(PathBuf::from(sys_name));
-            }
         }
     }
 

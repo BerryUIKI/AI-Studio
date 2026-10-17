@@ -20,9 +20,8 @@ impl BackendSupervisor {
     }
 
     /// Resolve Python executable:
-    /// 1. Bundled release runtime (runtime/python/python.exe) - requires 0 host Python
-    /// 2. Isolated virtualenv (backend/.venv/Scripts/python.exe)
-    /// 3. Host Python fallback is allowed only in a source checkout
+    /// App-managed recovery runtime, bundled release Python or an explicit development venv.
+    /// A host PATH interpreter is never used as the application environment.
     pub fn find_python_executable(&self) -> Result<PathBuf, String> {
         berry_runtime::find_python_executable(&self.root_dir)
     }

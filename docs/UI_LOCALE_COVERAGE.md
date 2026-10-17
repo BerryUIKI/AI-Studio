@@ -33,3 +33,19 @@ Regression tests cover mounted locale changes, English fallback, key resolution,
 execution identifier separation and existing preview behavior. These checks are
 implementation evidence. Full keyboard/native workflow and translation-quality
 acceptance for any newly advertised locale still requires the testing handover.
+
+## Desktop environment onboarding
+
+The backend-independent startup guide has complete catalogs for all eight
+application locales: English, Simplified Chinese, Japanese, Korean, French,
+German, Spanish and Russian. This covers installation, observed progress,
+environment validation, cancellation, recovery, accessibility labels and the
+language selector. It follows the system locale initially. The chosen locale
+is transferred to the workspace when startup succeeds. Technical diagnostics
+and user environment paths retain their original text.
+
+`startupMessages.ts` requires every onboarding key in each of its six additional
+catalogs; English and Chinese use the shared workflow catalog. Rendered tests
+check key completeness, each locale, immediate switching and system detection.
+This scoped coverage does not certify translation completeness or native-speaker
+review for the rest of the application.
