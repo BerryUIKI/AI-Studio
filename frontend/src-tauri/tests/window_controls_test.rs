@@ -108,7 +108,7 @@ mod window_controls_tests {
                 "CSP should restrict object-src");
     }
 
-    /// Test window URL is set to backend origin
+    /// Setup must be available before the backend starts.
     #[test]
     fn test_window_url_configured() {
         let config_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tauri.conf.json");
@@ -117,6 +117,7 @@ mod window_controls_tests {
 
         // Verify window has a URL configured (not relying on devUrl only)
         assert!(content.contains("\"url\""), "Window URL should be explicitly configured");
-        assert!(content.contains("127.0.0.1"), "Window URL should point to local backend");
+        let config: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert_eq!(config["app"]["windows"][0]["url"], "startup.html");
     }
 }

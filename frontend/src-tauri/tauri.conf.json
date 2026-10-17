@@ -22,7 +22,7 @@
         "center": true,
         "decorations": false,
         "shadow": true,
-        "url": "http://127.0.0.1:8000"
+        "url": "startup.html"
       }
     ],
     "security": {
