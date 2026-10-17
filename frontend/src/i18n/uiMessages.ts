@@ -1,5 +1,6 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  setupNotFound: "No environments found. Choose a Python file or use automatic installation.",
   setupPythonVersion: "Python {version} · {path}",
   setupTitle: "Let’s get Berry ready",
   setupIntro: "Berry needs a basic environment to run. We can prepare it for you, or you can choose an existing Python environment.",
@@ -813,6 +814,7 @@ export const UI_ENGLISH = {
 } as const;
 
 export const UI_CHINESE_PREVIEW: Record<string, string> = {
+  setupNotFound: "未找到已有环境。请选择 Python 文件，或使用自动安装。",
   setupPythonVersion: "Python {version} · {path}",
   setupTitle: "准备使用 Berry",
   setupIntro: "Berry 需要基础运行环境。你可以让应用自动准备，也可以选择电脑上已有的 Python 环境。",

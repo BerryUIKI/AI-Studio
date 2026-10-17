@@ -6,6 +6,7 @@ type SetupKey = Extract<keyof typeof UI_ENGLISH, `setup${string}`>;
 /** Complete onboarding catalogs; unrelated screens retain their existing coverage. */
 export const STARTUP_TRANSLATIONS = {
   "ja": {
+    "setupNotFound": "環境が見つかりません。Python ファイルを選択するか、自動インストールを使用してください。",
     "setupPythonVersion": "Python {version} · {path}",
     "setupTitle": "Berry の準備をしましょう",
     "setupIntro": "Berry の実行には基本環境が必要です。自動で準備するか、既存の Python 環境を選択できます。",
@@ -47,6 +48,7 @@ export const STARTUP_TRANSLATIONS = {
     "setupExit": "Berry を終了"
   },
   "ko": {
+    "setupNotFound": "환경을 찾지 못했습니다. Python 파일을 선택하거나 자동 설치를 사용하세요.",
     "setupPythonVersion": "Python {version} · {path}",
     "setupTitle": "Berry를 사용할 준비를 해요",
     "setupIntro": "Berry를 실행하려면 기본 환경이 필요합니다. 자동으로 준비하거나 기존 Python 환경을 선택할 수 있습니다.",
@@ -88,6 +90,7 @@ export const STARTUP_TRANSLATIONS = {
     "setupExit": "Berry 종료"
   },
   "fr": {
+    "setupNotFound": "Aucun environnement trouvé. Choisissez un fichier Python ou utilisez l’installation automatique.",
     "setupPythonVersion": "Python {version} · {path}",
     "setupTitle": "Préparons Berry",
     "setupIntro": "Berry a besoin d’un environnement de base. Nous pouvons le préparer automatiquement, ou vous pouvez choisir un environnement Python existant.",
@@ -129,6 +132,7 @@ export const STARTUP_TRANSLATIONS = {
     "setupExit": "Quitter Berry"
   },
   "de": {
+    "setupNotFound": "Keine Umgebung gefunden. Wählen Sie eine Python-Datei oder die automatische Installation.",
     "setupPythonVersion": "Python {version} · {path}",
     "setupTitle": "Berry startklar machen",
     "setupIntro": "Berry benötigt eine Basisumgebung. Wir können sie automatisch einrichten, oder Sie wählen eine vorhandene Python-Umgebung.",
@@ -170,6 +174,7 @@ export const STARTUP_TRANSLATIONS = {
     "setupExit": "Berry beenden"
   },
   "es": {
+    "setupNotFound": "No se encontraron entornos. Elige un archivo Python o utiliza la instalación automática.",
     "setupPythonVersion": "Python {version} · {path}",
     "setupTitle": "Preparemos Berry",
     "setupIntro": "Berry necesita un entorno básico para funcionar. Podemos prepararlo automáticamente o puedes elegir un entorno Python existente.",
@@ -211,6 +216,7 @@ export const STARTUP_TRANSLATIONS = {
     "setupExit": "Salir de Berry"
   },
   "ru": {
+    "setupNotFound": "Среды не найдены. Выберите файл Python или автоматическую установку.",
     "setupPythonVersion": "Python {version} · {path}",
     "setupTitle": "Подготовим Berry к работе",
     "setupIntro": "Для работы Berry нужна базовая среда. Мы можем подготовить её автоматически, или вы можете выбрать существующую среду Python.",

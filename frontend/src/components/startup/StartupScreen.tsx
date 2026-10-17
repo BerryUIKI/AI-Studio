@@ -24,6 +24,7 @@ export function StartupScreen() {
   const [discovering, setDiscovering] = useState(false);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [selected, setSelected] = useState('');
+  const [searched, setSearched] = useState(false);
   const [notice, setNotice] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const current = environments.find((item) => item.path === selected);
@@ -49,7 +50,7 @@ export function StartupScreen() {
   };
   const discover = async () => {
     setDiscovering(true); setNotice(false);
-    try { setEnvironments(await invoke<Environment[]>('discover_environments')); }
+    try { setEnvironments(await invoke<Environment[]>('discover_environments')); setSearched(true); setSelected(''); }
     catch { setNotice(true); }
     finally { setDiscovering(false); }
   };
@@ -74,7 +75,7 @@ export function StartupScreen() {
 
   return <div className="flex h-full flex-col bg-slate-950 text-slate-100">
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-800 pl-5" data-tauri-drag-region>
-      <span className="text-sm font-semibold" data-tauri-drag-region>{t('about_heading')}</span>
+      <span className="text-sm font-semibold" data-tauri-drag-region>{t('ui_berry_ai_studio')}</span>
       <div className="flex">
         <button className="p-4 hover:bg-slate-800" aria-label={t('setupMinimize')} onClick={() => void invoke('minimize_app').catch(() => setNotice(true))}><Minus size={16} /></button>
         <button className="p-4 hover:bg-red-600" aria-label={t('setupExit')} onClick={() => void invoke('close_app').catch(() => setNotice(true))}><X size={16} /></button>
@@ -121,6 +122,7 @@ export function StartupScreen() {
               <button className={`${button} bg-slate-800 hover:bg-slate-700`} disabled={busy || discovering} onClick={() => void discover()}>{t(discovering ? 'setupDetecting' : 'setupDetect')}</button>
               <button className={`${button} bg-slate-800 hover:bg-slate-700`} disabled={busy || discovering} onClick={() => void browse()}>{t('setupBrowse')}</button>
             </div>
+            {searched && !discovering && environments.length === 0 && <p className="mt-3 text-sm text-slate-400" role="status">{t('setupNotFound')}</p>}
             {environments.length > 0 && <label className="mt-4 block text-sm text-slate-300">{t('setupChoosePython')}
               <select className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-3" value={selected} disabled={busy || discovering} onChange={(event) => setSelected(event.target.value)}>
                 <option value="">{t('setupSelect')}</option>
