@@ -68,6 +68,7 @@ try {
 
 $FrontendDist = "$RepoRoot\frontend\dist"
 Assert-FileExists "$FrontendDist\index.html" "Frontend production dist (index.html)"
+Assert-FileExists "$FrontendDist\startup.html" "Backend-independent environment onboarding"
 Assert-FileExists "$FrontendDist\assets" "Frontend assets directory"
 Write-Host "  -> Frontend assets built successfully" -ForegroundColor Green
 
@@ -258,6 +259,7 @@ $CriticalFiles = @(
     "$TargetDir\runtime\python\python.exe",
     "$TargetDir\runtime\git\cmd\git.exe",
     "$TargetDir\frontend\dist\index.html",
+    "$TargetDir\frontend\dist\startup.html",
     "$TargetDir\backend\app\main.py"
 )
 
