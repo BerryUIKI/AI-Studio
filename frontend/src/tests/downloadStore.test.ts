@@ -104,3 +104,30 @@ describe('useDownloadStore (MH-M5)', () => {
     useDownloadStore.getState().stopPolling();
   });
 });
+
+
+describe('download removal', () => {
+  const task = { task_id: 'remove', model_id: 'model', model_name: 'Model', target_engine: 'comfyui', target_path: '/owned/model', status: 'paused' as const, total_bytes: 10, downloaded_bytes: 5, progress_pct: 50, speed_bps: 0 };
+
+  it('removes the task and rejects an older poll response', async () => {
+    useDownloadStore.setState({ tasks: [task], revision: 0 });
+    let finishPoll!: (response: Response) => void;
+    vi.stubGlobal('fetch', vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finishPoll = resolve; }))
+      .mockResolvedValueOnce(new Response('{}', { status: 200 })));
+    const polling = useDownloadStore.getState().fetchTasks();
+    expect(await useDownloadStore.getState().cancelTask(task.task_id)).toBe(true);
+    finishPoll(new Response(JSON.stringify({ tasks: [task] })));
+    await polling;
+    expect(useDownloadStore.getState().tasks).toEqual([]);
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the entry available for retry when deletion fails', async () => {
+    useDownloadStore.setState({ tasks: [task] });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 409 })));
+    expect(await useDownloadStore.getState().cancelTask(task.task_id)).toBe(false);
+    expect(useDownloadStore.getState().tasks).toEqual([task]);
+    vi.unstubAllGlobals();
+  });
+});

@@ -178,3 +178,7 @@ Read [AGENTS.md](AGENTS.md), [Branching Strategy](BRANCHING_STRATEGY.md), [Contr
 ## License
 
 Apache License 2.0. See [LICENSE](LICENSE).
+
+### Removing model downloads
+
+In Downloads, **Cancel and remove incomplete download** stops the transfer, closes its file handle, removes its managed `.part` file, and removes the task from the list. Cleanup failures remain visible and can be retried. **Remove from list (keep installed model)** removes completed history only; installed or shared model files are preserved.

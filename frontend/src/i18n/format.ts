@@ -15,3 +15,16 @@ export function formatNumber(value: number, digits = 1, minimumDigits = 0): stri
   }).format(value);
 }
 
+
+/** Remaining durations always include hours; round up partial seconds. */
+export function formatDownloadDuration(seconds?: number | null): string {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return '';
+  const rounded = Math.ceil(seconds);
+  if (!Number.isSafeInteger(rounded)) return '';
+  const language = useSettingsStore.getState().getEffectiveLanguage();
+  const values = [Math.floor(rounded / 3600), Math.floor(rounded % 3600 / 60), rounded % 60];
+  const units = ['hour', 'minute', 'second'] as const;
+  return units.map((unit, index) => new Intl.NumberFormat(language, {
+    style: 'unit', unit, unitDisplay: 'narrow', maximumFractionDigits: 0,
+  }).format(values[index])).join(' ');
+}
