@@ -32,6 +32,7 @@ export const FloatingDownloadWidget: React.FC = () => {
   return (
     <button
       onClick={toggleDrawer}
+      aria-label={ui("ui_downloads")}
       className="fixed bottom-6 right-6 z-40 flex items-center gap-3 px-4 py-2.5 bg-neutral-900/90 hover:bg-neutral-800/95 text-neutral-100 rounded-full border border-neutral-700/80 shadow-2xl backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95 group"
     >
       <div className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/20 text-blue-400">
@@ -45,12 +46,12 @@ export const FloatingDownloadWidget: React.FC = () => {
       <div className="flex items-center gap-2 text-xs font-medium">
         {activeCount > 0 ? (
           <>
-            <span className="text-neutral-200 font-semibold">{activeCount} {ui("ui_downloading")}</span>
+            <span className="text-neutral-200 font-semibold">{ui('downloadWidgetActive', { count: formatNumber(activeCount, 0) })}</span>
             <span className="text-neutral-500">·</span>
             <span className="text-emerald-400 font-mono">{formatSpeed(totalSpeed)}</span>
           </>
         ) : (
-          <span className="text-neutral-300">{tasks.length} {ui("ui_downloads")}</span>
+          <span className="text-neutral-300">{ui('downloadWidgetTotal', { count: formatNumber(tasks.length, 0) })}</span>
         )}
       </div>
 

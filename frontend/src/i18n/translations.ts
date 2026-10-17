@@ -1,3 +1,4 @@
+import { DOWNLOAD_TRANSLATIONS } from './downloadMessages';
 import { STARTUP_TRANSLATIONS } from './startupMessages';
 import { UI_ENGLISH, UI_CHINESE_PREVIEW } from './uiMessages';
 
@@ -449,5 +450,6 @@ export const TRANSLATIONS: Record<SupportedLanguage, Record<string, string>> = {
 
 export function t(key: string, lang: SupportedLanguage, fallback?: string): string {
   const dict = TRANSLATIONS[lang] || TRANSLATIONS.en;
-  return dict[key] || TRANSLATIONS.en[key] || fallback || key;
+  const downloads: Readonly<Record<string, string>> = DOWNLOAD_TRANSLATIONS[lang] || DOWNLOAD_TRANSLATIONS.en;
+  return downloads[key] || dict[key] || TRANSLATIONS.en[key] || fallback || key;
 }

@@ -49,3 +49,9 @@ catalogs; English and Chinese use the shared workflow catalog. Rendered tests
 check key completeness, each locale, immediate switching and system detection.
 This scoped coverage does not certify translation completeness or native-speaker
 review for the rest of the application.
+
+## Download Manager coverage (#224)
+
+The download drawer and floating download control have complete message catalogs for English, Simplified Chinese, Japanese, Korean, French, German, Spanish and Russian. Counts use translated templates; transfer numbers follow the selected locale. All lifecycle labels, accessible controls, cleanup/action failures and remaining-time wording are localized. Model/engine identifiers and real file paths stay unchanged. Raw service diagnostics are preserved under a localized Technical details disclosure, beneath a localized failure explanation.
+
+Rendered regression tests cover all eight languages, each task state, empty lists, the floating control, system language selection, live language switching and action errors. This scoped coverage does not establish complete application-wide translation or close the broader #139 acceptance gate.

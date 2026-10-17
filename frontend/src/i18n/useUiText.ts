@@ -1,11 +1,12 @@
+import { DOWNLOAD_TRANSLATIONS, type DownloadMessageKey } from './downloadMessages';
 import { useCallback, useMemo } from 'react';
 import { useSettingsStore } from '../stores/useSettingsStore';
 import { resolveEffectiveLanguage, t, type SupportedLanguage } from './translations';
 import { UI_ENGLISH } from './uiMessages';
 
-export type UiMessageKey = keyof typeof UI_ENGLISH;
+export type UiMessageKey = keyof typeof UI_ENGLISH | DownloadMessageKey;
 export type MessageValues = Record<string, string | number | null | undefined>;
-const catalogKeys = new Map(Object.entries(UI_ENGLISH).map(([key, value]) => [value as string, key as UiMessageKey]));
+const catalogKeys = new Map(Object.entries({ ...UI_ENGLISH, ...DOWNLOAD_TRANSLATIONS.en }).map(([key, value]) => [value as string, key as UiMessageKey]));
 
 export function uiText(key: UiMessageKey, language: SupportedLanguage, values: MessageValues = {}): string {
   return t(key, language).replace(/\{(\w+)\}/g, (token, name: string) =>
