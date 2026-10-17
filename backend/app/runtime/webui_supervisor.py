@@ -2,7 +2,7 @@
 Sandboxed Stable Diffusion WebUI Process Supervisor.
 
 Manages isolated execution of the local SD WebUI engine in a dedicated,
-hermetic application directory (~/.ai-workflow/engine/webui or %LOCALAPPDATA%/AI-Workflow/engine/webui).
+hermetic application directory (Berry-AI-Studio, with legacy directory compatibility).
 Guarantees zero system environment pollution, separate virtual environment from ComfyUI,
 and strictly disallows host Python fallback.
 """

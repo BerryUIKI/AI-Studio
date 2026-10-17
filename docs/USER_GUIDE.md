@@ -39,7 +39,7 @@ Berry AI Studio supports two modes of creation:
   - If you already run ComfyUI (port `8188`) or SD WebUI (port `7860`), Berry detects them automatically and connects with **zero process interference**.
 - **Using Berry's Managed Engine**:
   - Open the **"Environment"** manager from the top header to inspect or start Berry's sandboxed local runtimes.
-  - All local packages live strictly inside isolated directories (`%LOCALAPPDATA%\AI-Workflow\engine\`) with zero pollution of your system Python.
+  - All local packages live strictly inside isolated directories (`%LOCALAPPDATA%\Berry-AI-Studio\engine\` for new Windows installations) with zero pollution of your system Python.
 
 ### Mode C: Embedded Local LLM (`llama.cpp` / `llama-server`)
 - **Who it is for**: Users wanting private, local offline LLM prompt expansion, agent orchestration, and creative assistance without cloud API costs or installing external Ollama daemons.
@@ -114,3 +114,11 @@ The modal features four dedicated panels:
 - **"No API key configured" in Cloud Mode**: Click **"Cloud BYOK"** in the header, paste your key from OpenAI/Fal.ai/SiliconFlow, and click **"Save"**.
 - **Model Files Safety**: Adding or removing directories in Berry's model inventory is non-destructive and never deletes weights from your disk.
 - **Interrupted Engine Update Recovery**: If an engine update fails or is interrupted, the manager automatically checks out the prior git commit and preserves your model files. If third-party pip dependencies inside the engine's isolated virtualenv were damaged, recovery requires clicking "Reinstall" in the Environment Manager or restoring an external backup.
+
+### Engine and model storage compatibility
+
+New Windows installations use `%LOCALAPPDATA%/Berry-AI-Studio/engine`; new non-Windows development installations use `~/Berry-AI-Studio/engine`. Engine installation, model downloads, model inventory and readiness checks use the same root.
+
+If the legacy `%LOCALAPPDATA%/AI-Workflow/engine` (or `~/.ai-workflow/engine`) directory already exists, Berry continues using it, including when a branded directory also exists. The Downloads panel displays the actual destination. Startup does not move files, merge directories, or restart transfers. This preserves installed engines, shared models, partial downloads and active processes. Existing users can therefore still see the legacy name; that is intentional compatibility, not a renamed display label.
+
+An explicitly configured `AI_WORKFLOW_ENGINE_DIR` continues to take precedence. For an intentional manual migration, stop Berry and its managed engines and finish or cancel downloads first, copy the complete engine directory to your chosen destination, then point `AI_WORKFLOW_ENGINE_DIR` to that destination before starting Berry. Retain the original until you verify the installation. User-selected model libraries and external engines are never moved by this change.

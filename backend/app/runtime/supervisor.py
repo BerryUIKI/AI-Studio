@@ -2,7 +2,7 @@
 Sandboxed ComfyUI Runtime Process Supervisor.
 
 Manages isolated execution of the local ComfyUI engine in a dedicated,
-hermetic application directory (~/.ai-workflow/engine or %LOCALAPPDATA%/AI-Workflow/engine).
+hermetic application directory (Berry-AI-Studio, with legacy directory compatibility).
 Guarantees zero system environment pollution and strictly disallows host Python fallback.
 """
 
@@ -23,10 +23,17 @@ def get_default_engine_dir() -> Path:
         return Path(custom_dir).resolve()
 
     if sys.platform == "win32":
-        local_app_data = os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))
-        return Path(local_app_data) / "AI-Workflow" / "engine"
+        local_app_data = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local")))
+        branded = local_app_data / "Berry-AI-Studio" / "engine"
+        legacy = local_app_data / "AI-Workflow" / "engine"
+    else:
+        branded = Path.home() / "Berry-AI-Studio" / "engine"
+        legacy = Path.home() / ".ai-workflow" / "engine"
 
-    return Path.home() / ".ai-workflow" / "engine"
+    # Existing runtimes can contain live processes, partial transfers, and shared
+    # models. Keep their root stable; never migrate or merge directories at boot.
+    return legacy if legacy.is_dir() else branded
+
 
 
 class ComfySupervisor:
