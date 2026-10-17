@@ -877,8 +877,11 @@ async def resume_download_task(task_id: str) -> dict[str, Any]:
 
 @app.delete("/api/v1/models/hub/tasks/{task_id}")
 async def cancel_download_task(task_id: str) -> dict[str, Any]:
-    """Cancel and delete an active or paused download task (MH-M4)."""
-    success = model_downloader.cancel_task(task_id)
+    """Remove download history and incomplete bytes, preserving installed models."""
+    try:
+        success = await model_downloader.cancel_task(task_id)
+    except OSError:
+        raise HTTPException(status_code=409, detail="Could not remove partial download; check file permissions and retry.") from None
     if not success:
         raise HTTPException(status_code=404, detail=f"Task '{task_id}' not found")
     return {"status": "cancelled", "task_id": task_id}

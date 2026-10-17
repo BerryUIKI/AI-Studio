@@ -2,7 +2,7 @@ import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Dialog } from '../ui/Dialog';
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Pause,
@@ -23,6 +23,18 @@ export const DownloadManagerDrawer: React.FC = () => {
   const pauseTask = useDownloadStore((state) => state.pauseTask);
   const resumeTask = useDownloadStore((state) => state.resumeTask);
   const cancelTask = useDownloadStore((state) => state.cancelTask);
+
+  const [removing, setRemoving] = useState<string[]>([]);
+  const [actionError, setActionError] = useState(false);
+  const removeTask = async (taskId: string) => {
+    setRemoving((ids) => [...ids, taskId]);
+    setActionError(false);
+    try {
+      if (!await cancelTask(taskId)) setActionError(true);
+    } finally {
+      setRemoving((ids) => ids.filter((id) => id !== taskId));
+    }
+  };
 
   if (!isDrawerOpen) return null;
 
@@ -80,6 +92,7 @@ export const DownloadManagerDrawer: React.FC = () => {
 
         {/* Task List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {actionError && <p role="alert" className="text-sm text-rose-400">{ui('downloadRemoveError')}</p>}
           {tasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-neutral-500 gap-2">
               <Download className="w-8 h-8 opacity-40" />
@@ -135,15 +148,15 @@ export const DownloadManagerDrawer: React.FC = () => {
                           <Play className="w-4 h-4" />
                         </button>
                       )}
-                      {!isFinished && (
-                        <button
-                          onClick={() => cancelTask(task.task_id)}
-                          title={ui("ui_cancel")}
+                      <button
+                          disabled={removing.includes(task.task_id)}
+                          onClick={() => void removeTask(task.task_id)}
+                          title={ui(isFinished ? 'downloadRemoveHistory' : 'downloadCancelRemove')}
+                          aria-label={ui(isFinished ? 'downloadRemoveHistory' : 'downloadCancelRemove')}
                           className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-700 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                      )}
                     </div>
                   </div>
 
