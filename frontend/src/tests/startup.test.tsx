@@ -133,3 +133,32 @@ it('does not report an installation failure after intentional cancellation', asy
   await screen.findByText('Setup stopped. You can retry when you are ready.', {}, { timeout: 2000 });
   expect(screen.getByRole('status').textContent).not.toContain('could not finish');
 });
+
+it('shows measured download percentage and resets to indeterminate for installation', async () => {
+  let phase = 'downloading';
+  mocks.invoke.mockImplementation((command: string) => command === 'startup_status'
+    ? Promise.resolve({ phase, can_install: true, downloaded_bytes: 25 * 1024 ** 2, total_bytes: 100 * 1024 ** 2 })
+    : new Promise<void>((resolve) => { finish = resolve; }));
+  render(<StartupScreen />);
+  await waitFor(() => expect((screen.getByText('Install and continue') as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByText('Install and continue'));
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBeNull();
+  await waitFor(() => expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25'), { timeout: 2000 });
+  expect(screen.getByText('25 / 100 MiB')).toBeTruthy();
+  expect(screen.getByText('25%')).toBeTruthy();
+  phase = 'installing';
+  await waitFor(() => expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBeNull(), { timeout: 2000 });
+  expect(screen.queryByText('25%')).toBeNull();
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuetext')).toBe('Working… progress cannot be measured for this step.');
+});
+
+it('shows received bytes without inventing a percentage for unknown-length downloads', async () => {
+  mocks.invoke.mockImplementation((command: string) => command === 'startup_status'
+    ? Promise.resolve({ phase: 'downloading', can_install: true, downloaded_bytes: 8 * 1024 ** 2, total_bytes: null })
+    : new Promise<void>((resolve) => { finish = resolve; }));
+  render(<StartupScreen />);
+  await waitFor(() => expect((screen.getByText('Install and continue') as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByText('Install and continue'));
+  await screen.findByText('8 MiB downloaded', {}, { timeout: 2000 });
+  expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBeNull();
+});
