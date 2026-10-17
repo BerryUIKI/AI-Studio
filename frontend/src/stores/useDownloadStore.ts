@@ -24,6 +24,7 @@ interface DownloadState {
   isDrawerOpen: boolean;
   isPolling: boolean;
   pollTimer: number | null;
+  revision: number;
 
   setDrawerOpen: (open: boolean) => void;
   toggleDrawer: () => void;
@@ -45,6 +46,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   isDrawerOpen: false,
   isPolling: false,
   pollTimer: null,
+  revision: 0,
 
   setDrawerOpen: (open) => set({ isDrawerOpen: open }),
   toggleDrawer: () => set((state) => ({ isDrawerOpen: !state.isDrawerOpen })),
@@ -52,7 +54,9 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   fetchTasks: async () => {
     try {
       {
+        const revision = get().revision;
         const tasks = await listDownloadTasks();
+        if (revision !== get().revision) return;
         const newlyCompleted = tasks.some((task) => task.status === 'completed'
           && get().tasks.find((previous) => previous.task_id === task.task_id)?.status !== 'completed');
         set({ tasks });
@@ -136,7 +140,8 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
       const res = await fetch(`/api/v1/models/hub/tasks/${taskId}`, { method: 'DELETE' });
       if (res.ok) {
         set((state) => ({
-          tasks: state.tasks.map((t) => (t.task_id === taskId ? { ...t, status: 'cancelled', speed_bps: 0 } : t)),
+          tasks: state.tasks.filter((t) => t.task_id !== taskId),
+          revision: state.revision + 1,
         }));
         return true;
       }

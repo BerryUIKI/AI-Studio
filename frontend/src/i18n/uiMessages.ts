@@ -1,5 +1,8 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  downloadRemoveError: "Could not remove the download. Check file permissions and your connection, then retry.",
+  downloadRemoveHistory: "Remove from list (keep installed model)",
+  downloadCancelRemove: "Cancel and remove incomplete download",
   setupProgressIndeterminate: "Working… progress cannot be measured for this step.",
   setupDownloadProgress: "{received} / {total} MiB",
   setupDownloadReceived: "{received} MiB downloaded",
