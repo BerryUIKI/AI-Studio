@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { CheckCircle2, Download, Loader2, Minus, X } from 'lucide-react';
@@ -32,6 +32,7 @@ export function StartupScreen() {
   const [searched, setSearched] = useState(false);
   const [notice, setNotice] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const cancelRequested = useRef(false);
   const current = environments.find((item) => item.path === selected);
 
   useEffect(() => { document.documentElement.lang = resolveEffectiveLanguage(language); }, [language]);
@@ -47,10 +48,11 @@ export function StartupScreen() {
   }, []);
 
   const prepare = async (action: 'install' | 'existing' | 'retry') => {
+    cancelRequested.current = false;
     setBusy(true); setNotice(false); setCancelling(false);
     try {
       await invoke('prepare_environment', { action, path: action === 'existing' ? selected : null, language });
-    } catch { setNotice(true); }
+    } catch { if (!cancelRequested.current) setNotice(true); }
     finally { setBusy(false); setCancelling(false); }
   };
   const discover = async () => {
@@ -71,6 +73,7 @@ export function StartupScreen() {
     finally { setDiscovering(false); }
   };
   const cancel = async () => {
+    cancelRequested.current = true;
     setCancelling(true);
     try { await invoke('cancel_environment_setup'); }
     catch { setNotice(true); setCancelling(false); }

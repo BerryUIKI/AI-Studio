@@ -21,6 +21,13 @@ pub fn install(
     if !supported() {
         return Err("Automatic environment setup supports Windows x64 only".into());
     }
+    if cancel.load(Ordering::SeqCst) {
+        return Err("Environment setup cancelled".into());
+    }
+    if managed_python(root).is_some_and(|python| runtime_usable(&python)) {
+        progress("validating");
+        return Ok(());
+    }
     let directory = runtime_dir(root);
     verify_storage_path(&directory)?;
     let existing = directory
