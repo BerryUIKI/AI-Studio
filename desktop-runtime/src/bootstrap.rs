@@ -57,7 +57,7 @@ pub fn supported() -> bool {
     cfg!(all(windows, target_arch = "x86_64"))
 }
 
-fn verify_storage_path(path: &Path) -> Result<(), String> {
+pub(crate) fn verify_storage_path(path: &Path) -> Result<(), String> {
     for ancestor in path.ancestors() {
         if let Ok(metadata) = ancestor.symlink_metadata() {
             #[cfg(windows)]

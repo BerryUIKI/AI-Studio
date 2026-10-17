@@ -1,5 +1,6 @@
 //! Shared backend supervision for the desktop app and command-line launcher.
 pub mod bootstrap;
+pub mod environments;
 mod setup_process;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -48,6 +49,7 @@ pub fn detect_root_dir() -> PathBuf {
 
 /// Locate an app-owned runtime or explicit development virtual environment.
 pub fn find_python_executable(root_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(python) = environments::selected(root_dir)? { return Ok(python); }
     if let Some(python) = bootstrap::managed_python(root_dir) {
         return Ok(python);
     }
