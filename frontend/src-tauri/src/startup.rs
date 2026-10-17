@@ -9,6 +9,10 @@ pub struct StartupStatus {
     pub details: String,
     pub environment_path: String,
     pub can_install: bool,
+    pub error_code: String,
+    pub volume: String,
+    pub available_bytes: Option<u64>,
+    pub required_bytes: Option<u64>,
 }
 
 fn local_page(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -125,7 +129,7 @@ pub async fn prepare_environment(
     tauri::async_runtime::spawn_blocking(move || {
         let app = handle;
         let state = app.state::<AppState>();
-        let result = (|| -> Result<(), String> {
+        let result = (|| -> Result<(), berry_runtime::setup_error::SetupError> {
             if action != "retry" && state.backend_child.lock().unwrap().as_mut()
                 .is_some_and(|child| child.try_wait().ok().flatten().is_none()) {
                 return Err("The application service is still running. Retry startup before changing its environment.".into());
@@ -154,12 +158,12 @@ pub async fn prepare_environment(
             loop {
                 if state.setup_cancel.load(Ordering::SeqCst) { return Err("Environment setup cancelled".into()); }
                 if berry_runtime::is_backend_healthy(state.port) { break; }
-                if started.elapsed().as_secs() >= 30 { return Err("The application service did not become ready. Retry startup or choose another environment.".into()); }
+                if started.elapsed().as_secs() >= 30 { return Err(berry_runtime::setup_error::SetupError::new("service", "The application service did not become ready")); }
                 let mut child = state.backend_child.lock().unwrap();
                 if let Some(process) = child.as_mut() {
                     if process.try_wait().map_err(|_| "Cannot check owned backend")?.is_some() {
                         *child = None;
-                        return Err("The application service stopped. Retry startup or choose another environment.".into());
+                        return Err(berry_runtime::setup_error::SetupError::new("service", "The application service stopped"));
                     }
                 }
                 drop(child);
@@ -181,9 +185,13 @@ pub async fn prepare_environment(
         if let Err(error) = &result {
             let mut status = state.startup.lock().unwrap();
             status.phase = if state.setup_cancel.load(Ordering::SeqCst) { "cancelled" } else { "failed" }.into();
-            status.details = error.clone();
+            status.details = error.detail.clone();
+            status.error_code = error.code.into();
+            status.volume = error.volume.clone();
+            status.available_bytes = error.available_bytes;
+            status.required_bytes = error.required_bytes;
         }
         state.setup_running.store(false, Ordering::SeqCst);
-        result
+        result.map_err(|error| error.detail)
     }).await.map_err(|_| "Environment preparation was interrupted".to_owned())?
 }

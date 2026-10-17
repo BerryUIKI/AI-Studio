@@ -64,7 +64,7 @@ it('keeps the chooser usable after a discovery failure', async () => {
     : Promise.resolve({ phase: 'needs_environment', details: '', can_install: true }));
   render(<StartupScreen />);
   fireEvent.click(screen.getByText('Find environments'));
-  await screen.findByText(/We couldn’t complete setup/);
+  await screen.findByText(/Setup could not finish/);
   expect((screen.getByText('Choose a file…') as HTMLButtonElement).disabled).toBe(false);
 });
 
@@ -94,4 +94,25 @@ it('follows a supported system language before any selection', async () => {
     if (previous) Object.defineProperty(navigator, 'language', previous);
     else Reflect.deleteProperty(navigator, 'language');
   }
+});
+
+it.each([
+  ['network', 'The download service could not be reached.'],
+  ['proxy', 'The enabled Windows system proxy could not be reached'],
+  ['checksum', 'The downloaded file did not pass verification.'],
+  ['permission', 'Berry cannot write to the installation folder on D:'],
+  ['service', 'The environment is ready, but Berry could not start.'],
+])('renders the observed %s cause without guessing from technical logs', async (code, message) => {
+  mocks.invoke.mockResolvedValue({ phase: 'failed', error_code: code, volume: 'D:', can_install: true, details: 'Unrelated network/disk diagnostic text' });
+  render(<StartupScreen />);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain(message));
+});
+
+it('reports measured free space on the actual installation drive', async () => {
+  mocks.invoke.mockResolvedValue({ phase: 'failed', error_code: 'disk_space', volume: 'D:', can_install: true,
+    available_bytes: 512 * 1024 ** 2, required_bytes: 1024 ** 3 });
+  render(<StartupScreen />);
+  await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Not enough space on D:. Available: 0.5 GiB.'));
+  expect(screen.getByRole('status').textContent).not.toContain('Internet');
+  expect(screen.getByRole('status').textContent).not.toContain('C:');
 });

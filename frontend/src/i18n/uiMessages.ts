@@ -1,5 +1,15 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  setupErrorNetwork: "The download service could not be reached. Check your Internet connection and Windows system proxy, then retry.",
+  setupErrorProxy: "The enabled Windows system proxy could not be reached or requires authentication. Check that your proxy app is running and its settings are correct.",
+  setupErrorProxyConfiguration: "Windows system proxy settings could not be applied to these downloads. Check the proxy configuration; no direct connection was substituted.",
+  setupErrorDiskSpace: "Not enough space on {volume}. Available: {available} GiB. Setup needs at least {required} GiB. Free space on this drive and retry.",
+  setupErrorPermission: "Berry cannot write to the installation folder on {volume}. Check folder permissions or choose an existing environment.",
+  setupErrorChecksum: "The downloaded file did not pass verification. It will not be installed. Retry the download.",
+  setupErrorDependencies: "The required app components could not be installed or validated. Retry installation or choose a compatible existing environment. See technical details for more information.",
+  setupErrorStorage: "Berry could not save or extract the environment on {volume}. See technical details for the observed file error.",
+  setupErrorService: "The environment is ready, but Berry could not start. Retry startup; reinstalling is not required.",
+
   setupNotFound: "No environments found. Choose a Python file or use automatic installation.",
   setupPythonVersion: "Python {version} · {path}",
   setupTitle: "Let’s get Berry ready",
@@ -22,7 +32,7 @@ export const UI_ENGLISH = {
   setupCancel: "Cancel",
   setupCancelling: "Stopping safely…",
   setupCancelled: "Setup stopped. You can retry when you are ready.",
-  setupFailed: "We couldn’t complete setup. Check your connection and free disk space, then retry or choose another environment.",
+  setupFailed: "Setup could not finish. Open technical details for the observed error, then retry or choose another environment.",
   setupUnsupported: "Automatic installation is currently available on Windows x64. Choose a compatible existing environment on this system.",
   setupExisting: "Use an existing environment",
   setupExistingHelp: "For users who already have Python: find environments on this computer or select a Python executable. Berry checks compatibility before use and never installs packages into it.",
@@ -814,6 +824,16 @@ export const UI_ENGLISH = {
 } as const;
 
 export const UI_CHINESE_PREVIEW: Record<string, string> = {
+  setupErrorNetwork: "无法连接下载服务。请检查网络连接和 Windows 系统代理后重试。",
+  setupErrorProxy: "无法连接已启用的 Windows 系统代理，或代理需要身份验证。请确认代理软件正在运行，并检查代理设置。",
+  setupErrorProxyConfiguration: "无法将 Windows 系统代理配置应用于下载。请检查代理设置；应用没有改为直接连接。",
+  setupErrorDiskSpace: "{volume} 空间不足。可用 {available} GiB，安装至少需要 {required} GiB。请清理该磁盘后重试。",
+  setupErrorPermission: "Berry 无法写入 {volume} 上的安装文件夹。请检查文件夹权限，或选择已有环境。",
+  setupErrorChecksum: "下载文件未通过校验，应用不会安装该文件。请重新下载。",
+  setupErrorDependencies: "所需应用组件未能安装或通过兼容性检查。请重试安装或选择兼容的已有环境，具体原因见技术详情。",
+  setupErrorStorage: "无法在 {volume} 上保存或解压环境。请在技术详情中查看实际文件错误。",
+  setupErrorService: "环境已准备好，但 Berry 启动失败。请重新启动，无需重新安装。",
+
   setupNotFound: "未找到已有环境。请选择 Python 文件，或使用自动安装。",
   setupPythonVersion: "Python {version} · {path}",
   setupTitle: "准备使用 Berry",
@@ -836,7 +856,7 @@ export const UI_CHINESE_PREVIEW: Record<string, string> = {
   setupCancel: "取消",
   setupCancelling: "正在安全停止…",
   setupCancelled: "安装已停止，你可以稍后重试。",
-  setupFailed: "未能完成准备。请检查网络连接和磁盘空间后重试，或选择其他环境。",
+  setupFailed: "未能完成准备。请展开技术详情查看实际错误，然后重试或选择其他环境。",
   setupUnsupported: "自动安装目前支持 Windows x64。请在此系统上选择兼容的已有环境。",
   setupExisting: "使用已有环境",
   setupExistingHelp: "如果电脑上已有 Python，可以自动查找或选择 Python 程序文件。Berry 会先检查兼容性，不会向该环境安装任何软件包。",

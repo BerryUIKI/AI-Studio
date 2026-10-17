@@ -133,6 +133,10 @@ pub fn run() {
                 .display()
                 .to_string(),
             can_install: berry_runtime::bootstrap::supported(),
+            error_code: String::new(),
+            volume: String::new(),
+            available_bytes: None,
+            required_bytes: None,
         }),
         root_dir,
         setup_running: std::sync::atomic::AtomicBool::new(false),

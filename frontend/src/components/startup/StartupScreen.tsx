@@ -6,11 +6,16 @@ import { useUiText, type UiMessageKey } from '../../i18n/useUiText';
 import { LANGUAGE_OPTIONS, resolveEffectiveLanguage } from '../../i18n/translations';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 
-interface Status { phase: string; details: string; environment_path: string; can_install: boolean }
+interface Status { phase: string; details: string; environment_path: string; can_install: boolean; error_code?: string; volume?: string; available_bytes?: number | null; required_bytes?: number | null }
 interface Environment { path: string; version: string | null; ready: boolean; reason: string; missing: string[] }
 const stages: Record<string, UiMessageKey> = {
   downloading: 'setupDownloading', verifying: 'setupVerifying', installing: 'setupInstalling',
   validating: 'setupValidating', starting: 'setupStarting', ready: 'setupReady',
+};
+const failureMessages: Record<string, UiMessageKey> = {
+  network: 'setupErrorNetwork', proxy: 'setupErrorProxy', proxy_configuration: 'setupErrorProxyConfiguration',
+  disk_space: 'setupErrorDiskSpace', permission: 'setupErrorPermission', checksum: 'setupErrorChecksum',
+  dependencies: 'setupErrorDependencies', validation: 'setupErrorDependencies', storage: 'setupErrorStorage', service: 'setupErrorService',
 };
 const button = 'rounded-xl px-5 py-3 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400';
 
@@ -72,6 +77,12 @@ export function StartupScreen() {
   };
   const failed = status?.phase === 'failed';
   const cancelled = status?.phase === 'cancelled';
+  const formatSpace = (bytes: number | null | undefined) => bytes == null ? '—'
+    : new Intl.NumberFormat(resolveEffectiveLanguage(language), { maximumFractionDigits: 2 }).format(bytes / 1024 ** 3);
+  const failure = t(failed ? failureMessages[status?.error_code ?? ''] ?? 'setupFailed' : 'setupFailed', {
+    volume: status?.volume || status?.environment_path || '—',
+    available: formatSpace(status?.available_bytes), required: formatSpace(status?.required_bytes),
+  });
 
   return <div className="flex h-full flex-col bg-slate-950 text-slate-100">
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-800 pl-5" data-tauri-drag-region>
@@ -105,7 +116,7 @@ export function StartupScreen() {
           <p className="mt-4 text-sm leading-6 text-slate-400">{t('setupOptional')}</p>
           <div className="mt-6" role="status" aria-live="polite">
             {busy && <p className="flex items-center gap-3 text-violet-300"><Loader2 size={18} className="animate-spin" />{cancelling ? t('setupCancelling') : t(stages[status?.phase ?? ''] ?? 'setupValidating')}</p>}
-            {!busy && (notice || failed) && <p className="text-amber-300">{t('setupFailed')}</p>}
+            {!busy && (notice || failed) && <p className="text-amber-300">{failure}</p>}
             {!busy && cancelled && <p className="text-slate-300">{t('setupCancelled')}</p>}
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
