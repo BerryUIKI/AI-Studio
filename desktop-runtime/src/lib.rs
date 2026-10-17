@@ -1,6 +1,7 @@
 //! Shared backend supervision for the desktop app and command-line launcher.
 pub mod bootstrap;
 pub mod environments;
+pub mod setup_error;
 mod setup_process;
 use std::fs::OpenOptions;
 use std::io::Write;

@@ -1,4 +1,5 @@
 //! App-owned core runtime setup; no host Python installation or engine packages.
+use crate::setup_error::{check_space, volume, SetupError};
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::io::{BufRead, BufReader};
@@ -12,14 +13,30 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 /// Install only after an explicit UI action; downloads are not inference calls.
-pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Result<(), String> {
+pub fn install(
+    root: &Path,
+    cancel: &AtomicBool,
+    progress: impl Fn(&str),
+) -> Result<(), SetupError> {
     if !supported() {
         return Err("Automatic environment setup supports Windows x64 only".into());
     }
     let directory = runtime_dir(root);
     verify_storage_path(&directory)?;
-    std::fs::create_dir_all(&directory)
-        .map_err(|_| "Application runtime storage is not writable")?;
+    let existing = directory
+        .ancestors()
+        .find(|path| path.exists())
+        .ok_or("Cannot locate runtime storage")?;
+    let available = fs2::available_space(existing).map_err(|_| {
+        SetupError::new(
+            "storage",
+            "Cannot inspect free space on the installation volume",
+        )
+    })?;
+    check_space(available, volume(&directory))?;
+    std::fs::create_dir_all(&directory).map_err(|_| {
+        SetupError::new("permission", "Application runtime storage is not writable")
+    })?;
     let lock = std::fs::OpenOptions::new()
         .create(true)
         .truncate(false)
@@ -29,6 +46,11 @@ pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Res
         .map_err(|_| "Cannot open setup lock")?;
     lock.try_lock_exclusive()
         .map_err(|_| "Environment setup is already running in another Berry window")?;
+    std::fs::write(
+        directory.join("setup_network.ps1"),
+        include_str!("setup_network.ps1"),
+    )
+    .map_err(|_| SetupError::new("permission", "Cannot write the network setup helper"))?;
     let script = directory.join("bootstrap.ps1");
     std::fs::write(&script, include_str!("bootstrap.ps1"))
         .map_err(|_| "Cannot prepare environment setup")?;
@@ -61,7 +83,7 @@ pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Res
         .take()
         .ok_or("Cannot read setup status")?;
     let (send, receive) = mpsc::channel();
-    thread::spawn(move || {
+    let reader = thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
                 if let Some(stage) = value["stage"].as_str() {
@@ -71,6 +93,7 @@ pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Res
         }
     });
     let started = Instant::now();
+    let mut failure = String::new();
     loop {
         if cancel.load(Ordering::SeqCst) {
             return Err("Environment setup cancelled".into());
@@ -79,6 +102,9 @@ pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Res
             return Err("Environment setup timed out; retry when connected".into());
         }
         if let Ok(stage) = receive.recv_timeout(Duration::from_millis(100)) {
+            if stage.starts_with("failed_") {
+                failure = stage.clone();
+            }
             if ["downloading", "verifying", "installing", "validating"].contains(&stage.as_str()) {
                 progress(&stage);
             }
@@ -88,8 +114,34 @@ pub fn install(root: &Path, cancel: &AtomicBool, progress: impl Fn(&str)) -> Res
             .try_wait()
             .map_err(|_| "Cannot observe environment setup")?
         {
+            let _ = reader.join();
+            for stage in receive.try_iter() {
+                if stage.starts_with("failed_") {
+                    failure = stage;
+                }
+            }
             if !status.success() {
-                return Err("Environment setup failed. Check network access to GitHub and PyPI, then retry.".into());
+                let (code, detail) = match failure.as_str() {
+                    "failed_checksum" => ("checksum", "The downloaded Python archive failed its checksum check"),
+                    "failed_extraction" => ("storage", "The Python archive could not be extracted"),
+                    "failed_dependencies" => ("dependencies", "Application dependencies could not be installed"),
+                    "failed_validation" => ("validation", "The installed environment is incompatible or incomplete"),
+                    "failed_permission" => ("permission", "Application runtime storage is not writable"),
+                    "failed_storage" => ("storage", "The environment could not be saved"),
+                    "failed_disk_space" => ("disk_space", "The installation volume ran out of space"),
+                    "failed_proxy" => ("proxy", "The enabled Windows system proxy is unavailable or requires authentication"),
+                    "failed_proxy_configuration" => ("proxy_configuration", "The system proxy could not be resolved consistently for package downloads"),
+                    "failed_network" => ("network", "The download service could not be reached"),
+                    _ => ("unknown", "Environment preparation stopped unexpectedly"),
+                };
+                let mut error = SetupError::new(code, detail);
+                error.volume = volume(&directory);
+                error.available_bytes = fs2::available_space(&directory).ok();
+                error.required_bytes = Some(crate::setup_error::REQUIRED_BYTES);
+                if error.available_bytes == Some(0) {
+                    error.code = "disk_space";
+                }
+                return Err(error);
             }
             break;
         }

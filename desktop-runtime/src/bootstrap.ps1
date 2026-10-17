@@ -36,13 +36,23 @@ $env:PYTHONHOME = $null
 $env:PYTHONPATH = $null
 $env:PIP_CONFIG_FILE = 'NUL'
 try {
+    $Failure = 'network'
     Progress 'downloading'
     $Archive = Join-Path $Stage 'python.tar.gz'
     $RuntimeUrl = 'https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-pc-windows-msvc-install_only.tar.gz'
     $RuntimeSha256 = 'e90c1b6419da3bd812dd73bb3de40287a21abf153438147639ec5e20375ea93f'
-    Invoke-WebRequest -Uri $RuntimeUrl -OutFile $Archive -UseBasicParsing -TimeoutSec 180
+    . (Join-Path $PSScriptRoot 'setup_network.ps1')
+    $Failure = 'proxy_configuration'
+    $DownloadProxy = Get-BerryProxyUri ([Uri]$RuntimeUrl)
+    $Failure = 'proxy'
+    Assert-BerryProxyReachable $DownloadProxy
+    $Failure = 'network'
+    Save-BerryDownload ([Uri]$RuntimeUrl) $Archive
     Progress 'verifying'
-    if ((Get-FileHash -LiteralPath $Archive -Algorithm SHA256).Hash -ne $RuntimeSha256) { throw 'Python download checksum mismatch.' }
+    $Failure = 'validation'
+    $DownloadedHash = Get-BerryFileHash $Archive
+    if ($DownloadedHash -ne $RuntimeSha256) { $Failure = 'checksum'; throw 'Python download checksum mismatch.' }
+    $Failure = 'extraction'
     & "$env:SystemRoot\System32\tar.exe" -xf $Archive -C $Stage
     if ($LASTEXITCODE -ne 0) { throw 'Python extraction failed.' }
     $Python = Join-Path $Stage 'python\python.exe'
@@ -50,16 +60,21 @@ try {
     $Requirements = Join-Path $Stage 'requirements.txt'
     Copy-Item -LiteralPath "$SourceRoot\backend\requirements.txt" -Destination $Requirements
     Progress 'installing'
+    $Failure = 'proxy_configuration'
+    Set-BerryPackageProxy
+    $Failure = 'dependencies'
     & $Python -I -m ensurepip --upgrade *> $Log
     if ($LASTEXITCODE -ne 0) { throw 'Package tooling setup failed.' }
     & $Python -I -m pip --isolated install --disable-pip-version-check --no-input --no-user --only-binary=:all: --index-url https://pypi.org/simple --timeout 30 --retries 2 --no-cache-dir --prefix "$Stage\python" -r $Requirements *>> $Log
     if ($LASTEXITCODE -ne 0) { throw 'Application dependency installation failed.' }
     Progress 'validating'
+    $Failure = 'validation'
     $Probe = 'import sys,pathlib; assert sys.version_info >= (3,10); assert pathlib.Path(sys.prefix).resolve()==pathlib.Path(sys.executable).resolve().parent; import uvicorn,fastapi,pydantic,httpx,aiosqlite,PIL,multipart,quickjs; assert "torch" not in sys.modules'
     & $Python -I -c $Probe *>> $Log
     if ($LASTEXITCODE -ne 0) { throw 'Core environment validation failed.' }
-    $Ready = @{ requirements_sha256=(Get-FileHash -LiteralPath $Requirements -Algorithm SHA256).Hash.ToLowerInvariant(); python_version='3.12.14'; archive_sha256=$RuntimeSha256 }
+    $Ready = @{ requirements_sha256=(Get-BerryFileHash $Requirements); python_version='3.12.14'; archive_sha256=$RuntimeSha256 }
     [IO.File]::WriteAllText("$Stage\python\berry-core-ready.json", ($Ready | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    $Failure = 'storage'
     Assert-Owned $Target
     Assert-Owned $Backup
     if (Test-Path -LiteralPath $Target) { Move-Item -LiteralPath $Target -Destination $Backup }
@@ -81,7 +96,18 @@ try {
     Progress 'complete'
 } catch {
     # Fixed error text prevents package/index/environment secrets from reaching UI/log output.
-    Progress 'failed'
+    $Exception = $_.Exception
+    while ($null -ne $Exception.InnerException) { $Exception = $Exception.InnerException }
+    if ($Exception -is [UnauthorizedAccessException]) { $Failure = 'permission' }
+    if (($Exception.HResult -band 0xffff) -eq 112) { $Failure = 'disk_space' }
+    if ($Exception -is [Net.WebException]) {
+        $Failure = 'network'
+        if ($null -ne $Exception.Response -and [int]$Exception.Response.StatusCode -eq 407) { $Failure = 'proxy' }
+    }
+    # Fixed numeric/type metadata only; never record exception messages or proxy credentials.
+    $Diagnostic = @{code=$Failure; exception_type=$Exception.GetType().FullName; hresult=$Exception.HResult; line=$_.InvocationInfo.ScriptLineNumber}
+    [IO.File]::WriteAllText("$RuntimeDir\setup-error.json", ($Diagnostic | ConvertTo-Json), (New-Object Text.UTF8Encoding($false)))
+    Progress "failed_$Failure"
     exit 1
 } finally {
     if (Test-Path -LiteralPath $Log) { Copy-Item -LiteralPath $Log -Destination "$RuntimeDir\last-installation.log" -Force }
