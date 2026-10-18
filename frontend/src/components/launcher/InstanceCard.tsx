@@ -84,6 +84,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   const lang = getEffectiveLanguage();
   const Icon = getIcon();
   const isRunning = instance.status === 'running';
+  const isStarting = instance.status === 'starting';
   const isReady = instance.status === 'ready';
   const isNotInstalled = instance.status === 'not_installed';
 
@@ -99,6 +100,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
       return;
     }
 
+    if (isStarting) return;
     if (isRunning) {
       if (instance.type === 'comfyui') setActiveView('comfyui');
       else if (instance.type === 'webui') setActiveView('webui');
@@ -297,6 +299,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         )}
       </div>
 
+      {instance.error_message && <p role="alert" className="mt-3 text-sm text-amber-200">{instance.error_message}</p>}
       {/* Card Footer Actions */}
       <div className="pt-5 mt-4 border-t border-white/[0.06] flex items-center justify-between" data-stop-propagation>
         {instance.is_builtin ? (
@@ -310,6 +313,11 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
             <span>{ui("ui_open_2")}{instance.name}</span>
             <span className="group-hover:translate-x-1 transition-transform">→</span>
           </button>
+        ) : isStarting ? (
+          <div className="flex w-full items-center justify-between gap-2">
+            <span role="status" className="text-sm text-amber-200">{ui('ui_starting')}</span>
+            <button onClick={handleStop} disabled={isActing} className="rounded border border-slate-700 px-3 py-1 text-sm disabled:opacity-50">{ui('ui_stop')}</button>
+          </div>
         ) : isRunning ? (
           <div className="flex items-center justify-between w-full">
             <button
