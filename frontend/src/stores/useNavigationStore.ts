@@ -1,11 +1,14 @@
 import { create } from 'zustand';
 
 export type ViewType = 'launcher' | 'canvas' | 'models' | 'comfyui' | 'webui' | 'settings';
+export type EngineViewType = 'comfyui' | 'webui';
 
 interface NavigationState {
   activeView: ViewType;
   isRailCollapsed: boolean;
   viewHistory: ViewType[];
+  selectedEngineIds: Partial<Record<EngineViewType, string>>;
+  openEngineView: (type: EngineViewType, instanceId: string) => void;
   
   setActiveView: (view: ViewType) => void;
   toggleRail: () => void;
@@ -16,6 +19,11 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   activeView: 'canvas',
   isRailCollapsed: true,
   viewHistory: ['canvas'],
+  selectedEngineIds: {},
+  openEngineView: (type, instanceId) => {
+    set((state) => ({ selectedEngineIds: { ...state.selectedEngineIds, [type]: instanceId } }));
+    get().setActiveView(type);
+  },
 
   setActiveView: (view: ViewType) => {
     const current = get().activeView;
