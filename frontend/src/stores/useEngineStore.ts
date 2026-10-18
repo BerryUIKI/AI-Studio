@@ -9,7 +9,12 @@ export interface EngineInstance {
   is_managed: boolean;
   is_builtin: boolean;
   install_path?: string | null;
-  status: 'ready' | 'running' | 'stopped' | 'not_installed' | 'error' | 'updating';
+  status: 'ready' | 'running' | 'starting' | 'stopped' | 'not_installed' | 'error' | 'updating';
+  process_running?: boolean | null;
+  service_healthy?: boolean | null;
+  service_checked_at?: number | null;
+  lifecycle_state?: string | null;
+  error_message?: string | null;
   endpoint?: string | null;
   pid?: number | null;
   vram_used_mb?: number | null;
