@@ -138,7 +138,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
         </div>
       </header>
       {(startError || error) && <p role="alert" className="border-b border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-200">{startError || error}</p>}
-      {isRunning && !engineUrl && <p role="alert" className="p-4 text-sm text-amber-200">The configured engine endpoint is unavailable or invalid. Check the connection settings.</p>}
+      {isRunning && !engineUrl && <p role="alert" className="p-4 text-sm text-amber-200">{ui('ui_engine_endpoint_unavailable')}</p>}
 
       {/* Main View Area */}
       <main className="flex-1 relative w-full h-full bg-slate-950">
@@ -151,7 +151,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
             sandbox="allow-same-origin allow-scripts allow-forms allow-downloads allow-modals allow-popups"
           />
         ) : !isManaged ? (
-          <p role="status" className="p-8 text-sm text-slate-300">Start this external engine outside Berry, then refresh its connection. Berry does not control external processes.</p>
+          <p role="status" className="p-8 text-sm text-slate-300">{ui('ui_external_engine_manual_start')}</p>
         ) : !isInstalled ? (
           <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center select-none">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 shadow-xl">
