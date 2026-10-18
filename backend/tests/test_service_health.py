@@ -6,15 +6,30 @@ import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
 
 from app.runtime.service_health import ServiceHealthProbe, observed_runtime_status
-from app.schemas.engine import EngineType
+from app.schemas.engine import EngineInstanceInfo, EngineType
+from app.core.engine_service import EngineService
 from app.runtime.supervisor import ComfySupervisor
 from app.runtime.webui_supervisor import WebUISupervisor
+
+
+@pytest.mark.asyncio
+async def test_instance_catalog_marks_observed_ready_services_as_running() -> None:
+    manager = Mock()
+    manager.get_all_instances.return_value = [EngineInstanceInfo(id="comfyui-managed", type="comfyui", name="Fixture", status="stopped")]
+    target = SimpleNamespace()
+    service = EngineService(manager, {EngineType.COMFYUI: target})
+    observation = {"process_running": True, "service_healthy": True, "service_checked_at": 1.0, "lifecycle_state": "ready", "health_error": None}
+    with patch("app.core.engine_service.observed_runtime_status", AsyncMock(return_value=observation)):
+        instance = (await service.instances())[0]
+    assert instance.status == "running"
+    assert instance.lifecycle_state == "ready"
+    assert instance.service_healthy is True
 
 
 @pytest.mark.asyncio
