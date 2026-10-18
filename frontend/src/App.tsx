@@ -9,7 +9,7 @@ import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { VideoModal } from './components/canvas/VideoModal';
 import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
-import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
+import { EnvironmentManagerModal, type EnvironmentManagerTab } from './components/manager/EnvironmentManagerModal';
 import { GlobalNavRail } from './components/navigation/GlobalNavRail';
 import { ViewContainer } from './components/navigation/ViewContainer';
 import { AddEngineModal } from './components/launcher/AddEngineModal';
@@ -49,6 +49,7 @@ export default function App() {
   const [showNodePalette, setShowNodePalette] = useState<boolean>(false);
   const [showCloudModal, setShowCloudModal] = useState<boolean>(false);
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
+  const [managerInitialTab, setManagerInitialTab] = useState<EnvironmentManagerTab>('overview');
   const [showAgentPanel, setShowAgentPanel] = useState<boolean>(false);
   const [isMaximized, setIsMaximized] = useState<boolean>(false);
   const [showAddEngineModal, setShowAddEngineModal] = useState<boolean>(false);
@@ -423,7 +424,9 @@ export default function App() {
                   <main className="flex-1 relative w-full h-full">
                     <FlowCanvas />
                     <TaskHistory />
-                    <CreationDock onCloudSetup={() => setShowCloudModal(true)} onLocalSetup={() => setShowManagerModal(true)} />
+                    <CreationDock onCloudSetup={() => setShowCloudModal(true)}
+                      onLocalSetup={() => { setManagerInitialTab('engines'); setShowManagerModal(true); }}
+                      onOpenModels={() => { setManagerInitialTab('models'); setShowManagerModal(true); }} />
                   </main>
                 </div>
               </ErrorBoundary>
@@ -505,7 +508,8 @@ export default function App() {
       <UpscaleModal />
       <VideoModal />
       <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
-      <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
+      <EnvironmentManagerModal isOpen={showManagerModal} initialTab={managerInitialTab}
+        onClose={() => { setShowManagerModal(false); setManagerInitialTab('overview'); }} />
       <ProjectManagerModal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} />
       <AddEngineModal
         isOpen={showAddEngineModal}

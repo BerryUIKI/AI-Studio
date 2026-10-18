@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCanvasStore } from '../../stores/useCanvasStore';
+import { useNavigationStore } from '../../stores/useNavigationStore';
 import type { ImageCardData } from '../../types/creative';
 import { FloatingCardToolbar } from './FloatingCardToolbar';
 import { CreationSetup, useCreationReadiness } from './CreationSetup';
@@ -45,7 +46,14 @@ export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationS
 );
 };
 
-export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = () => undefined }: { onCloudSetup?: () => void; onLocalSetup?: () => void }) => {
+interface CreationDockProps {
+  onCloudSetup?: () => void;
+  onLocalSetup?: () => void;
+  onOpenModels?: () => void;
+}
+
+export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = () => undefined,
+  onOpenModels = () => useNavigationStore.getState().setActiveView('models') }: CreationDockProps) => {
   const ui = useUiText();
   const selectedImage = useCanvasStore((state) => state.nodes.find(
     (node): node is Node<ImageCardData> => node.id === state.selectedNodeId && node.type === 'imageCard',
@@ -246,9 +254,7 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
             {/* Quick Models Inventory Link */}
             <button
               type="button"
-              onClick={() => {
-                window.location.hash = 'manager';
-              }}
+              onClick={onOpenModels}
               title={ui("ui_inspect_local_models_scan_roots_and_engine_compatibility")}
               className="px-2 py-0.5 rounded-md bg-purple-950/60 hover:bg-purple-900/80 text-purple-300 hover:text-purple-100 border border-purple-800/60 transition text-[11px] font-medium"
             >
