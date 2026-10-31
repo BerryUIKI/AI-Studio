@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCreationReadiness } from './CreationSetup';
+import { CreativeTaskFeedback } from './CreativeTaskFeedback';
 
 export const InpaintModal = () => {
   const ui = useUiText();
@@ -163,7 +164,7 @@ export const InpaintModal = () => {
     <Dialog title={ui("ui_inpaint_image")} onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-in fade-in duration-150">
       <div
         ref={containerRef}
-        className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl shadow-slate-950/90 overflow-hidden"
+        className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl shadow-slate-950/90 overflow-y-auto"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/60">
@@ -186,6 +187,7 @@ export const InpaintModal = () => {
         </div>
 
         {/* Canvas Workspace */}
+        <div className="px-4 py-2"><CreativeTaskFeedback /></div>
         <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-slate-950/70 relative min-h-[380px]">
           <div className="relative inline-block max-w-full max-h-[55vh] select-none rounded-xl overflow-hidden shadow-2xl border border-slate-800">
             {/* Background source image */}

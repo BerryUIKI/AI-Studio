@@ -18,32 +18,8 @@ import type { ImageCardData } from '../../types/creative';
 import { FloatingCardToolbar } from './FloatingCardToolbar';
 import { CreationSetup, useCreationReadiness } from './CreationSetup';
 
-type CreativeTaskStatusProps = Pick<ReturnType<typeof useCreativeStore.getState>,
-  'isGenerating' | 'generationNotice' | 'generationStage' | 'activeTaskId' | 'cancellationRequested' | 'cancelGeneration'>;
-
-export const CreativeTaskStatus = ({ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }: CreativeTaskStatusProps) => {
-  const ui = useUiText();
-  return (
-  <>
-    {generationNotice && <p role="status" className="px-3 text-xs text-amber-200">{generationNotice}</p>}
-    {isGenerating && (
-      <div className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-indigo-950/50 border border-indigo-800/60 text-xs">
-        <div className="flex items-center gap-2.5">
-          <Loader2 className="w-4 h-4 text-indigo-400 animate-spin" />
-          <div className="flex flex-col">
-            <span className="font-medium text-indigo-200">{generationStage || ui("ui_running")}</span>
-            <span className="text-[10px] text-slate-400">{activeTaskId || ui("ui_waiting_for_task_admission")}</span>
-          </div>
-        </div>
-        <button type="button" onClick={() => void cancelGeneration()} disabled={!activeTaskId || cancellationRequested}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-slate-200 disabled:opacity-50">
-          {cancellationRequested ? ui("ui_cancellation_requested") : ui("ui_cancel")}
-        </button>
-      </div>
-    )}
-  </>
-);
-};
+import { CreativeTaskFeedback } from './CreativeTaskFeedback';
+export { CreativeTaskStatus } from './CreativeTaskFeedback';
 
 export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = () => undefined }: { onCloudSetup?: () => void; onLocalSetup?: () => void }) => {
   const ui = useUiText();
@@ -69,12 +45,6 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
     setSeed,
     randomizeSeed,
     isGenerating,
-    generationStage,
-    activeTaskId,
-    cancellationRequested,
-    generationNotice,
-    cancelGeneration,
-    error,
     executeCreativeAction,
   } = useCreativeStore(useShallow((state) => ({
     prompt: state.prompt,
@@ -95,12 +65,6 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
     setSeed: state.setSeed,
     randomizeSeed: state.randomizeSeed,
     isGenerating: state.isGenerating,
-    generationStage: state.generationStage,
-    activeTaskId: state.activeTaskId,
-    cancellationRequested: state.cancellationRequested,
-    generationNotice: state.generationNotice,
-    cancelGeneration: state.cancelGeneration,
-    error: state.error,
     executeCreativeAction: state.executeCreativeAction,
   })));
 
@@ -127,20 +91,7 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
         {selectedImage && !selectedImage.data.isGenerating && (
           <FloatingCardToolbar nodeId={selectedImage.id} data={selectedImage.data} />
         )}
-        {/* Error message if any */}
-        {error && (
-          <div className="px-3 py-1.5 rounded-lg bg-rose-950/60 border border-rose-800/50 text-rose-300 text-xs flex items-center justify-between">
-            <span>{error}</span>
-            <button
-              onClick={() => useCreativeStore.setState({ error: null })}
-              className="text-rose-400 hover:text-white"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        <CreativeTaskStatus {...{ isGenerating, generationNotice, generationStage, activeTaskId, cancellationRequested, cancelGeneration }} />
+        <CreativeTaskFeedback />
         <CreationSetup onCloudSetup={onCloudSetup} onLocalSetup={onLocalSetup} />
 
         {/* Reference Image Badge (Img2Img Mode) */}
