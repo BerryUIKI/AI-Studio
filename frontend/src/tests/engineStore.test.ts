@@ -53,7 +53,7 @@ describe('useEngineStore', () => {
     expect(state.instances[0].id).toBe('test-canvas');
   });
 
-  it('starts engine and updates status on success', async () => {
+  it('waits for observed service health after process startup succeeds', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ success: true, message: 'ComfyUI started', pid: 1234 }),
@@ -64,8 +64,19 @@ describe('useEngineStore', () => {
 
     expect(result.success).toBe(true);
     const updated = useEngineStore.getState().instances.find((i) => i.id === 'comfyui-managed');
-    expect(updated?.status).toBe('running');
+    expect(updated?.status).toBe('starting');
     expect(updated?.pid).toBe(1234);
+    expect(updated?.service_healthy).toBeNull();
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ instances: [{ ...updated, status: 'running', service_healthy: true }] }) });
+    await store.fetchInstances();
+    expect(useEngineStore.getState().instances[0].status).toBe('running');
+  });
+
+  it('retains process ownership and shows the cause when stopping fails', async () => {
+    useEngineStore.setState({ instances: [{ ...defaultBuiltinInstances[1], status: 'running', pid: 1234 }] });
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ success: false, message: 'Process did not exit' }) });
+    expect(await useEngineStore.getState().stopEngine('comfyui-managed')).toBe(false);
+    expect(useEngineStore.getState().instances[0]).toMatchObject({ status: 'running', pid: 1234, error_message: 'Process did not exit' });
   });
 
   it('marks instance as not_installed when start returns NOT_INSTALLED', async () => {
