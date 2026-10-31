@@ -49,6 +49,46 @@ Assert-FileExists "$StandalonePython\python.exe" "Standalone Python executable"
 & "$PSScriptRoot\test-standalone-python.ps1" -PythonDir $StandalonePython
 Write-Host "  -> Standalone Python runtime verified" -ForegroundColor Green
 
+# Prepare pinned portable Git. Both the portable archive and the installer payload need it,
+# and the extraction is cached in the repository runtime directory so it happens only once.
+# This enables isolated engine installation without requiring system Git.
+$PortableGitUrl = "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/PortableGit-2.56.0.2-64-bit.7z.exe"
+$PortableGitSha256 = "075e158ef8e1f0ab80b347e245405d3eca735c2dc88fd8e032e137d0ca61f61b"
+$PortableGitCache = "$RepoRoot\runtime\portable-git"
+$CachedArchive = "$RepoRoot\runtime\PortableGit-$($PortableGitSha256.Substring(0,12)).7z.exe"
+
+Write-Host "  -> Preparing portable Git..." -ForegroundColor Yellow
+try {
+    if (Test-Path "$PortableGitCache\cmd\git.exe") {
+        Write-Host "  -> Reusing cached portable Git" -ForegroundColor Gray
+    } else {
+        if (-not (Test-Path $CachedArchive) -or
+            (Get-FileHash -LiteralPath $CachedArchive -Algorithm SHA256).Hash -ne $PortableGitSha256) {
+            Write-Host "  -> Downloading portable Git..." -ForegroundColor Yellow
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $PortableGitUrl -OutFile $CachedArchive -UseBasicParsing -TimeoutSec 600
+        }
+        if ((Get-FileHash -LiteralPath $CachedArchive -Algorithm SHA256).Hash -ne $PortableGitSha256) {
+            throw "Portable Git checksum mismatch."
+        }
+        Write-Host "  -> Extracting portable Git..." -ForegroundColor Yellow
+        New-Item -ItemType Directory -Path $PortableGitCache -Force | Out-Null
+        $7z = Get-Command 7z -ErrorAction SilentlyContinue
+        if ($7z) {
+            & 7z x $CachedArchive "-o$PortableGitCache" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Portable Git extraction failed." }
+        } else {
+            $Extractor = Start-Process -FilePath $CachedArchive -ArgumentList "-o`"$PortableGitCache`"","-y" -Wait -WindowStyle Hidden -PassThru
+            if ($Extractor.ExitCode -ne 0) { throw "Portable Git extraction failed: $($Extractor.ExitCode)" }
+        }
+    }
+    Assert-FileExists "$PortableGitCache\cmd\git.exe" "Portable Git executable"
+    & "$PortableGitCache\cmd\git.exe" --version
+    if ($LASTEXITCODE -ne 0) { throw "Portable Git cannot execute." }
+} catch {
+    throw "PACKAGING FAILED: Portable Git is required for isolated engine installation: $_"
+}
+
 # Step 1: Build Frontend assets FIRST (required before Tauri can embed them)
 Write-Host "`n[1/6] Building frontend production bundle..." -ForegroundColor Yellow
 Push-Location "$RepoRoot\frontend"
@@ -74,10 +114,49 @@ Write-Host "  -> Frontend assets built successfully" -ForegroundColor Green
 
 # Step 2: Build Tauri native desktop application (embeds frontend assets)
 Write-Host "`n[2/6] Building native Tauri desktop application..." -ForegroundColor Yellow
+
+# The NSIS installer is only the native shell unless the backend and runtime are declared
+# as bundle resources. Stage the same payload the portable archive carries so the installed
+# app supervises a real backend instead of falling back to the environment wizard.
+$InstallerStaging = "$RepoRoot\frontend\src-tauri\installer-staging"
+$InstallerPayload = "$InstallerStaging\resources"
+$StageInstallerPayload = Test-Path "$RepoRoot\backend\app\main.py" -and (Test-Path "$StandalonePython\python.exe")
+if ($StageInstallerPayload) {
+    Write-Host "  -> Staging installer resources (backend, Python runtime, Git)..." -ForegroundColor Yellow
+    if (Test-Path $InstallerStaging) { Remove-Item -Recurse -Force $InstallerStaging }
+    New-Item -ItemType Directory -Path "$InstallerPayload\backend\app" -Force | Out-Null
+    Copy-Item -Recurse "$RepoRoot\backend\app\*" -Destination "$InstallerPayload\backend\app\" -Force
+    if (Test-Path "$RepoRoot\backend\requirements.txt") {
+        Copy-Item "$RepoRoot\backend\requirements.txt" -Destination "$InstallerPayload\backend\" -Force
+    }
+    New-Item -ItemType Directory -Path "$InstallerPayload\runtime" -Force | Out-Null
+    Copy-Item -Recurse "$StandalonePython\*" -Destination "$InstallerPayload\runtime\python\" -Force
+    New-Item -ItemType Directory -Path "$InstallerPayload\runtime\git" -Force | Out-Null
+    Copy-Item -Recurse "$PortableGitCache\*" -Destination "$InstallerPayload\runtime\git\" -Force
+    Assert-FileExists "$InstallerPayload\backend\app\main.py" "Installer backend main.py"
+    Assert-FileExists "$InstallerPayload\runtime\python\python.exe" "Installer Python runtime"
+    Assert-FileExists "$InstallerPayload\runtime\git\cmd\git.exe" "Installer portable Git"
+} else {
+    Write-Host "  -> Backend or Python runtime unavailable; packaging the native shell only." -ForegroundColor Yellow
+}
+
 Push-Location "$RepoRoot\frontend"
 try {
-    pnpm tauri build --bundles nsis
-    if ($LASTEXITCODE -ne 0) { throw "Tauri build failed" }
+    # Passed through the CLI so CI builds and the plain config keep their current shape.
+    $BuildArgs = @("tauri", "build", "--bundles", "nsis")
+    if ($StageInstallerPayload) {
+        $TauriOverride = @{ bundle = @{ resources = @{ "installer-staging/resources/" = "resources/" } } } | ConvertTo-Json -Depth 4 -Compress
+        $TauriOverridePath = Join-Path $env:TEMP "berry-tauri-resources-$PID.json"
+        if (Test-Path $TauriOverridePath) { Remove-Item -Force $TauriOverridePath }
+        Set-Content -LiteralPath $TauriOverridePath -Value $TauriOverride -Encoding utf8
+        $BuildArgs += @("--config", $TauriOverridePath)
+    }
+    try {
+        & pnpm @BuildArgs
+        if ($LASTEXITCODE -ne 0) { throw "Tauri build failed" }
+    } finally {
+        if ($TauriOverridePath) { Remove-Item -Force $TauriOverridePath -ErrorAction SilentlyContinue }
+    }
 } finally {
     Pop-Location
 }
@@ -143,43 +222,14 @@ Assert-FileExists "$TargetDir\runtime\python\python.exe" "Bundled Python executa
 # Verify bundled Python is self-contained (no external base_prefix references)
 & "$PSScriptRoot\test-standalone-python.ps1" -PythonDir "$TargetDir\runtime\python" -BackendDir "$TargetDir\backend"
 
-# Bundle pinned portable Git, verified before executing the self-extractor.
-# This enables engine installation without requiring system Git
-$PortableGitUrl = "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/PortableGit-2.56.0.2-64-bit.7z.exe"
-$PortableGitSha256 = "075e158ef8e1f0ab80b347e245405d3eca735c2dc88fd8e032e137d0ca61f61b"
+# Copy the portable Git prepared in step 0 (shared with the installer payload)
 $PortableGitPath = "$TargetDir\runtime\git"
-$PortableGitExe = Join-Path $TargetDir "PortableGit.exe"
-
-Write-Host "  -> Downloading portable Git..." -ForegroundColor Yellow
-try {
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri $PortableGitUrl -OutFile $PortableGitExe -UseBasicParsing -TimeoutSec 180
-    if ((Get-FileHash -LiteralPath $PortableGitExe -Algorithm SHA256).Hash -ne $PortableGitSha256) {
-        throw "Portable Git checksum mismatch."
-    }
-
-    # Extract portable Git (self-extracting 7z)
-    New-Item -ItemType Directory -Path $PortableGitPath -Force | Out-Null
-    Write-Host "  -> Extracting portable Git to runtime/git..." -ForegroundColor Yellow
-
-    # Use 7z if available, otherwise use the self-extractor
-    $7z = Get-Command 7z -ErrorAction SilentlyContinue
-    if ($7z) {
-        & 7z x $PortableGitExe "-o$PortableGitPath" -y | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Portable Git extraction failed." }
-    } else {
-        $Extractor = Start-Process -FilePath $PortableGitExe -ArgumentList "-o`"$PortableGitPath`"","-y" -Wait -WindowStyle Hidden -PassThru
-        if ($Extractor.ExitCode -ne 0) { throw "Portable Git extraction failed: $($Extractor.ExitCode)" }
-    }
-
-    Remove-Item $PortableGitExe -Force
-
-    Assert-FileExists "$PortableGitPath\cmd\git.exe" "Portable Git executable"
-    & "$PortableGitPath\cmd\git.exe" --version
-    if ($LASTEXITCODE -ne 0) { throw "Bundled Git cannot execute." }
-} catch {
-    throw "PACKAGING FAILED: Portable Git is required for isolated engine installation: $_"
-}
+Write-Host "  -> Copying portable Git to runtime/git..." -ForegroundColor Yellow
+New-Item -ItemType Directory -Path $PortableGitPath -Force | Out-Null
+Copy-Item -Recurse "$PortableGitCache\*" -Destination $PortableGitPath -Force
+Assert-FileExists "$PortableGitPath\cmd\git.exe" "Portable Git executable"
+& "$PortableGitPath\cmd\git.exe" --version
+if ($LASTEXITCODE -ne 0) { throw "Bundled Git cannot execute." }
 
 # Copy embedded llama-server runtime if present
 $SourceLlamaServer = "$RepoRoot\runtime\llama_server"

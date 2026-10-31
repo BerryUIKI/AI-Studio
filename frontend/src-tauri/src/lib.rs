@@ -97,6 +97,18 @@ fn minimize_app(window: tauri::Window) {
     let _ = window.minimize();
 }
 
+/// Resolve the package root, preferring the Tauri resource directory of an installed build.
+///
+/// The NSIS installer ships the backend and runtime as Tauri resources next to the
+/// executable. Development and portable layouts keep them beside the binary instead, so
+/// the resource directory is only used when it actually contains the backend.
+fn resolve_root_dir() -> std::path::PathBuf {
+    let resource_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("resources")));
+    berry_runtime::detect_root_dir_with(resource_dir.as_deref())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     backend::log_msg("=== Berry AI Studio Starting ===");
@@ -105,7 +117,7 @@ pub fn run() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(8000);
 
-    let root_dir = backend::detect_root_dir();
+    let root_dir = resolve_root_dir();
     backend::log_msg(&format!("Detected root directory: {:?}", root_dir));
 
     let mut child = match backend::spawn_backend(&root_dir, port) {

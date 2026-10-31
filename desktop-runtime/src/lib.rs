@@ -26,12 +26,28 @@ pub fn log_msg(msg: &str) {
     }
 }
 
-/// Detect the workspace or repository root directory by walking all ancestors.
-pub fn detect_root_dir() -> PathBuf {
+/// Detect the workspace, repository or installed-package root directory.
+///
+/// `resource_override` is the Tauri resource directory for an installed build. The
+/// installer places the backend and runtime under `install_dir/resources/`, so it is
+/// checked before the ancestor walk that serves development and portable layouts.
+pub fn detect_root_dir_with(resource_override: Option<&Path>) -> PathBuf {
+    fn is_root(candidate: &Path) -> bool {
+        candidate.join("backend").join("app").join("main.py").is_file()
+    }
+
+    if let Some(resources) = resource_override {
+        for candidate in [resources.to_path_buf(), resources.join("resources")] {
+            if is_root(&candidate) {
+                return candidate;
+            }
+        }
+    }
+
     // 1. Check current_exe and ALL its ancestors
     if let Ok(exe) = std::env::current_exe() {
         for ancestor in exe.ancestors() {
-            if ancestor.join("backend").join("app").join("main.py").is_file() {
+            if is_root(ancestor) {
                 return ancestor.to_path_buf();
             }
         }
@@ -40,13 +56,18 @@ pub fn detect_root_dir() -> PathBuf {
     // 2. Check current_dir and ALL its ancestors
     if let Ok(cwd) = std::env::current_dir() {
         for ancestor in cwd.ancestors() {
-            if ancestor.join("backend").join("app").join("main.py").is_file() {
+            if is_root(ancestor) {
                 return ancestor.to_path_buf();
             }
         }
     }
 
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+/// Detect the workspace or repository root directory by walking all ancestors.
+pub fn detect_root_dir() -> PathBuf {
+    detect_root_dir_with(None)
 }
 
 /// Locate an app-owned runtime or explicit development virtual environment.
@@ -292,6 +313,46 @@ mod tests {
         let root = std::env::temp_dir().join(format!("berry-runtime-test-{}", std::process::id()));
         assert!(!root.exists());
         assert!(find_python_executable(&root).is_err());
+    }
+
+    #[test]
+    fn installer_resource_directory_supplies_the_package_root() {
+        // The NSIS installer places backend/ and runtime/ under a resources directory
+        // that is not an ancestor of the executable, so it must be resolved explicitly.
+        let base = std::env::temp_dir().join(format!(
+            "berry-resource-root-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let resources = base.join("resources");
+        std::fs::create_dir_all(resources.join("backend").join("app")).unwrap();
+        std::fs::write(resources.join("backend").join("app").join("main.py"), b"").unwrap();
+
+        assert_eq!(detect_root_dir_with(Some(&resources)), resources);
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn resource_override_without_a_backend_is_ignored() {
+        // A stale or empty resource directory must not shadow the normal ancestor walk.
+        let base = std::env::temp_dir().join(format!(
+            "berry-resource-empty-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let resources = base.join("resources");
+        std::fs::create_dir_all(&resources).unwrap();
+
+        assert_ne!(detect_root_dir_with(Some(&resources)), resources);
+
+        std::fs::remove_dir_all(&base).ok();
     }
 
     #[test]

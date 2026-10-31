@@ -18,6 +18,7 @@ build/
 target/
 launcher/target/
 frontend/src-tauri/target/
+frontend/src-tauri/installer-staging/
 
 # Python
 __pycache__/
