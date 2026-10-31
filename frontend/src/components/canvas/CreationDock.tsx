@@ -322,12 +322,15 @@ export const CreationDock = ({ onCloudSetup = () => undefined, onLocalSetup = ()
 
             {/* Seed Configuration */}
             <div className="flex flex-col gap-1 bg-slate-950/40 p-2 rounded-xl border border-slate-800/80">
-              <label className="text-[11px] font-medium text-slate-300">{ui("ui_seed_1_for_random")}</label>
+              <label htmlFor="creation-seed" className="text-[11px] font-medium text-slate-300">{ui("ui_seed_1_for_random")}</label>
               <div className="flex items-center gap-1.5">
                 <input
+                  id="creation-seed"
                   type="number"
+                  min={-1}
+                  step={1}
                   value={seed}
-                  onChange={(e) => setSeed(parseInt(e.target.value, 10) || -1)}
+                  onChange={(e) => setSeed(Number.isNaN(e.target.valueAsNumber) ? -1 : Math.trunc(e.target.valueAsNumber))}
                   className="w-full bg-slate-950 border border-slate-700 rounded-md px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 font-mono"
                 />
                 <button
