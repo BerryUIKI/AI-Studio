@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Loader2, Maximize2, Sparkles, X } from 'lucide-react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCreationReadiness } from './CreationSetup';
+import { CreativeTaskFeedback } from './CreativeTaskFeedback';
 
 export const UpscaleModal = () => {
   const ui = useUiText();
@@ -40,7 +41,7 @@ export const UpscaleModal = () => {
 
   return (
     <Dialog title={ui("ui_upscale_image")} onClose={closeModals} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md max-h-[90vh] shadow-2xl overflow-y-auto flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
@@ -58,6 +59,7 @@ export const UpscaleModal = () => {
 
         {/* Content Body */}
         <div className="p-5 flex flex-col gap-4">
+          <CreativeTaskFeedback />
           {/* Image Thumbnail Preview */}
           <div className="flex items-center gap-4 bg-slate-950 p-3 rounded-xl border border-slate-800">
             <img

@@ -31,6 +31,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
     openProject,
     renameProject,
     deleteProject,
+    saveError,
   } = useProjectStore();
 
   const isModalOpen = isOpen !== undefined ? isOpen : isManagerModalOpen;
@@ -56,7 +57,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newProjectName.trim() || 'Untitled Project';
-    await createProject(name);
+    if (!await createProject(name)) return;
     setNewProjectName('');
     setIsCreating(false);
     handleClose();
@@ -113,6 +114,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
 
         {/* Toolbar & Search */}
         <div className="p-6 pb-2 flex flex-col gap-3">
+          {saveError && <p role="alert" className="rounded-lg border border-rose-800 bg-rose-950/50 p-3 text-sm text-rose-200">{saveError}</p>}
           <div className="flex items-center justify-between gap-3">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -260,8 +262,7 @@ export const ProjectManagerModal: React.FC<ProjectManagerModalProps> = ({ isOpen
                         {!isActive && (
                           <button
                             onClick={async () => {
-                              await openProject(proj.id);
-                              handleClose();
+                              if (await openProject(proj.id)) handleClose();
                             }}
                             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition"
                           >

@@ -71,14 +71,17 @@ interface ModelRoot {
   models_found: number;
 }
 
+export type EnvironmentManagerTab = 'overview' | 'engines' | 'models' | 'updates';
+
 interface EnvironmentManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: EnvironmentManagerTab;
 }
 
-export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = ({ isOpen, onClose }) => {
+export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = ({ isOpen, onClose, initialTab = 'overview' }) => {
   const ui = useUiText();
-  const [activeTab, setActiveTab] = useState<'overview' | 'engines' | 'models' | 'updates'>('overview');
+  const [activeTab, setActiveTab] = useState<EnvironmentManagerTab>(initialTab);
   const [status, setStatus] = useState<ManagerStatus | null>(null);
   const [models, setModels] = useState<ModelItem[]>([]);
   const [roots, setRoots] = useState<ModelRoot[]>([]);
@@ -117,10 +120,11 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
 
   useEffect(() => {
     if (isOpen) {
+      setActiveTab(initialTab);
       fetchStatus();
       fetchModels();
     }
-  }, [isOpen]);
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 
