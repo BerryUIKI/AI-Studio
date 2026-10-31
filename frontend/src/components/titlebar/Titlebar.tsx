@@ -179,7 +179,9 @@ export const Titlebar: React.FC<TitlebarProps> = ({
       console.error('Failed to close window:', e);
       try {
         window.close();
-      } catch {}
+      } catch {
+        // Browser policies may reject script-driven window closure.
+      }
     }
   };
 

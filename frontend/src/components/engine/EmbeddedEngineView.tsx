@@ -3,10 +3,12 @@ import React, { useRef, useState } from 'react';
 import { ExternalLink, RefreshCw, FolderOpen, Play, Power, Download } from 'lucide-react';
 
 interface EmbeddedEngineViewProps {
-  engineType: 'comfyui' | 'webui';
   title: string;
-  port: number;
+  endpoint: string | null;
   isRunning: boolean;
+  isStarting?: boolean;
+  isManaged?: boolean;
+  error?: string | null;
   isInstalled?: boolean;
   onStartEngine: () => Promise<void> | void;
   onDeployEngine?: () => void;
@@ -14,10 +16,12 @@ interface EmbeddedEngineViewProps {
 }
 
 export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
-  engineType: _engineType,
   title,
-  port,
+  endpoint,
   isRunning,
+  isStarting: processStarting = false,
+  isManaged = true,
+  error,
   isInstalled = true,
   onStartEngine,
   onDeployEngine,
@@ -26,12 +30,19 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
   const ui = useUiText();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isStarting, setIsStarting] = useState(false);
+  const [submittingStart, setSubmittingStart] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const isStarting = submittingStart || processStarting;
 
-  const engineUrl = `http://127.0.0.1:${port}`;
+  const engineUrl = (() => {
+    try {
+      const url = new URL(endpoint || '');
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null;
+    } catch { return null; }
+  })();
 
   const handleRefresh = () => {
-    if (iframeRef.current) {
+    if (iframeRef.current && engineUrl) {
       setIsRefreshing(true);
       iframeRef.current.src = engineUrl;
       setTimeout(() => setIsRefreshing(false), 800);
@@ -39,15 +50,19 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
   };
 
   const handleOpenBrowser = () => {
-    window.open(engineUrl, '_blank');
+    if (engineUrl) window.open(engineUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleStart = async () => {
-    setIsStarting(true);
+    if (isStarting || !isManaged) return;
+    setSubmittingStart(true);
+    setStartError(null);
     try {
       await onStartEngine();
+    } catch (cause: unknown) {
+      setStartError(cause instanceof Error ? cause.message : 'The engine could not be started.');
     } finally {
-      setIsStarting(false);
+      setSubmittingStart(false);
     }
   };
 
@@ -67,13 +82,13 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
                 isRunning ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
               }`}
             />
-            {isRunning ? ui("ui_127_0_0_1_value", { value1: port }) : ui("ui_stopped")}
+            {isRunning ? engineUrl : isStarting ? ui('ui_starting') : ui("ui_stopped")}
           </span>
         </div>
 
         {/* Toolbar action buttons */}
         <div className="flex items-center space-x-2">
-          {isRunning ? (
+          {isRunning && engineUrl ? (
             <>
               <button
                 onClick={handleRefresh}
@@ -92,7 +107,7 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
                 <span>{ui("ui_browser")}</span>
               </button>
             </>
-          ) : !isInstalled ? (
+          ) : !isManaged ? null : !isInstalled ? (
             <button
               onClick={onDeployEngine}
               className="flex items-center space-x-1 px-3 py-1 text-xs font-medium text-white bg-amber-600 hover:bg-amber-500 rounded transition-colors shadow-sm shadow-amber-600/30"
@@ -122,10 +137,12 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
           )}
         </div>
       </header>
+      {(startError || error) && <p role="alert" className="border-b border-amber-800 bg-amber-950/40 p-4 text-sm text-amber-200">{startError || error}</p>}
+      {isRunning && !engineUrl && <p role="alert" className="p-4 text-sm text-amber-200">{ui('ui_engine_endpoint_unavailable')}</p>}
 
       {/* Main View Area */}
       <main className="flex-1 relative w-full h-full bg-slate-950">
-        {isRunning ? (
+        {isRunning && engineUrl ? (
           <iframe
             ref={iframeRef}
             src={engineUrl}
@@ -133,6 +150,8 @@ export const EmbeddedEngineView: React.FC<EmbeddedEngineViewProps> = ({
             className="w-full h-full border-0 bg-slate-900"
             sandbox="allow-same-origin allow-scripts allow-forms allow-downloads allow-modals allow-popups"
           />
+        ) : !isManaged ? (
+          <p role="status" className="p-8 text-sm text-slate-300">{ui('ui_external_engine_manual_start')}</p>
         ) : !isInstalled ? (
           <div className="flex flex-col items-center justify-center w-full h-full p-8 text-center select-none">
             <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-4 shadow-xl">

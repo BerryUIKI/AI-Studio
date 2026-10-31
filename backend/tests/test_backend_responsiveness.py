@@ -181,4 +181,6 @@ async def test_runtime_status_probe_does_not_block_health() -> None:
                 assert not status.done()
             finally:
                 release.set()
-                assert (await status).json() == {"running": False}
+                observed = (await status).json()
+                assert observed["running"] is False
+                assert observed["service_healthy"] is None
