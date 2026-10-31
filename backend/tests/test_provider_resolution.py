@@ -36,6 +36,21 @@ def test_resolve_execution_plan_fal_sdxl_turbo():
     assert resolve_effective_provider(req) == plan.provider_id
 
 
+def test_legacy_cloud_default_uses_configured_openai_with_a_compatible_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(credentials_manager, "get_key", lambda provider: "fixture" if provider == CloudProviderId.OPENAI else None)
+    request = CreativeActionRequest(action=CreativeActionType.TXT2IMG, prompt="A review fixture", connection_id="cloud")
+    plan = resolve_execution_plan(request)
+    assert plan.provider_id == "openai"
+    assert plan.target_model == "dall-e-3"
+    assert resolve_effective_provider(request) == plan.provider_id
+
+
+def test_openai_fallback_does_not_override_an_explicit_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(credentials_manager, "get_key", lambda provider: "fixture" if provider == CloudProviderId.OPENAI else None)
+    request = CreativeActionRequest(action=CreativeActionType.TXT2IMG, connection_id="fal_ai", model="flux-schnell")
+    assert resolve_execution_plan(request).provider_id == "fal_ai"
+
+
 def test_resolve_execution_plan_comfy_and_webui():
     """Verify local engines resolve consistently."""
     req_comfy = CreativeActionRequest(

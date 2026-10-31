@@ -19,6 +19,26 @@ beforeEach(() => {
 afterEach(() => { cleanup(); useProjectStore.setState(useProjectStore.getInitialState()); });
 
 describe('project dialog accessible controls', () => {
+  it.each(['open', 'create'])('keeps the dialog and user input available after a failed %s', async (operation) => {
+    const close = vi.fn();
+    useProjectStore.setState({ projects: [project, { ...project, id: 'other', name: 'Other project' }],
+      saveError: 'Save failed. Retry before switching projects.',
+      openProject: vi.fn().mockResolvedValue(false), createProject: vi.fn().mockResolvedValue(null) });
+    render(<ProjectManagerModal isOpen onClose={close} />);
+    if (operation === 'create') {
+      fireEvent.click(screen.getByRole('button', { name: 'New Project' }));
+      fireEvent.change(screen.getByRole('textbox', { name: 'Project name...' }), { target: { value: 'Keep this name' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+      await waitFor(() => expect(useProjectStore.getState().createProject).toHaveBeenCalled());
+      expect((screen.getByRole('textbox', { name: 'Project name...' }) as HTMLInputElement).value).toBe('Keep this name');
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+      await waitFor(() => expect(useProjectStore.getState().openProject).toHaveBeenCalledWith('other'));
+    }
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert').textContent).toContain('Save failed');
+    expect(screen.getByRole('dialog', { name: 'Projects' })).toBeTruthy();
+  });
   it('names project search and creation fields and submits the named field', async () => {
     render(<ProjectManagerModal isOpen />);
     expect(screen.getByRole('textbox', { name: 'Search projects...' })).toBeTruthy();

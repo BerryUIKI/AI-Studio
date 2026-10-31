@@ -1,5 +1,7 @@
 /** Primary-workflow messages. Untranslated preview locales fall back to English. */
 export const UI_ENGLISH = {
+  ui_engine_endpoint_unavailable: 'The configured engine endpoint is unavailable or invalid. Check the connection settings.',
+  ui_external_engine_manual_start: 'Start this external engine outside Berry, then refresh its connection. Berry does not control external processes.',
   downloadRemaining: "{duration} remaining",
   downloadRemoveError: "Could not remove the download. Check file permissions and your connection, then retry.",
   downloadRemoveHistory: "Remove from list (keep installed model)",
