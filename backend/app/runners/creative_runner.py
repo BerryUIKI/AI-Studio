@@ -215,6 +215,8 @@ def resolve_execution_plan(req: CreativeActionRequest) -> CreativeExecutionPlan:
         return CreativeExecutionPlan(engine="cloud", provider_id="siliconflow", target_model=req.model or "stabilityai/stable-diffusion-xl-base-1.0", action=action)
     if credentials_manager.get_key(CloudProviderId.FAL):
         return CreativeExecutionPlan(engine="cloud", provider_id="fal_ai", target_model="flux-schnell", action=action)
+    if credentials_manager.get_key(CloudProviderId.OPENAI):
+        return CreativeExecutionPlan(engine="cloud", provider_id="openai", target_model="dall-e-3", action=action)
     return CreativeExecutionPlan(engine="cloud", provider_id="cloud_default", target_model=req.model, action=action)
 
 
