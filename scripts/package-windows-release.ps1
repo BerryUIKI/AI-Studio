@@ -115,24 +115,37 @@ Write-Host "  -> Frontend assets built successfully" -ForegroundColor Green
 # Step 2: Build Tauri native desktop application (embeds frontend assets)
 Write-Host "`n[2/6] Building native Tauri desktop application..." -ForegroundColor Yellow
 
+# Copy the backend without __pycache__: stale bytecode from a different interpreter version
+# must never ship in a release artifact.
+function Copy-BackendSources([string]$SourceApp, [string]$DestinationApp) {
+    New-Item -ItemType Directory -Path $DestinationApp -Force | Out-Null
+    Get-ChildItem -Path $SourceApp -Recurse -File |
+        Where-Object { $_.FullName -notmatch '\\__pycache__\\' -and $_.Extension -ne '.pyc' } |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($SourceApp.Length).TrimStart('\')
+            $target = Join-Path $DestinationApp $relative
+            $parent = Split-Path $target -Parent
+            if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+            Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+        }
+}
+
 # The NSIS installer is only the native shell unless the backend and runtime are declared
 # as bundle resources. Stage the same payload the portable archive carries so the installed
 # app supervises a real backend instead of falling back to the environment wizard.
 $InstallerStaging = "$RepoRoot\frontend\src-tauri\installer-staging"
 $InstallerPayload = "$InstallerStaging\resources"
-$StageInstallerPayload = Test-Path "$RepoRoot\backend\app\main.py" -and (Test-Path "$StandalonePython\python.exe")
+$StageInstallerPayload = (Test-Path "$RepoRoot\backend\app\main.py") -and (Test-Path "$StandalonePython\python.exe")
 if ($StageInstallerPayload) {
     Write-Host "  -> Staging installer resources (backend, Python runtime, Git)..." -ForegroundColor Yellow
     if (Test-Path $InstallerStaging) { Remove-Item -Recurse -Force $InstallerStaging }
-    New-Item -ItemType Directory -Path "$InstallerPayload\backend\app" -Force | Out-Null
-    Copy-Item -Recurse "$RepoRoot\backend\app\*" -Destination "$InstallerPayload\backend\app\" -Force
+    Copy-BackendSources "$RepoRoot\backend\app" "$InstallerPayload\backend\app"
     if (Test-Path "$RepoRoot\backend\requirements.txt") {
         Copy-Item "$RepoRoot\backend\requirements.txt" -Destination "$InstallerPayload\backend\" -Force
     }
     New-Item -ItemType Directory -Path "$InstallerPayload\runtime" -Force | Out-Null
-    Copy-Item -Recurse "$StandalonePython\*" -Destination "$InstallerPayload\runtime\python\" -Force
-    New-Item -ItemType Directory -Path "$InstallerPayload\runtime\git" -Force | Out-Null
-    Copy-Item -Recurse "$PortableGitCache\*" -Destination "$InstallerPayload\runtime\git\" -Force
+    Copy-Item -Recurse "$StandalonePython" -Destination "$InstallerPayload\runtime\python" -Force
+    Copy-Item -Recurse "$PortableGitCache" -Destination "$InstallerPayload\runtime\git" -Force
     Assert-FileExists "$InstallerPayload\backend\app\main.py" "Installer backend main.py"
     Assert-FileExists "$InstallerPayload\runtime\python\python.exe" "Installer Python runtime"
     Assert-FileExists "$InstallerPayload\runtime\git\cmd\git.exe" "Installer portable Git"
@@ -206,8 +219,7 @@ Copy-Item -Recurse "$FrontendDist\*" -Destination "$TargetDir\frontend\dist\" -F
 Write-Host "  -> frontend/dist assets copied" -ForegroundColor Green
 
 # Copy backend application files
-New-Item -ItemType Directory -Path "$TargetDir\backend\app" -Force | Out-Null
-Copy-Item -Recurse "$RepoRoot\backend\app\*" -Destination "$TargetDir\backend\app\" -Force
+Copy-BackendSources "$RepoRoot\backend\app" "$TargetDir\backend\app"
 if (Test-Path "$RepoRoot\backend\requirements.txt") {
     Copy-Item "$RepoRoot\backend\requirements.txt" -Destination "$TargetDir\backend\" -Force
 }
