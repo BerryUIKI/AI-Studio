@@ -133,3 +133,5 @@ jobs:
           pnpm build
       - name: Compile and test the native desktop onboarding
         run: cargo test --manifest-path frontend/src-tauri/Cargo.toml --locked --features custom-protocol
+      - name: Verify Tauri CLI packaging compatibility
+        run: pnpm tauri build --no-bundle --debug --ci
