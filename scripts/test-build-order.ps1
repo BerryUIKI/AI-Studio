@@ -1,8 +1,12 @@
 # Berry AI Studio - Build Order Validation Test
 # Verifies that frontend assets are built before Tauri attempts to embed them.
 
+param (
+    [string]$RepoRoot = "$PSScriptRoot\.."
+)
+
 $ErrorActionPreference = "Stop"
-$RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+$RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host "  Build Order Validation Test" -ForegroundColor Cyan
@@ -18,26 +22,29 @@ if (-not (Test-Path $TauriConfig)) {
     throw "Tauri config not found at $TauriConfig"
 }
 
-# Parse tauri.conf.json to find distDir
+# Tauri v2 resolves frontendDist relative to src-tauri/.
 $TauriConfigContent = Get-Content $TauriConfig -Raw | ConvertFrom-Json
-$DistDir = $TauriConfigContent.build.distDir
+$DistDir = $TauriConfigContent.build.frontendDist
 
-if ($DistDir) {
-    Write-Host "  -> Tauri configured to embed from: $DistDir" -ForegroundColor Gray
+if ($DistDir -isnot [string] -or [string]::IsNullOrWhiteSpace($DistDir)) {
+    throw "Tauri build.frontendDist must identify the production frontend directory."
+}
+$ConfiguredDist = [IO.Path]::GetFullPath((Join-Path (Split-Path $TauriConfig -Parent) $DistDir))
+if (-not [string]::Equals($ConfiguredDist, [IO.Path]::GetFullPath($FrontendDist), [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Tauri frontendDist must resolve to frontend/dist: $ConfiguredDist"
+}
+Write-Host "  -> Tauri configured to embed from: $ConfiguredDist" -ForegroundColor Gray
 
-    if (-not (Test-Path $FrontendDist)) {
-        Write-Host "  -> Frontend dist does not exist yet (correct - must be built first)" -ForegroundColor Green
-    } else {
-        Write-Host "  -> Frontend dist exists" -ForegroundColor Green
-    }
+if (-not (Test-Path $FrontendDist)) {
+    Write-Host "  -> Frontend dist does not exist yet (correct - must be built first)" -ForegroundColor Green
 } else {
-    Write-Warning "Could not determine Tauri distDir from config"
+    Write-Host "  -> Frontend dist exists" -ForegroundColor Green
 }
 
 # Test 2: Verify package script builds in correct order
 Write-Host "`n[Test 2/3] Analyzing package-windows-release.ps1 build order..." -ForegroundColor Yellow
 
-$PackageScript = Get-Content "$PSScriptRoot\package-windows-release.ps1" -Raw
+$PackageScript = Get-Content "$RepoRoot\scripts\package-windows-release.ps1" -Raw
 
 # Find line numbers for key build steps
 $FrontendBuildLine = ($PackageScript -split "`n" | Select-String "pnpm build" | Select-Object -First 1).LineNumber
@@ -63,7 +70,7 @@ if ($HasValidation) {
     throw "Package script lacks proper validation for missing critical files"
 }
 
-$ValidatesFrontendAssets = $PackageScript -match "frontend\\dist\\index\.html"
+$ValidatesFrontendAssets = $PackageScript -match 'Assert-FileExists\s+"\$FrontendDist\\index\.html"'
 if ($ValidatesFrontendAssets) {
     Write-Host "  -> Package script validates frontend assets exist" -ForegroundColor Green
 } else {
