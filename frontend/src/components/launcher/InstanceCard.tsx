@@ -17,7 +17,7 @@ import {
   Download,
 } from 'lucide-react';
 import { EngineInstance, StartEngineResult } from '../../stores/useEngineStore';
-import { useNavigationStore, ViewType } from '../../stores/useNavigationStore';
+import { useNavigationStore } from '../../stores/useNavigationStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { t } from '../../i18n/translations';
 
@@ -47,7 +47,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   onLaunchFailed,
 }) => {
   const ui = useUiText();
-  const { setActiveView } = useNavigationStore();
+  const { setActiveView, openEngineView } = useNavigationStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isActing, setIsActing] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -84,6 +84,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   const lang = getEffectiveLanguage();
   const Icon = getIcon();
   const isRunning = instance.status === 'running';
+  const isStarting = instance.status === 'starting';
   const isReady = instance.status === 'ready';
   const isNotInstalled = instance.status === 'not_installed';
 
@@ -99,9 +100,9 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
       return;
     }
 
+    if (isStarting) return;
     if (isRunning) {
-      if (instance.type === 'comfyui') setActiveView('comfyui');
-      else if (instance.type === 'webui') setActiveView('webui');
+      if (instance.type === 'comfyui' || instance.type === 'webui') openEngineView(instance.type, instance.id);
     } else if (isNotInstalled) {
       if (onDeploy) {
         onDeploy(instance);
@@ -297,6 +298,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
         )}
       </div>
 
+      {instance.error_message && <p role="alert" className="mt-3 text-sm text-amber-200">{instance.error_message}</p>}
       {/* Card Footer Actions */}
       <div className="pt-5 mt-4 border-t border-white/[0.06] flex items-center justify-between" data-stop-propagation>
         {instance.is_builtin ? (
@@ -310,26 +312,30 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
             <span>{ui("ui_open_2")}{instance.name}</span>
             <span className="group-hover:translate-x-1 transition-transform">→</span>
           </button>
+        ) : isStarting ? (
+          <div className="flex w-full items-center justify-between gap-2">
+            <span role="status" className="text-sm text-amber-200">{ui('ui_starting')}</span>
+            <button onClick={handleStop} disabled={isActing} className="rounded border border-slate-700 px-3 py-1 text-sm disabled:opacity-50">{ui('ui_stop')}</button>
+          </div>
         ) : isRunning ? (
           <div className="flex items-center justify-between w-full">
             <button
               onClick={() => {
-                const view = instance.type as ViewType;
-                setActiveView(view);
+                if (instance.type === 'comfyui' || instance.type === 'webui') openEngineView(instance.type, instance.id);
               }}
               className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center space-x-1"
             >
               <span>{ui("ui_switch_to_view")}</span>
               <span>→</span>
             </button>
-            <button
+            {instance.is_managed && <button
               onClick={handleStop}
               disabled={isActing}
               className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-red-300 bg-slate-800 hover:bg-red-500/20 rounded border border-slate-700 hover:border-red-500/30 transition-colors"
             >
               <Square className="w-3 h-3 text-red-400" />
               <span>{ui("ui_stop")}</span>
-            </button>
+            </button>}
           </div>
         ) : isNotInstalled ? (
           <div className="flex items-center justify-between w-full">

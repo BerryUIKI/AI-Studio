@@ -1,6 +1,7 @@
 """Tests for llama-server installation and lifecycle fixes (issues #135, #130)."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -46,6 +47,7 @@ async def test_install_queries_github_api_for_latest_release(tmp_path, monkeypat
     # Track whether API was called
     api_called = False
     api_url_called = None
+    download_attempts: list[str] = []
 
     class MockAsyncClient:
         def __init__(self, *args, **kwargs):
@@ -78,17 +80,22 @@ async def test_install_queries_github_api_for_latest_release(tmp_path, monkeypat
                 return mock_resp
             raise Exception("Unexpected URL")
 
+        @asynccontextmanager
         async def stream(self, method, url, **kwargs):
             # Mock download failure to speed up test
+            download_attempts.append(url)
             mock_resp = MagicMock()
             mock_resp.status_code = 404
+
+            mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "Fixture HTTP 404", request=httpx.Request("GET", url), response=httpx.Response(404))
 
             async def aiter_bytes(chunk_size):
                 if False:
                     yield b""
 
             mock_resp.aiter_bytes = aiter_bytes
-            return mock_resp
+            yield mock_resp
 
     import httpx
     monkeypatch.setattr(httpx, "AsyncClient", MockAsyncClient)
@@ -103,12 +110,15 @@ async def test_install_queries_github_api_for_latest_release(tmp_path, monkeypat
     assert isinstance(result, dict)
     assert "success" in result
     assert "installed" in result
+    assert result["success"] is False
+    assert download_attempts and all("b11457" in url for url in download_attempts)
 
 
 @pytest.mark.asyncio
 async def test_install_uses_fallback_on_api_failure(tmp_path, monkeypatch):
     """Test that install() uses fallback release b11457 when API call fails."""
     supervisor = LlamaServerSupervisor(engine_dir=tmp_path, port=8080)
+    download_attempts: list[str] = []
 
     class FailingClient:
         def __init__(self, *args, **kwargs):
@@ -123,17 +133,22 @@ async def test_install_uses_fallback_on_api_failure(tmp_path, monkeypatch):
         async def get(self, url):
             raise Exception("Simulated API failure")
 
+        @asynccontextmanager
         async def stream(self, method, url, **kwargs):
             # Should still attempt download with fallback
+            download_attempts.append(url)
             mock_resp = MagicMock()
             mock_resp.status_code = 404
+
+            mock_resp.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "Fixture HTTP 404", request=httpx.Request("GET", url), response=httpx.Response(404))
 
             async def aiter_bytes(chunk_size):
                 if False:
                     yield b""
 
             mock_resp.aiter_bytes = aiter_bytes
-            return mock_resp
+            yield mock_resp
 
     import httpx
     monkeypatch.setattr(httpx, "AsyncClient", FailingClient)
@@ -144,6 +159,8 @@ async def test_install_uses_fallback_on_api_failure(tmp_path, monkeypatch):
     assert isinstance(result, dict)
     assert "success" in result
     assert "installed" in result
+    assert result["success"] is False
+    assert download_attempts and all("b11457" in url for url in download_attempts)
 
 
 def test_start_endpoint_returns_proper_structure():
