@@ -248,6 +248,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     if (!inst.is_managed) {
       return { success: false, message: 'External engines cannot be started from the app. Start them manually.' };
     }
+    if (inst.status === 'starting') return { success: true, message: 'Engine is starting; waiting for service health.' };
 
     try {
       // Route lifecycle controls by engine type
@@ -259,7 +260,8 @@ export const useEngineStore = create<EngineState>((set, get) => ({
         if (isSuccess) {
           set((state) => ({
             instances: state.instances.map((i) =>
-              i.id === instanceId ? { ...i, status: 'running', pid: data.pid } : i
+              i.id === instanceId ? { ...i, status: 'starting', pid: data.pid, process_running: true,
+                service_healthy: null, lifecycle_state: 'starting', error_message: null } : i
             ),
           }));
           return { success: true, message: data.message, pid: data.pid };
@@ -298,14 +300,18 @@ export const useEngineStore = create<EngineState>((set, get) => ({
       // Route lifecycle controls by engine type
       const endpoint = inst.type === 'webui' ? '/api/v1/runtime/webui/stop' : '/api/v1/runtime/stop';
       const res = await fetch(endpoint, { method: 'POST' });
-      if (res.ok) {
+      const data: { success?: boolean; status?: string; message?: string } = await res.json().catch(() => ({ success: false }));
+      if (res.ok && (data.success === true || (data.success !== false && data.status === 'stopped'))) {
         set((state) => ({
           instances: state.instances.map((i) =>
-            i.id === instanceId ? { ...i, status: 'stopped' } : i
+            i.id === instanceId ? { ...i, status: 'stopped', pid: null, process_running: false,
+              service_healthy: null, lifecycle_state: 'stopped', error_message: null } : i
           ),
         }));
         return true;
       }
+      set((state) => ({ instances: state.instances.map((item) => item.id === instanceId
+        ? { ...item, error_message: data.message || `Could not stop engine (HTTP ${res.status})` } : item) }));
       return false;
     } catch {
       return false;

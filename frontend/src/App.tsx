@@ -84,8 +84,13 @@ export default function App() {
 
   // Flush pending project autosaves when the window/tab is closing
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      flushPendingSave();
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      const project = useProjectStore.getState();
+      if (project.isDirty || project.isSaving) {
+        event.preventDefault();
+        event.returnValue = '';
+        void flushPendingSave();
+      }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => {
@@ -220,9 +225,14 @@ export default function App() {
     stopManagedEngines?: boolean;
   }) => {
     try {
-      await flushPendingSave();
+      if (!await flushPendingSave()) {
+        setEngineNotice(useProjectStore.getState().saveError || 'Project saving failed. Retry saving before closing Berry.');
+        return;
+      }
     } catch (e) {
       console.warn('Failed to flush pending project save before close:', e);
+      setEngineNotice('Project saving failed. Retry saving before closing Berry.');
+      return;
     }
 
     const mode = options?.mode || 'stop_owned';
@@ -265,7 +275,9 @@ export default function App() {
       console.error('Failed to close app window:', err);
       try {
         window.close();
-      } catch {}
+      } catch {
+        // Browser policies may reject script-driven window closure.
+      }
     }
   };
 
@@ -282,11 +294,7 @@ export default function App() {
       setExitPolicy('close_all');
     }
     setShowExitDialog(false);
-    try {
-      await fetch('/api/v1/runtime/stop', { method: 'POST' }).catch(() => {});
-    } finally {
-      closeAppWindow({ mode: 'stop_owned', force, stopManagedEngines: true });
-    }
+    void closeAppWindow({ mode: 'stop_owned', force, stopManagedEngines: true });
   };
 
   const handleCloseRequested = useCallback(async () => {
@@ -314,18 +322,8 @@ export default function App() {
     if (isTauri()) {
       getCurrentWindow()
         .onCloseRequested(async (event) => {
-          const running = getRunningManagedEngines();
-          const tasks = await checkActiveTasks();
-          if ((running.length > 0 || tasks > 0) && (exitPolicy === 'prompt' || tasks > 0)) {
-            event.preventDefault();
-            setShowExitDialog(true);
-          } else if (exitPolicy === 'keep_running') {
-            event.preventDefault();
-            handleKeepRunning(false);
-          } else if (exitPolicy === 'close_all') {
-            event.preventDefault();
-            handleCloseAllAndExit(false, false);
-          }
+          event.preventDefault();
+          await handleCloseRequested();
         })
         .then((fn) => {
           unlistenClose = fn;

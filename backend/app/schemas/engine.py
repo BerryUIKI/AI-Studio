@@ -163,6 +163,11 @@ class EngineInstanceInfo(BaseModel):
     port: Optional[int] = None
     extra_args: List[str] = Field(default_factory=list)
     connection_id: Optional[str] = None
+    process_running: Optional[bool] = None
+    service_healthy: Optional[bool] = None
+    service_checked_at: Optional[float] = None
+    lifecycle_state: Optional[str] = None
+    error_message: Optional[str] = None
 
 
 class EngineInstancesResponse(BaseModel):
