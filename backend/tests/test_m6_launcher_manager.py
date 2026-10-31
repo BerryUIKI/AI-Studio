@@ -37,7 +37,7 @@ def test_manager_status_endpoint(client):
     data = resp.json()
 
     assert data["app_name"] == "Berry AI Studio"
-    assert data["version"] == "0.1.0"
+    assert data["version"] == "0.1.1"
     assert data["pid"] == os.getpid()
     assert data["uptime_seconds"] >= 0
     assert "port" in data
