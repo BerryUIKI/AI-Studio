@@ -17,7 +17,7 @@ import {
   Download,
 } from 'lucide-react';
 import { EngineInstance, StartEngineResult } from '../../stores/useEngineStore';
-import { useNavigationStore, ViewType } from '../../stores/useNavigationStore';
+import { useNavigationStore } from '../../stores/useNavigationStore';
 import { useSettingsStore } from '../../stores/useSettingsStore';
 import { t } from '../../i18n/translations';
 
@@ -47,7 +47,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
   onLaunchFailed,
 }) => {
   const ui = useUiText();
-  const { setActiveView } = useNavigationStore();
+  const { setActiveView, openEngineView } = useNavigationStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isActing, setIsActing] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -102,8 +102,7 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
 
     if (isStarting) return;
     if (isRunning) {
-      if (instance.type === 'comfyui') setActiveView('comfyui');
-      else if (instance.type === 'webui') setActiveView('webui');
+      if (instance.type === 'comfyui' || instance.type === 'webui') openEngineView(instance.type, instance.id);
     } else if (isNotInstalled) {
       if (onDeploy) {
         onDeploy(instance);
@@ -322,22 +321,21 @@ export const InstanceCard: React.FC<InstanceCardProps> = ({
           <div className="flex items-center justify-between w-full">
             <button
               onClick={() => {
-                const view = instance.type as ViewType;
-                setActiveView(view);
+                if (instance.type === 'comfyui' || instance.type === 'webui') openEngineView(instance.type, instance.id);
               }}
               className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center space-x-1"
             >
               <span>{ui("ui_switch_to_view")}</span>
               <span>→</span>
             </button>
-            <button
+            {instance.is_managed && <button
               onClick={handleStop}
               disabled={isActing}
               className="flex items-center space-x-1 px-2.5 py-1 text-xs font-medium text-slate-300 hover:text-red-300 bg-slate-800 hover:bg-red-500/20 rounded border border-slate-700 hover:border-red-500/30 transition-colors"
             >
               <Square className="w-3 h-3 text-red-400" />
               <span>{ui("ui_stop")}</span>
-            </button>
+            </button>}
           </div>
         ) : isNotInstalled ? (
           <div className="flex items-center justify-between w-full">

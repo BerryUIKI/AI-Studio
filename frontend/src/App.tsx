@@ -37,7 +37,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 
 const AgentPanel = lazy(() => import('./components/agent/AgentPanel').then((module) => ({ default: module.AgentPanel })));
 const LauncherHub = lazy(() => import('./components/launcher/LauncherHub').then((module) => ({ default: module.LauncherHub })));
-const EmbeddedEngineView = lazy(() => import('./components/engine/EmbeddedEngineView').then((module) => ({ default: module.EmbeddedEngineView })));
+const ConnectedEngineView = lazy(() => import('./components/engine/ConnectedEngineView').then((module) => ({ default: module.ConnectedEngineView })));
 const ModelHubView = lazy(() => import('./components/hub/ModelHubView').then((module) => ({ default: module.ModelHubView })));
 const SettingsView = lazy(() => import('./components/settings/SettingsView').then((module) => ({ default: module.SettingsView })));
 
@@ -385,8 +385,8 @@ export default function App() {
         <GlobalNavRail
           comfyOnline={comfyStatus?.online}
           comfyRunning={runtimeStatus?.running}
-          webuiOnline={false}
-          webuiRunning={false}
+          webuiOnline={instances.some((instance) => instance.type === 'webui' && instance.status === 'running')}
+          webuiRunning={instances.some((instance) => instance.type === 'webui' && instance.process_running)}
           isGenerating={isExecuting}
         />
         <Suspense fallback={<div role="status" className="flex flex-1 items-center justify-center text-slate-300">{ui("ui_loading_workspace")}</div>}>
@@ -396,10 +396,8 @@ export default function App() {
               <LauncherHub
                 comfyOnline={comfyStatus?.online}
                 comfyRunning={runtimeStatus?.running}
-                webuiOnline={false}
-                webuiRunning={false}
-                onStartComfy={toggleRuntime}
-                onStartWebui={toggleRuntime}
+                webuiOnline={instances.some((instance) => instance.type === 'webui' && instance.status === 'running')}
+                webuiRunning={instances.some((instance) => instance.type === 'webui' && instance.process_running)}
                 onOpenAddEngine={() => {
                   setAddEngineInitialTab('detected');
                   setShowAddEngineModal(true);
@@ -431,45 +429,18 @@ export default function App() {
                 <ModelHubView />
               </ErrorBoundary>
             ),
-            comfyui: (() => {
-              const comfyInst = instances.find((i) => i.id === 'comfyui-managed' || i.type === 'comfyui');
-              const dynamicPort = comfyStatus?.port || (comfyInst?.endpoint ? Number(new URL(comfyInst.endpoint).port) : 8188) || 8188;
-              return (
-                <ErrorBoundary fallbackTitle={ui("ui_comfyui_view_error")}>
-                  <EmbeddedEngineView
-                    engineType="comfyui"
-                    title={ui("ui_comfyui")}
-                    port={dynamicPort}
-                    isRunning={Boolean(runtimeStatus?.running || comfyStatus?.online)}
-                    isInstalled={Boolean(
-                      instances.find((i) => i.id === 'comfyui-managed')?.status !== 'not_installed' &&
-                      runtimeStatus?.installed !== false
-                    )}
-                    onStartEngine={toggleRuntime}
-                    onDeployEngine={() => handleStartDeployment('comfyui')}
-                    onOpenDirectory={() => void handleOpenEngineDirectory(comfyInst?.id ?? 'comfyui-managed')}
-                  />
-                </ErrorBoundary>
-              );
-            })(),
-            webui: (() => {
-              const webuiInst = instances.find((i) => i.id === 'webui-managed' || i.type === 'webui');
-              const dynamicPort = (webuiInst?.endpoint ? Number(new URL(webuiInst.endpoint).port) : 7860) || 7860;
-              return (
-                <ErrorBoundary fallbackTitle={ui("ui_sd_webui_view_error")}>
-                  <EmbeddedEngineView
-                    engineType="webui"
-                    title={ui("ui_sd_webui")}
-                    port={dynamicPort}
-                    isRunning={Boolean(instances.find((i) => i.id === 'webui-managed')?.status === 'running')}
-                    isInstalled={Boolean(instances.find((i) => i.id === 'webui-managed')?.status !== 'not_installed')}
-                    onStartEngine={toggleRuntime}
-                    onDeployEngine={() => handleStartDeployment('webui')}
-                    onOpenDirectory={() => void handleOpenEngineDirectory(webuiInst?.id ?? 'webui-managed')}
-                  />
-                </ErrorBoundary>
-              );
-            })(),
+            comfyui: (
+              <ErrorBoundary fallbackTitle={ui('ui_comfyui_view_error')}>
+                <ConnectedEngineView engineType="comfyui" onDeployEngine={() => handleStartDeployment('comfyui')}
+                  onOpenDirectory={(id) => void handleOpenEngineDirectory(id)} />
+              </ErrorBoundary>
+            ),
+            webui: (
+              <ErrorBoundary fallbackTitle={ui('ui_sd_webui_view_error')}>
+                <ConnectedEngineView engineType="webui" onDeployEngine={() => handleStartDeployment('webui')}
+                  onOpenDirectory={(id) => void handleOpenEngineDirectory(id)} />
+              </ErrorBoundary>
+            ),
             settings: (
               <SettingsView
                 onOpenCloudSettings={() => setShowCloudModal(true)}
