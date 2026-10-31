@@ -206,7 +206,7 @@ logger = logging.getLogger("berry_ai_studio")
 app = FastAPI(
     title="Berry AI Studio Engine API",
     description="Lightweight, API-first creative engine with persistent projects and deterministic caching",
-    version="0.1.0",
+    version="0.1.1",
     lifespan=lifespan,
 )
 
@@ -265,7 +265,7 @@ async def system_info() -> dict[str, object]:
     installed = supervisor.is_installed()
     return {
         "name": "Berry AI Studio",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "session_token": session_manager.get_token(),
         "runners": {
             "api": {"status": "ready", "type": "cloud"},
@@ -301,7 +301,7 @@ async def manager_status() -> ManagerStatusResponse:
 
     return ManagerStatusResponse(
         app_name="Berry AI Studio",
-        version="0.1.0",
+        version="0.1.1",
         pid=os.getpid(),
         uptime_seconds=round(time.time() - app_start_time, 2),
         port=launcher_config.port,
@@ -536,8 +536,8 @@ async def check_all_updates() -> dict[str, Any]:
     return {
         "app": {
             "name": "Berry AI Studio",
-            "current_version": "0.1.0",
-            "latest_version": "0.1.0",
+            "current_version": "0.1.1",
+            "latest_version": "0.1.1",
             "update_available": False,
             "release_notes_url": "https://github.com/BerryUIKI/AI-Studio/releases",
         },
