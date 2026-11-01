@@ -8,7 +8,6 @@ import { CreationDock } from './components/canvas/CreationDock';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { VideoModal } from './components/canvas/VideoModal';
-import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
 import { EnvironmentManagerModal, type EnvironmentManagerTab } from './components/manager/EnvironmentManagerModal';
 import { GlobalNavRail } from './components/navigation/GlobalNavRail';
 import { ViewContainer } from './components/navigation/ViewContainer';
@@ -47,7 +46,6 @@ export default function App() {
   const [comfyStatus, setComfyStatus] = useState<ComfyStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [showNodePalette, setShowNodePalette] = useState<boolean>(false);
-  const [showCloudModal, setShowCloudModal] = useState<boolean>(false);
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
   const [managerInitialTab, setManagerInitialTab] = useState<EnvironmentManagerTab>('overview');
   const [showAgentPanel, setShowAgentPanel] = useState<boolean>(false);
@@ -74,6 +72,7 @@ export default function App() {
     exitPolicy: state.exitPolicy, setExitPolicy: state.setExitPolicy, defaultLandingView: state.defaultLandingView,
   })));
   const setActiveView = useNavigationStore((state) => state.setActiveView);
+  const openModelAccess = () => setActiveView('settings');
   const { initProject, flushPendingSave } = useProjectStore(useShallow((state) => ({
     initProject: state.initProject, flushPendingSave: state.flushPendingSave,
   })));
@@ -366,7 +365,7 @@ export default function App() {
         runtimeStatus={runtimeStatus}
         toggleRuntime={toggleRuntime}
         onImportImage={() => fileInputRef.current?.click()}
-        onOpenCloud={() => setShowCloudModal(true)}
+        onOpenCloud={openModelAccess}
         onOpenManager={() => setShowManagerModal(true)}
         onOpenProjectManager={() => setShowProjectModal(true)}
         showAgentPanel={showAgentPanel}
@@ -420,7 +419,7 @@ export default function App() {
                   <main className="flex-1 relative w-full h-full">
                     <FlowCanvas />
                     <TaskHistory />
-                    <CreationDock onCloudSetup={() => setShowCloudModal(true)}
+                    <CreationDock onCloudSetup={openModelAccess}
                       onLocalSetup={() => { setManagerInitialTab('engines'); setShowManagerModal(true); }}
                       onOpenModels={() => { setManagerInitialTab('models'); setShowManagerModal(true); }} />
                   </main>
@@ -446,7 +445,7 @@ export default function App() {
             ),
             settings: (
               <SettingsView
-                onOpenCloudSettings={() => setShowCloudModal(true)}
+                initialSection="cloud"
                 onOpenEnvironmentManager={() => setShowManagerModal(true)}
               />
             ),
@@ -476,7 +475,6 @@ export default function App() {
       <InpaintModal />
       <UpscaleModal />
       <VideoModal />
-      <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
       <EnvironmentManagerModal isOpen={showManagerModal} initialTab={managerInitialTab}
         onClose={() => { setShowManagerModal(false); setManagerInitialTab('overview'); }} />
       <ProjectManagerModal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} />

@@ -29,18 +29,17 @@ import {
   resolveEffectiveLanguage,
   VERIFIED_UI_LANGUAGES,
 } from '../../i18n/translations';
+import { ProviderRegistry } from '../cloud/ProviderRegistry';
 
 export type SettingsSection = 'general' | 'agent' | 'startup' | 'exit' | 'cloud' | 'engines' | 'about';
 
 interface SettingsViewProps {
   initialSection?: SettingsSection;
-  onOpenCloudSettings?: () => void;
   onOpenEnvironmentManager?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   initialSection = 'general',
-  onOpenCloudSettings,
   onOpenEnvironmentManager,
 }) => {
   const ui = useUiText();
@@ -508,22 +507,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <p className="text-xs text-slate-400 mt-0.5">{t('cloud_desc', currentLang)}</p>
               </div>
 
-              <div className="p-6 rounded-2xl bg-slate-900/60 border border-white/[0.08] flex items-center justify-between">
-                <div>
-                  <h3 className="text-xs font-semibold text-slate-200">
-                    {ui("ui_openai_fal_ai_siliconflow")}</h3>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    {ui("ui_store_api_tokens_securely_on_this_device_without")}</p>
-                </div>
-                {onOpenCloudSettings && (
-                  <button
-                    onClick={onOpenCloudSettings}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white rounded-xl shadow-md shadow-indigo-600/20 transition-all shrink-0 ml-4"
-                  >
-                    {t('cloud_btn', currentLang)}
-                  </button>
-                )}
-              </div>
+              <ProviderRegistry />
             </div>
           )}
 
