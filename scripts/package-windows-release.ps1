@@ -146,6 +146,10 @@ if ($StageInstallerPayload) {
     New-Item -ItemType Directory -Path "$InstallerPayload\runtime" -Force | Out-Null
     Copy-Item -Recurse "$StandalonePython" -Destination "$InstallerPayload\runtime\python" -Force
     Copy-Item -Recurse "$PortableGitCache" -Destination "$InstallerPayload\runtime\git" -Force
+    # The backend resolves the canvas bundle relative to its own source tree, so the
+    # installed layout needs frontend/dist beside backend/ or it serves the L02 page.
+    Copy-Item -Recurse "$FrontendDist" -Destination "$InstallerPayload\frontend\dist" -Force
+    Assert-FileExists "$InstallerPayload\frontend\dist\index.html" "Installer frontend index.html"
     Assert-FileExists "$InstallerPayload\backend\app\main.py" "Installer backend main.py"
     Assert-FileExists "$InstallerPayload\runtime\python\python.exe" "Installer Python runtime"
     Assert-FileExists "$InstallerPayload\runtime\git\cmd\git.exe" "Installer portable Git"
