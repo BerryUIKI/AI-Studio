@@ -1,0 +1,5 @@
+{
+  "base_runtime_outside_fixture": true,
+  "python_version": "3.14.5",
+  "scope": "Copied venv executable/config only; demonstrates host-base dependency, not a clean-VM launch result."
+}
