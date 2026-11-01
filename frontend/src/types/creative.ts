@@ -1,19 +1,28 @@
+import { CustomNodeData } from './workflow';
+
 export type CreativeActionType = 'txt2img' | 'img2img' | 'inpaint' | 'upscale' | 'txt2video' | 'img2video';
 
+export type CanvasNodeData = CustomNodeData | ImageCardData | WorkspaceFrameData;
+
 export interface GenerationProvenance {
+  parameters?: Partial<CreativeActionRequest> & Record<string, unknown>;
   action: CreativeActionType;
   prompt: string;
-  negative_prompt?: string;
+  negative_prompt?: string | null;
   model: string;
-  engine_id: string;
-  seed: number;
-  steps: number;
-  cfg_scale: number;
+  model_revision?: string;
+  model_hash?: string;
+  connection_id: string;  // Connection used for generation
+  engine_id: string;      // Legacy field, kept for backward compatibility
+  seed: number | null;
+  steps: number | null;
+  cfg_scale: number | null;
   dimensions: string;
   created_at: string;
   source_asset_id?: string;
   mask_asset_id?: string;
   execution_time_ms?: number;
+  provider_id?: string;
   fps?: number;
   num_frames?: number;
   duration_seconds?: number;
@@ -21,11 +30,16 @@ export interface GenerationProvenance {
 }
 
 export interface CreativeActionRequest {
+  project_id?: string;
   action: CreativeActionType;
   prompt: string;
   negative_prompt?: string;
   model?: string;
-  engine_id?: string;
+  connection_id?: string;  // Stable engine connection identifier (e.g., "comfyui-managed", "studio-comfy-a100")
+  provider_revision?: string;
+  credential_revision?: number;
+  dependency_revision?: string;
+  engine_id?: string;      // Legacy fallback - deprecated in favor of connection_id
   aspect_ratio?: string;
   width?: number;
   height?: number;
@@ -44,6 +58,10 @@ export interface CreativeActionRequest {
 }
 
 export interface CreativeActionResult {
+  mime_type?: string;
+  extension?: string;
+  is_animated?: boolean;
+  codec?: string;
   success: boolean;
   task_id: string;
   asset_id?: string;
@@ -58,7 +76,11 @@ export interface CreativeActionResult {
   error_message?: string;
 }
 
-export interface ImageCardData {
+export interface ImageCardData extends Record<string, unknown> {
+  mimeType?: string;
+  extension?: string;
+  isAnimated?: boolean;
+  codec?: string;
   assetId?: string;
   imageUrl: string;
   videoUrl?: string;
@@ -67,6 +89,18 @@ export interface ImageCardData {
   height: number;
   provenance?: GenerationProvenance;
   label?: string;
+  isGenerating?: boolean;
+  generationStage?: string;
+  generationProgress?: number;
+  isMissing?: boolean;
+}
+
+export interface WorkspaceFrameData extends Record<string, unknown> {
+  label: string;
+  description?: string;
+  width: number;
+  height: number;
+  color?: string;
 }
 
 export interface AgentActionStep {
@@ -74,7 +108,7 @@ export interface AgentActionStep {
   action: CreativeActionType;
   engine_id: string;
   model: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   description?: string;
 }
 
@@ -105,7 +139,7 @@ export interface AgentProposal {
   summary: string;
   target_engine: string;
   model: string;
-  parameters: Record<string, any>;
+  parameters: Record<string, unknown>;
   chain_steps: AgentActionStep[];
   workflow_graph?: ReviewableWorkflowGraph;
   estimated_calls: number;

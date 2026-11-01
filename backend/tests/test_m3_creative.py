@@ -73,10 +73,29 @@ async def test_webui_runner_txt2img_and_upscale():
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
     # 1. Test txt2img
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = [
+        {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
+    ]
+
+    from PIL import Image
+
+    def _make_png(w: int, h: int) -> str:
+        buf = io.BytesIO()
+        Image.new("RGB", (w, h), color=(255, 255, 255)).save(buf, "PNG")
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    b64_512 = _make_png(512, 512)
+    b64_1024 = _make_png(1024, 1024)
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"images": [b64_dummy]}
+        mock_resp.json.return_value = {"images": [b64_512]}
         mock_post.return_value = mock_resp
 
         req = CreativeActionRequest(
@@ -99,7 +118,7 @@ async def test_webui_runner_txt2img_and_upscale():
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        mock_resp.json.return_value = {"image": b64_dummy}
+        mock_resp.json.return_value = {"image": b64_1024}
         mock_post.return_value = mock_resp
 
         upscale_req = CreativeActionRequest(
@@ -116,12 +135,21 @@ async def test_webui_runner_txt2img_and_upscale():
 
 
 @pytest.mark.asyncio
-async def test_creative_runner_caching_and_provenance():
+async def test_creative_runner_caching_and_provenance(mock_engine_manager):
     """Verify CreativeRunner attaches provenance and deterministically caches results."""
     runner = CreativeRunner()
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = [
+        {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
+    ]
+
+    with patch("app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="verified-fixture-model")), patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"images": [b64_dummy]}
@@ -179,11 +207,20 @@ def test_creative_asset_upload_endpoint():
     assert len(content_resp.content) == len(DUMMY_PNG_BYTES)
 
 
-def test_api_creative_execute_endpoint():
+def test_api_creative_execute_endpoint(mock_engine_manager):
     """Verify FastAPI /api/v1/creative/execute endpoint."""
     b64_dummy = base64.b64encode(DUMMY_PNG_BYTES).decode("utf-8")
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    mock_models_resp = MagicMock()
+    mock_models_resp.status_code = 200
+    mock_models_resp.json.return_value = [
+        {"title": "v1-5-pruned-emaonly.safetensors", "model_name": "v1-5-pruned-emaonly", "hash": "6ce0161689"}
+    ]
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, patch(
+        "httpx.AsyncClient.post", new_callable=AsyncMock
+    ) as mock_post:
+        mock_get.return_value = mock_models_resp
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"images": [b64_dummy]}

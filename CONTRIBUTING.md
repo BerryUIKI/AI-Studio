@@ -28,7 +28,7 @@ Before opening a PR, please read our complete [Branching Strategy Specification]
 
 ### Prerequisites
 
-- **Node.js**: `v18.0.0+` (or `v20.x` LTS recommended)
+- **Node.js**: `v24.x` (matches CI and the locked frontend test runtime)
 - **pnpm**: `v8.x` or `v9.x` (`corepack enable` or `npm install -g pnpm`)
 - **Python**: `3.10+` or `3.12+`
 - **uv** (recommended) or standard `venv`
@@ -83,6 +83,8 @@ Use English for all project documentation, PR titles and descriptions, commit me
    - Write clean, self-documenting code.
    - Maintain unit tests for new logic.
 4. **Commit with Conventional Commits**:
+   - Please commit frequently; large commits are prohibited.
+   - Commit small, coherent, verified increments throughout the work. Keep related implementation and tests together, and separate unrelated changes. Do not wait until an entire task or milestone is finished to commit.
    - Follow the standard format: `type(scope): description`.
    - Example: `feat(nodes): add ElevenLabs TTS voice synthesis node`
 5. **Run Checks Locally**:
@@ -114,5 +116,6 @@ Before submitting your PR, ensure:
 - [ ] Code adheres to TypeScript and Python formatting guidelines.
 - [ ] User-facing features include updated documentation or tooltips.
 - [ ] Commit history is clean and uses conventional commit messages.
+- [ ] Work was committed frequently in small, atomic increments; no large commits are included or created by squashing.
 
 Thank you for helping make AI creation accessible and enjoyable for everyone!

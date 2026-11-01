@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,17 +8,25 @@ import {
   NodeTypes,
   ReactFlowProvider,
   useReactFlow,
+  Edge,
 } from '@xyflow/react';
 import { WorkflowNode } from './WorkflowNode';
 import { ImageCardNode } from './ImageCardNode';
+import { WorkspaceFrameNode } from './WorkspaceFrameNode';
 import { QuickAddMenu } from './QuickAddMenu';
+import { CanvasAgentPrompt } from '../agent/CanvasAgentPrompt';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { NodeDefinition } from '../../types/workflow';
+import { ImageCardData } from '../../types/creative';
+import { useProjectStore } from '../../stores/useProjectStore';
+import { useShallow } from 'zustand/react/shallow';
+import { acceptsCanvasShortcut } from '../../utils/canvasShortcuts';
 
 const nodeTypes: NodeTypes = {
   workflowNode: WorkflowNode,
   imageCard: ImageCardNode,
+  workspaceFrame: WorkspaceFrameNode,
 };
 
 interface MenuState {
@@ -28,9 +36,51 @@ interface MenuState {
 }
 
 function FlowCanvasInner() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addNode } = useCanvasStore();
-  const { uploadCanvasImage } = useCreativeStore();
-  const { screenToFlowPosition } = useReactFlow();
+  const {
+    nodes,
+    edges,
+    viewport,
+    setViewport: setViewportInStore,
+    selectedNodeId,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    removeNode,
+    duplicateNode,
+    undo,
+    redo,
+    setSelectedNodeId,
+  } = useCanvasStore(useShallow((state) => ({
+    nodes: state.nodes, edges: state.edges, viewport: state.viewport, selectedNodeId: state.selectedNodeId,
+    setViewport: state.setViewport, onNodesChange: state.onNodesChange, onEdgesChange: state.onEdgesChange,
+    onConnect: state.onConnect, addNode: state.addNode, removeNode: state.removeNode,
+    duplicateNode: state.duplicateNode, undo: state.undo, redo: state.redo, setSelectedNodeId: state.setSelectedNodeId,
+  })));
+
+  const uploadCanvasImage = useCreativeStore((state) => state.uploadCanvasImage);
+  const { screenToFlowPosition, setViewport } = useReactFlow();
+  const currentProjectId = useProjectStore((s) => s.currentProject?.id);
+
+  // Synchronize ReactFlow viewport when project loads
+  useEffect(() => {
+    if (viewport && typeof viewport.x === 'number' && typeof viewport.zoom === 'number') {
+      setViewport(viewport, { duration: 0 });
+    }
+  }, [currentProjectId, setViewport]);
+
+  // Global Ctrl+S shortcut to save project
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!acceptsCanvasShortcut(e.target)) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        useProjectStore.getState().saveProject();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const [menuState, setMenuState] = useState<MenuState>({
     isOpen: false,
@@ -38,9 +88,84 @@ function FlowCanvasInner() {
     flowPosition: { x: 0, y: 0 },
   });
 
+  const [agentPromptState, setAgentPromptState] = useState<{
+    isOpen: boolean;
+    screenPosition: { x: number; y: number };
+    flowPosition: { x: number; y: number };
+  }>({
+    isOpen: false,
+    screenPosition: { x: 0, y: 0 },
+    flowPosition: { x: 0, y: 0 },
+  });
+
   const lastClickRef = useRef<{ time: number; x: number; y: number }>({ time: 0, x: 0, y: 0 });
   const importPositionRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const mousePosRef = useRef<{ x: number; y: number }>({
+    x: window.innerWidth / 2,
+    y: window.innerHeight / 2,
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Track global mouse position for paste & slash actions
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      mousePosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Compute dynamic Ghost Lineage Edges (Issue #33)
+  const lineageEdges = useMemo(() => {
+    if (!selectedNodeId) return [];
+    const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+    if (!selectedNode || selectedNode.type !== 'imageCard') return [];
+
+    const cardData = selectedNode.data as unknown as ImageCardData;
+    const currentAssetId = cardData?.assetId;
+    const parentAssetId = cardData?.provenance?.source_asset_id;
+
+    const dynamicEdges: Edge[] = [];
+
+    // Connect to parent node if on canvas
+    if (parentAssetId) {
+      const parentNode = nodes.find((n) => {
+        const d = n.data as unknown as ImageCardData;
+        return d?.assetId === parentAssetId;
+      });
+      if (parentNode) {
+        dynamicEdges.push({
+          id: `lineage_${parentNode.id}_${selectedNode.id}`,
+          source: parentNode.id,
+          target: selectedNode.id,
+          animated: true,
+          style: { stroke: '#818cf8', strokeWidth: 2.5, strokeDasharray: '5 5' },
+        });
+      }
+    }
+
+    // Connect to child nodes if on canvas
+    if (currentAssetId) {
+      const childrenNodes = nodes.filter((n) => {
+        if (n.id === selectedNode.id) return false;
+        const d = n.data as unknown as ImageCardData;
+        return d?.provenance?.source_asset_id === currentAssetId;
+      });
+      childrenNodes.forEach((childNode) => {
+        dynamicEdges.push({
+          id: `lineage_${selectedNode.id}_${childNode.id}`,
+          source: selectedNode.id,
+          target: childNode.id,
+          animated: true,
+          style: { stroke: '#818cf8', strokeWidth: 2.5, strokeDasharray: '5 5' },
+        });
+      });
+    }
+
+    return dynamicEdges;
+  }, [selectedNodeId, nodes]);
+
+  const combinedEdges = useMemo(() => [...edges, ...lineageEdges], [edges, lineageEdges]);
 
   const openMenuAt = useCallback(
     (clientX: number, clientY: number) => {
@@ -69,7 +194,7 @@ function FlowCanvasInner() {
     [openMenuAt]
   );
 
-  // 2. Container context menu fallback (prevent browser menu on canvas background)
+  // 2. Container context menu fallback
   const handleContainerContextMenu = useCallback(
     (event: React.MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -94,6 +219,9 @@ function FlowCanvasInner() {
         closeMenu();
         return;
       }
+      if (agentPromptState.isOpen) {
+        setAgentPromptState((prev) => ({ ...prev, isOpen: false }));
+      }
 
       const now = Date.now();
       const dist = Math.hypot(
@@ -106,7 +234,7 @@ function FlowCanvasInner() {
       }
       lastClickRef.current = { time: now, x: event.clientX, y: event.clientY };
     },
-    [menuState.isOpen, closeMenu, openMenuAt]
+    [menuState.isOpen, agentPromptState.isOpen, closeMenu, openMenuAt]
   );
 
   // Double click event on wrapper
@@ -126,23 +254,96 @@ function FlowCanvasInner() {
     [openMenuAt]
   );
 
-  // 4. Keyboard shortcut: Shift + A or "/" to open quick add menu
+  // 4. Native Clipboard Paste (Ctrl+V) & Power-User Shortcuts (Issue #36 & Issue #38)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-      if (targetTag === 'input' || targetTag === 'textarea') return;
+    const handlePaste = (e: ClipboardEvent) => {
+      if (!acceptsCanvasShortcut(e.target)) return;
 
-      if ((e.shiftKey && (e.key === 'A' || e.key === 'a')) || e.key === '/') {
-        e.preventDefault();
-        const cx = window.innerWidth / 2;
-        const cy = window.innerHeight / 2;
-        openMenuAt(cx, cy);
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            const flowPos = screenToFlowPosition(mousePosRef.current);
+            uploadCanvasImage(file, flowPos);
+            break;
+          }
+        }
       }
     };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!acceptsCanvasShortcut(e.target)) return;
+
+      // Delete / Backspace: Remove selected node
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNodeId) {
+          e.preventDefault();
+          removeNode(selectedNodeId);
+        }
+      }
+
+      // Ctrl + D / Cmd + D: Duplicate selected node
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        if (selectedNodeId) {
+          e.preventDefault();
+          duplicateNode(selectedNodeId);
+        }
+      }
+
+      // Ctrl + Z: Undo
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        undo();
+      }
+
+      // Ctrl + Y or Ctrl + Shift + Z: Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'z' || e.key === 'Z'))
+      ) {
+        e.preventDefault();
+        redo();
+      }
+
+      // "/" key: Spatial Agent quick prompt trigger (Issue #38)
+      if (e.key === '/') {
+        e.preventDefault();
+        const flowPos = screenToFlowPosition(mousePosRef.current);
+        setAgentPromptState({
+          isOpen: true,
+          screenPosition: mousePosRef.current,
+          flowPosition: flowPos,
+        });
+      }
+
+      // Shift + A: Quick add node menu
+      if (e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+        e.preventDefault();
+        openMenuAt(mousePosRef.current.x, mousePosRef.current.y);
+      }
+    };
+
+    window.addEventListener('paste', handlePaste);
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openMenuAt]);
+    return () => {
+      window.removeEventListener('paste', handlePaste);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    selectedNodeId,
+    removeNode,
+    duplicateNode,
+    undo,
+    redo,
+    screenToFlowPosition,
+    uploadCanvasImage,
+    openMenuAt,
+  ]);
 
   const handleSelectNode = useCallback(
     (nodeDef: NodeDefinition, pos: { x: number; y: number }) => {
@@ -184,15 +385,20 @@ function FlowCanvasInner() {
 
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={combinedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onPaneClick={handlePaneClick}
         onPaneContextMenu={handlePaneContextMenu}
+        onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+        onMoveEnd={(_, vp) => {
+          setViewportInStore(vp);
+        }}
         zoomOnDoubleClick={false}
         nodeTypes={nodeTypes}
-        fitView
+        fitView={nodes.length === 0}
+        defaultViewport={viewport}
         className="dark"
         minZoom={0.2}
         maxZoom={2.5}
@@ -214,6 +420,14 @@ function FlowCanvasInner() {
         onClose={closeMenu}
         onSelectNode={handleSelectNode}
         onImportImage={handleImportImage}
+      />
+
+      {/* Spatial Agent Slash Prompt (Issue #38) */}
+      <CanvasAgentPrompt
+        isOpen={agentPromptState.isOpen}
+        position={agentPromptState.screenPosition}
+        flowPosition={agentPromptState.flowPosition}
+        onClose={() => setAgentPromptState((prev) => ({ ...prev, isOpen: false }))}
       />
     </div>
   );

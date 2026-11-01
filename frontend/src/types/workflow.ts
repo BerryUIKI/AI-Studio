@@ -1,25 +1,27 @@
 export type DataType = 'string' | 'image' | 'audio' | 'video' | 'json';
 
+export type PortValue = string | number | boolean | Record<string, unknown> | unknown[];
+
 export interface NodePort {
   id: string;
   name: string;
   type: DataType;
   required?: boolean;
-  default_value?: any;
+  default_value?: PortValue;
 }
 
 export type ParameterType = 'string' | 'textarea' | 'number' | 'boolean' | 'select';
 
 export interface SelectOption {
   label: string;
-  value: any;
+  value: string | number | boolean;
 }
 
 export interface ParameterDef {
   name: string;
   label: string;
   type: ParameterType;
-  default?: any;
+  default?: string | number | boolean;
   description?: string;
   options?: SelectOption[];
   min_value?: number;
@@ -41,10 +43,14 @@ export interface NodeDefinition {
 
 export type ExecutionStatus = 'idle' | 'queued' | 'running' | 'cached' | 'completed' | 'error' | 'cancelled';
 
+export type NodeParamValue = string | number | boolean | Record<string, unknown> | unknown[];
+export type NodeOutputValue = string | number | boolean | Record<string, unknown> | unknown[];
+
 export interface CustomNodeData extends Record<string, unknown> {
   definition: NodeDefinition;
-  params: Record<string, any>;
+  params: Record<string, NodeParamValue>;
   status: ExecutionStatus;
-  output?: Record<string, any>;
+  output?: Record<string, NodeOutputValue>;
   errorMessage?: string;
 }
+

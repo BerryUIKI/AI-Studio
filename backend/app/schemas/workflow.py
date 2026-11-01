@@ -33,6 +33,7 @@ class PlannedNodeStep(BaseModel):
     node_hash: str
     is_cached: bool
     dependencies: List[str]
+    cache_reason: Optional[str] = None
 
 
 class ExecutionPlan(BaseModel):

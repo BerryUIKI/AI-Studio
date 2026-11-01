@@ -2,32 +2,47 @@
 Sandboxed Stable Diffusion WebUI Process Supervisor.
 
 Manages isolated execution of the local SD WebUI engine in a dedicated,
-hermetic application directory (~/.ai-workflow/engine/webui or %LOCALAPPDATA%/AI-Workflow/engine/webui).
+hermetic application directory (Berry-AI-Studio, with legacy directory compatibility).
 Guarantees zero system environment pollution, separate virtual environment from ComfyUI,
 and strictly disallows host Python fallback.
 """
 
+import logging
 import os
+import re
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+from app.runtime.process_diagnostics import ProcessDiagnostics
+
 
 from app.runtime.supervisor import get_default_engine_dir
+
+logger = logging.getLogger(__name__)
 
 
 class WebUISupervisor:
     """Supervisor managing the lifecycle of an isolated Stable Diffusion WebUI subprocess."""
 
-    def __init__(self, engine_dir: Optional[Path] = None, port: int = 7860) -> None:
+    def __init__(
+        self,
+        engine_dir: Optional[Path] = None,
+        port: int = 7860,
+        extra_args: Optional[List[str]] = None,
+    ) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
         self.port = port
+        self.extra_args: List[str] = list(extra_args) if extra_args else []
         self.webui_dir = self.engine_dir / "webui"
         self.runtime_dir = self.engine_dir / "webui_runtime"
         self.models_dir = self.engine_dir / "models"
         self.pid_file = self.engine_dir / "webui.pid"
         self._process: Optional[subprocess.Popen] = None
+        self.diagnostics = ProcessDiagnostics(self.engine_dir / "logs" / "webui.log")
+        self._started_at: Optional[float] = None
 
     def ensure_directories(self) -> None:
         """Ensure the isolated WebUI engine directory layout exists."""
@@ -64,8 +79,30 @@ class WebUISupervisor:
         """Check if the sandboxed isolated virtual environment is ready."""
         return self.get_python_bin().is_file()
 
+    def _is_owned_executable(self, exe_path: Path) -> bool:
+        """Ensure the executable strictly resides in the isolated virtualenv or engine directory."""
+        try:
+            exe_res = exe_path.resolve()
+            expected_bin = self.get_python_bin().resolve()
+            if exe_res == expected_bin:
+                return True
+            runtime_res = self.runtime_dir.resolve()
+            if runtime_res in exe_res.parents:
+                return True
+            engine_res = self.engine_dir.resolve()
+            if engine_res in exe_res.parents:
+                return True
+            webui_res = self.webui_dir.resolve()
+            if webui_res in exe_res.parents:
+                return True
+        except Exception:
+            pass
+        return False
+
     def _verify_process_identity(self, pid: int) -> bool:
-        """Verify the process at pid is actually python, avoiding recycled PID collision."""
+        """Verify the process at pid is actually owned by this supervisor, avoiding recycled PID collision."""
+        if self._process is not None and self._process.pid == pid and self._process.poll() is None:
+            return True
         if sys.platform == "win32":
             try:
                 import ctypes
@@ -74,29 +111,38 @@ class WebUISupervisor:
                 handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
                 if not handle:
                     return False
-                buf = ctypes.create_unicode_buffer(1024)
-                size = wintypes.DWORD(1024)
-                success = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
-                kernel32.CloseHandle(handle)
-                if success:
-                    exe_name = buf.value.lower()
-                    return "python" in exe_name
-                return False
+                try:
+                    buf = ctypes.create_unicode_buffer(1024)
+                    size = wintypes.DWORD(1024)
+                    success = kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size))
+                    if success:
+                        exe_path = Path(buf.value)
+                        return self._is_owned_executable(exe_path)
+                    return False
+                finally:
+                    kernel32.CloseHandle(handle)
             except Exception:
                 return False
         else:
             try:
+                proc_exe = Path(f"/proc/{pid}/exe")
+                if proc_exe.exists():
+                    resolved = Path(os.readlink(proc_exe))
+                    if self._is_owned_executable(resolved):
+                        return True
                 proc_cmdline = Path(f"/proc/{pid}/cmdline")
                 if proc_cmdline.is_file():
-                    content = proc_cmdline.read_text(encoding="latin1", errors="ignore").lower()
-                    return "python" in content
-                os.kill(pid, 0)
-                return True
-            except OSError:
+                    content = proc_cmdline.read_text(encoding="latin1", errors="ignore")
+                    if str(self.webui_dir) in content or str(self.runtime_dir) in content:
+                        return True
+                return False
+            except (OSError, Exception):
                 return False
 
     def get_pid(self) -> Optional[int]:
         """Read active PID from the supervisor PID file if process is alive and verified."""
+        if self._process is not None and self._process.poll() is None:
+            return self._process.pid
         if not self.pid_file.is_file():
             return None
 
@@ -117,12 +163,15 @@ class WebUISupervisor:
     def get_status(self) -> Dict[str, Any]:
         """Return comprehensive status of the isolated WebUI runtime."""
         pid = self.get_pid()
+        exit_code = self._process.poll() if self._process is not None else None
         return {
+            "process_exit_code": exit_code if isinstance(exit_code, int) else None,
             "installed": self.is_installed(),
             "isolated_env_ready": self.has_isolated_env(),
             "running": pid is not None,
             "pid": pid,
             "port": self.port,
+            "extra_args": list(self.extra_args),
             "engine_dir": str(self.engine_dir),
             "webui_dir": str(self.webui_dir),
             "runtime_dir": str(self.runtime_dir),
@@ -150,6 +199,30 @@ class WebUISupervisor:
                 ),
             }
 
+        # Check Python version compatibility (WebUI expects Python 3.10.x)
+        try:
+            result = subprocess.run(
+                [str(python_bin), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                version_output = result.stdout.strip()
+                # Extract version like "Python 3.14.5" -> (3, 14, 5)
+                import re
+                match = re.search(r"Python (\d+)\.(\d+)\.(\d+)", version_output)
+                if match:
+                    major, minor, patch = map(int, match.groups())
+                    # WebUI officially supports Python 3.10.6
+                    if (major, minor) != (3, 10):
+                        logger.warning(
+                            f"WebUI expects Python 3.10.x but isolated runtime uses {major}.{minor}.{patch}. "
+                            "Compatibility issues may occur. Consider reinstalling with Python 3.10."
+                        )
+        except Exception as e:
+            logger.warning(f"Could not verify Python version in isolated runtime: {e}")
+
         if self.is_running():
             return {
                 "success": True,
@@ -171,9 +244,9 @@ class WebUISupervisor:
             "--port",
             str(self.port),
             "--listen",
+            "--server-name",
             "127.0.0.1",
             "--api",
-            "--nowebui",
             "--ckpt-dir",
             str(self.models_dir / "checkpoints"),
             "--lora-dir",
@@ -182,15 +255,22 @@ class WebUISupervisor:
             str(self.models_dir / "vae"),
         ]
 
+        # Append configured extra launch arguments (avoid exact duplicates)
+        for arg in self.extra_args:
+            if arg not in cmd:
+                cmd.append(arg)
+
         try:
             self.ensure_directories()
             self._process = subprocess.Popen(
                 cmd,
                 cwd=str(self.webui_dir),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
             )
+            self.diagnostics.attach(self._process)
+            self._started_at = time.monotonic()
             pid = self._process.pid
             self.pid_file.write_text(str(pid), encoding="utf-8")
             return {
@@ -203,6 +283,9 @@ class WebUISupervisor:
                 "success": False,
                 "message": f"Failed to launch WebUI: {err}",
             }
+
+    def get_recent_logs(self, lines: int = 100) -> List[str]:
+        return self.diagnostics.recent(lines)
 
     def stop(self) -> Dict[str, Any]:
         """Terminate the managed WebUI process with process identity verification."""
@@ -219,13 +302,24 @@ class WebUISupervisor:
 
         try:
             if sys.platform == "win32":
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
+                result = subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True, check=False)
+                if result.returncode != 0:
+                    raise RuntimeError(f"Process termination failed (exit {result.returncode})")
             else:
                 os.kill(pid, signal.SIGTERM)
+            if self._process is not None and self._process.pid == pid:
+                self._process.wait(timeout=5)
+            else:
+                deadline = time.monotonic() + 5
+                while self._verify_process_identity(pid) and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                if self._verify_process_identity(pid):
+                    raise RuntimeError("Process has not exited; check engine logs before retrying")
         except Exception as err:
             return {"success": False, "message": f"Error stopping WebUI process: {err}"}
-        finally:
-            self._clean_pid_file()
+        self._clean_pid_file()
+        self._process = None
+        self._started_at = None
 
         return {"success": True, "message": f"WebUI process {pid} stopped"}
 

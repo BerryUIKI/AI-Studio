@@ -1,6 +1,6 @@
 [package]
 name = "berry-ai-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "Berry AI Studio Desktop Application"
 authors = ["Berry AI Studio Team"]
 edition = "2021"
@@ -16,13 +16,18 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 
 [build-dependencies]
-tauri-build = { version = "2.6.3" }
+tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
+berry-runtime = { path = "../../desktop-runtime" }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.6" }
+tauri = { version = "2.11.6", features = [] }
 tauri-plugin-log = "2"
+tauri-plugin-dialog = "~2.7.3"
 ureq = { version = "3.4", features = ["json"] }
 
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

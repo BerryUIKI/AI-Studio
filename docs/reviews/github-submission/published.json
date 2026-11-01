@@ -1,0 +1,227 @@
+{
+  "tracker": {
+    "number": 100,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/100",
+    "title": "[Tracking] First-release stabilization: 2026-10-05 product and technical review"
+  },
+  "F01": {
+    "number": 101,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/101",
+    "title": "Security: Protect stored credentials and make API secret fields write-only"
+  },
+  "F02": {
+    "number": 102,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/102",
+    "title": "Security: Enforce a session boundary for local control APIs and WebSockets"
+  },
+  "F03": {
+    "number": 103,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/103",
+    "title": "Bug: Verify engine process ownership before terminating a stored PID"
+  },
+  "F04": {
+    "number": 104,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/104",
+    "title": "Bug: Save and reopen the complete canvas as a durable project"
+  },
+  "F05": {
+    "number": 105,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/105",
+    "title": "Bug: Transfer source images and masks into ComfyUI before execution"
+  },
+  "F06": {
+    "number": 106,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/106",
+    "title": "Bug: Normalize painted inpainting masks for each provider"
+  },
+  "F07": {
+    "number": 107,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/107",
+    "title": "Bug: Connect downloaded and shared model directories to engine search paths"
+  },
+  "F08": {
+    "number": 108,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/108",
+    "title": "Bug: Correct managed WebUI launch flags and isolated Python compatibility"
+  },
+  "F09": {
+    "number": 109,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/109",
+    "title": "Bug: Apply the selected WebUI checkpoint and record the effective model"
+  },
+  "F10": {
+    "number": 110,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/110",
+    "title": "Bug: Use one provider resolution plan for dispatch, hashing, and provenance"
+  },
+  "F11": {
+    "number": 111,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/111",
+    "title": "Bug: Invalidate cached results whose output assets are missing"
+  },
+  "F12": {
+    "number": 112,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/112",
+    "title": "Bug: Validate engine installation completion and preserve live install state"
+  },
+  "F13": {
+    "number": 113,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/113",
+    "title": "Bug: Verify model download integrity before promoting an artifact"
+  },
+  "F14": {
+    "number": 114,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/114",
+    "title": "Bug: Protect active creative tasks during engine updates and restore full runtimes"
+  },
+  "F15": {
+    "number": 115,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/115",
+    "title": "Bug: Respect shutdown refusal, process ownership, and Keep Running"
+  },
+  "F16": {
+    "number": 116,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/116",
+    "title": "Bug: Resume workflow subscriptions without resubmitting execution on reconnect"
+  },
+  "F17": {
+    "number": 117,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/117",
+    "title": "Bug: Fail workflows with missing runners and validate execution contracts"
+  },
+  "F18": {
+    "number": 118,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/118",
+    "title": "Bug: Package a complete portable runtime and verify clean-machine startup"
+  },
+  "F19": {
+    "number": 119,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/119",
+    "title": "Security: Validate uploaded media and isolate active content from the app origin"
+  },
+  "F20": {
+    "number": 120,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/120",
+    "title": "Enhancement: Persist task transitions and generation history across restart"
+  },
+  "F21": {
+    "number": 121,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/121",
+    "title": "Enhancement: Return task IDs at submission and expose accurate cancellation states"
+  },
+  "F22": {
+    "number": 122,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/122",
+    "title": "Refactor: Share a canonical execution and cache-validity contract with planning"
+  },
+  "F23": {
+    "number": 123,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/123",
+    "title": "Bug: Use actual image dimensions and honor the selected upscale factor"
+  },
+  "F24": {
+    "number": 124,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/124",
+    "title": "Bug: Restore complete canvas transactions with undo and redo"
+  },
+  "F25": {
+    "number": 125,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/125",
+    "title": "Bug: Persist engine configuration before showing a successful save"
+  },
+  "F26": {
+    "number": 126,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/126",
+    "title": "Bug: Make Uninstall and Open Folder perform their advertised actions"
+  },
+  "F27": {
+    "number": 127,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/127",
+    "title": "Bug: Resolve lifecycle and execution through the selected engine connection"
+  },
+  "F28": {
+    "number": 128,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/128",
+    "title": "Bug: Persist library and connection settings and apply selected mirrors"
+  },
+  "F29": {
+    "number": 129,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/129",
+    "title": "Bug: Preserve unknown model compatibility and validate readiness dependencies"
+  },
+  "F30": {
+    "number": 130,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/130",
+    "title": "Enhancement: Connect Model Hub discovery to installation, selection, and truthful estimates"
+  },
+  "F31": {
+    "number": 131,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/131",
+    "title": "Enhancement: Guide first-time users to a validated first image"
+  },
+  "F32": {
+    "number": 132,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/132",
+    "title": "Enhancement: Prioritize the verified image workflow in first-release navigation"
+  },
+  "F33": {
+    "number": 133,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/133",
+    "title": "Bug: Report observed progress, real engine logs, and service health"
+  },
+  "F34": {
+    "number": 134,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/134",
+    "title": "Bug: Preserve Agent conversation identity and place outputs in project context"
+  },
+  "F35": {
+    "number": 135,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/135",
+    "title": "Bug: Complete embedded LLM lifecycle results and readiness checks"
+  },
+  "F36": {
+    "number": 136,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/136",
+    "title": "Bug: Render and export managed media using verified MIME and format metadata"
+  },
+  "F37": {
+    "number": 137,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/137",
+    "title": "Enhancement: Improve canvas information hierarchy and resilient visual feedback"
+  },
+  "F38": {
+    "number": 138,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/138",
+    "title": "Enhancement: Standardize accessible dialogs and scope canvas keyboard shortcuts"
+  },
+  "F39": {
+    "number": 139,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/139",
+    "title": "Enhancement: Align advertised language support with complete workflow translations"
+  },
+  "F40": {
+    "number": 140,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/140",
+    "title": "Performance: Move blocking inventory and hardware work off async request paths"
+  },
+  "F41": {
+    "number": 141,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/141",
+    "title": "Performance: Limit store subscriptions, polling, and inactive-view effects"
+  },
+  "F42": {
+    "number": 142,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/142",
+    "title": "Refactor: Consolidate typed execution, lifecycle, and API contracts"
+  },
+  "F43": {
+    "number": 143,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/143",
+    "title": "Test: Gate release verification on current-head end-to-end acceptance"
+  },
+  "F44": {
+    "number": 144,
+    "url": "https://github.com/BerryUIKI/AI-Studio/issues/144",
+    "title": "Validation: Verify native capabilities and CSP on the production backend origin"
+  }
+}

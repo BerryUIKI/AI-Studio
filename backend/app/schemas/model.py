@@ -1,7 +1,7 @@
 """Model inventory, categories, architectures, and roots schemas."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -35,8 +35,14 @@ class ModelRecord(BaseModel):
     size_bytes: int
     size_mb: float
     content_hash: Optional[str] = None
-    engine_compatibility: List[str] = Field(default_factory=list)  # ["comfyui", "webui"]
-    is_ready: bool = True
+    integrity_status: Literal["structurally-valid", "invalid", "unverified"] = "unverified"
+    format_recognized: bool = False
+    architecture_status: Literal["recognized", "unverified"] = "unverified"
+    possible_engines: List[str] = Field(default_factory=list)
+    engine_compatibility: List[str] = Field(default_factory=list)  # Observed successful engine tests only.
+    is_ready: bool = False
+    dependency_status: Literal["not-assessed", "present", "missing"] = "not-assessed"
+    available_components: List[str] = Field(default_factory=list)
     missing_dependencies: List[str] = Field(default_factory=list)
     guidance: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)

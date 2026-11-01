@@ -1,55 +1,142 @@
-import { useEffect, useRef, useState } from 'react';
-import {
-  Activity,
-  Cpu,
-  Sparkles,
-  Play,
-  Trash2,
-  Power,
-  Upload,
-  ExternalLink,
-  Layers,
-  Cloud,
-  Server,
-} from 'lucide-react';
+import { useUiText } from './i18n/useUiText';
+import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { Titlebar, type ComfyStatus, type RuntimeStatus } from './components/titlebar/Titlebar';
 import { NodePalette } from './components/canvas/NodePalette';
 import { FlowCanvas } from './components/canvas/FlowCanvas';
 import { CreationDock } from './components/canvas/CreationDock';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { VideoModal } from './components/canvas/VideoModal';
-import { AgentPanel } from './components/agent/AgentPanel';
-import { CloudSettingsModal } from './components/cloud/CloudSettingsModal';
-import { EnvironmentManagerModal } from './components/manager/EnvironmentManagerModal';
+import { EnvironmentManagerModal, type EnvironmentManagerTab } from './components/manager/EnvironmentManagerModal';
+import { GlobalNavRail } from './components/navigation/GlobalNavRail';
+import { ViewContainer } from './components/navigation/ViewContainer';
+import { AddEngineModal } from './components/launcher/AddEngineModal';
+import { DeploymentDrawer } from './components/launcher/DeploymentDrawer';
+import { EngineConfigModal } from './components/launcher/EngineConfigModal';
+import { EngineLogViewer } from './components/launcher/EngineLogViewer';
+import { EngineNotInstalledModal } from './components/launcher/EngineNotInstalledModal';
+import { EngineRemovalDialog } from './components/launcher/EngineRemovalDialog';
+import { openEngineDirectory } from './api/engineLifecycle';
+import { SetupWizardModal } from './components/launcher/SetupWizardModal';
+import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
+import { FloatingDownloadWidget } from './components/hub/FloatingDownloadWidget';
+import { DownloadManagerDrawer } from './components/hub/DownloadManagerDrawer';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
+import { ProjectManagerModal } from './components/project/ProjectManagerModal';
+import { TaskHistory } from './components/project/TaskHistory';
 import { useCanvasStore } from './stores/useCanvasStore';
 import { useCreativeStore } from './stores/useCreativeStore';
+import { useEngineStore, type EngineInstance } from './stores/useEngineStore';
+import { useSettingsStore } from './stores/useSettingsStore';
+import { useNavigationStore } from './stores/useNavigationStore';
+import { useProjectStore } from './stores/useProjectStore';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
-interface ComfyStatus {
-  online: boolean;
-  port: number;
-  devices?: { name: string }[];
-}
-
-interface RuntimeStatus {
-  installed: boolean;
-  running: boolean;
-  pid?: number;
-}
+const AgentPanel = lazy(() => import('./components/agent/AgentPanel').then((module) => ({ default: module.AgentPanel })));
+const LauncherHub = lazy(() => import('./components/launcher/LauncherHub').then((module) => ({ default: module.LauncherHub })));
+const ConnectedEngineView = lazy(() => import('./components/engine/ConnectedEngineView').then((module) => ({ default: module.ConnectedEngineView })));
+const ModelHubView = lazy(() => import('./components/hub/ModelHubView').then((module) => ({ default: module.ModelHubView })));
+const SettingsView = lazy(() => import('./components/settings/SettingsView').then((module) => ({ default: module.SettingsView })));
 
 export default function App() {
+  const ui = useUiText();
   const [backendOnline, setBackendOnline] = useState<boolean>(false);
   const [comfyStatus, setComfyStatus] = useState<ComfyStatus | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
   const [showNodePalette, setShowNodePalette] = useState<boolean>(false);
-  const [showCloudModal, setShowCloudModal] = useState<boolean>(false);
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
+  const [managerInitialTab, setManagerInitialTab] = useState<EnvironmentManagerTab>('overview');
   const [showAgentPanel, setShowAgentPanel] = useState<boolean>(false);
+  const [isMaximized, setIsMaximized] = useState<boolean>(false);
+  const [showAddEngineModal, setShowAddEngineModal] = useState<boolean>(false);
+  const [addEngineInitialTab, setAddEngineInitialTab] = useState<'detected' | 'browse' | 'install'>('detected');
+  const [showDeploymentDrawer, setShowDeploymentDrawer] = useState<boolean>(false);
+  const [deploymentEngineType, setDeploymentEngineType] = useState<'comfyui' | 'webui'>('comfyui');
+  const [deploymentMirror, setDeploymentMirror] = useState<string | undefined>();
+  const [selectedConfigInstance, setSelectedConfigInstance] = useState<EngineInstance | null>(null);
+  const [selectedLogInstance, setSelectedLogInstance] = useState<EngineInstance | null>(null);
+  const [removalTarget, setRemovalTarget] = useState<EngineInstance | null>(null);
+  const [engineNotice, setEngineNotice] = useState<string | null>(null);
+  const [notInstalledTarget, setNotInstalledTarget] = useState<EngineInstance | null>(null);
+  const [notInstalledError, setNotInstalledError] = useState<string | null>(null);
+  const [showExitDialog, setShowExitDialog] = useState<boolean>(false);
+  const [showSetupWizard, setShowSetupWizard] = useState<boolean>(false);
+  const [showProjectModal, setShowProjectModal] = useState<boolean>(false);
+
+  const { instances, fetchInstances, saveEngineConfig } = useEngineStore(useShallow((state) => ({
+    instances: state.instances, fetchInstances: state.fetchInstances, saveEngineConfig: state.saveEngineConfig,
+  })));
+  const { exitPolicy, setExitPolicy, defaultLandingView } = useSettingsStore(useShallow((state) => ({
+    exitPolicy: state.exitPolicy, setExitPolicy: state.setExitPolicy, defaultLandingView: state.defaultLandingView,
+  })));
+  const setActiveView = useNavigationStore((state) => state.setActiveView);
+  const openModelAccess = () => setActiveView('settings');
+  const { initProject, flushPendingSave } = useProjectStore(useShallow((state) => ({
+    initProject: state.initProject, flushPendingSave: state.flushPendingSave,
+  })));
+
+  // Initialize active/default durable project on startup
+  useEffect(() => {
+    initProject();
+  }, [initProject]);
+
+  // Flush pending project autosaves when the window/tab is closing
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      const project = useProjectStore.getState();
+      if (project.isDirty || project.isSaving) {
+        event.preventDefault();
+        event.returnValue = '';
+        void flushPendingSave();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [flushPendingSave]);
+
+  // Apply default landing view on initial mount
+  useEffect(() => {
+    setActiveView(defaultLandingView);
+  }, [defaultLandingView, setActiveView]);
+
+  const handleStartDeployment = (type: 'comfyui' | 'webui', mirrorPreset?: string) => {
+    setDeploymentEngineType(type);
+    setDeploymentMirror(mirrorPreset);
+    setShowDeploymentDrawer(true);
+  };
+
+  const handlePromptDeployment = (instance: EngineInstance, error?: string) => {
+    setNotInstalledTarget(instance);
+    setNotInstalledError(error || null);
+  };
+
+  const handleLocateExisting = (type: 'comfyui' | 'webui') => {
+    setDeploymentEngineType(type);
+    setAddEngineInitialTab('browse');
+    setShowAddEngineModal(true);
+  };
+
+  const handleOpenEngineDirectory = async (instanceId: string) => {
+    try {
+      const path = await openEngineDirectory(instanceId);
+      setEngineNotice(ui("ui_opened_directory_value", { value1: path }));
+    } catch (error) {
+      setEngineNotice(error instanceof Error ? error.message : ui("ui_could_not_open_the_engine_directory"));
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const { nodes, clearCanvas, runWorkflow, isExecuting } = useCanvasStore();
-  const { uploadCanvasImage } = useCreativeStore();
+  const { nodeCount, clearCanvas, runWorkflow, isExecuting } = useCanvasStore(useShallow((state) => ({
+    nodeCount: state.nodes.length, clearCanvas: state.clearCanvas, runWorkflow: state.runWorkflow, isExecuting: state.isExecuting,
+  })));
+  const uploadCanvasImage = useCreativeStore((state) => state.uploadCanvasImage);
 
   const refreshStatus = () => {
+    void fetchInstances();
     fetch('/health')
       .then((res) => setBackendOnline(res.ok))
       .catch(() => setBackendOnline(false));
@@ -75,9 +162,13 @@ export default function App() {
     handleHash();
     window.addEventListener('hashchange', handleHash);
 
+    const handleOpenWizard = () => setShowSetupWizard(true);
+    window.addEventListener('open-setup-wizard', handleOpenWizard);
+
     const interval = setInterval(refreshStatus, 8000);
     return () => {
       window.removeEventListener('hashchange', handleHash);
+      window.removeEventListener('open-setup-wizard', handleOpenWizard);
       clearInterval(interval);
     };
   }, []);
@@ -91,6 +182,159 @@ export default function App() {
     refreshStatus();
   };
 
+  // Compute active running managed engines for exit policy prompt
+  const getRunningManagedEngines = useCallback((): RunningEngineItem[] => {
+    const running: RunningEngineItem[] = [];
+    for (const inst of instances) {
+      if (
+        inst.is_managed &&
+        !inst.is_builtin &&
+        (inst.status === 'running' || (inst.id === 'comfyui-managed' && runtimeStatus?.running))
+      ) {
+        running.push({ id: inst.id, name: inst.name });
+      }
+    }
+    if (runtimeStatus?.running && !running.some((e) => e.id === 'comfyui-managed')) {
+      running.push({ id: 'comfyui-managed', name: 'ComfyUI Engine' });
+    }
+    return running;
+  }, [instances, runtimeStatus]);
+
+  const [activeTasksCount, setActiveTasksCount] = useState<number>(0);
+
+  const checkActiveTasks = async (): Promise<number> => {
+    try {
+      const res = await fetch('/api/v1/tasks/active');
+      if (res.ok) {
+        const data = await res.json();
+        const count = data.active_tasks_count ?? 0;
+        setActiveTasksCount(count);
+        return count;
+      }
+    } catch {
+      // Fallback: check canvas executing state
+    }
+    const count = isExecuting ? 1 : 0;
+    setActiveTasksCount(count);
+    return count;
+  };
+
+  const closeAppWindow = async (options?: {
+    mode?: 'keep_running' | 'stop_owned';
+    force?: boolean;
+    stopManagedEngines?: boolean;
+  }) => {
+    try {
+      if (!await flushPendingSave()) {
+        setEngineNotice(useProjectStore.getState().saveError || 'Project saving failed. Retry saving before closing Berry.');
+        return;
+      }
+    } catch (e) {
+      console.warn('Failed to flush pending project save before close:', e);
+      setEngineNotice('Project saving failed. Retry saving before closing Berry.');
+      return;
+    }
+
+    const mode = options?.mode || 'stop_owned';
+    const force = options?.force || false;
+    const stopManagedEngines = options?.stopManagedEngines;
+
+    try {
+      const isDesktop = isTauri() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window));
+      if (isDesktop) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        try {
+          const res = await invoke<{ success: boolean; refused: boolean; message: string }>('close_app', {
+            payload: {
+              mode,
+              force,
+              stop_managed_engines: stopManagedEngines,
+            },
+          });
+          if (res && res.refused) {
+            console.warn('Backend refused shutdown due to active tasks:', res.message);
+            setShowExitDialog(true);
+            return;
+          }
+          return;
+        } catch (e) {
+          console.warn('invoke close_app failed, falling back to window destroy:', e);
+        }
+        const appWindow = getCurrentWindow();
+        try {
+          await appWindow.destroy();
+          return;
+        } catch {
+          await appWindow.close();
+          return;
+        }
+      } else {
+        window.close();
+      }
+    } catch (err) {
+      console.error('Failed to close app window:', err);
+      try {
+        window.close();
+      } catch {
+        // Browser policies may reject script-driven window closure.
+      }
+    }
+  };
+
+  const handleKeepRunning = (remember: boolean) => {
+    if (remember) {
+      setExitPolicy('keep_running');
+    }
+    setShowExitDialog(false);
+    closeAppWindow({ mode: 'keep_running' });
+  };
+
+  const handleCloseAllAndExit = async (remember: boolean, force = true) => {
+    if (remember) {
+      setExitPolicy('close_all');
+    }
+    setShowExitDialog(false);
+    void closeAppWindow({ mode: 'stop_owned', force, stopManagedEngines: true });
+  };
+
+  const handleCloseRequested = useCallback(async () => {
+    const running = getRunningManagedEngines();
+    const tasks = await checkActiveTasks();
+
+    if (running.length === 0 && tasks === 0) {
+      closeAppWindow({ mode: 'stop_owned', force: false });
+      return;
+    }
+
+    if (tasks > 0 || exitPolicy === 'prompt') {
+      setShowExitDialog(true);
+    } else if (exitPolicy === 'close_all') {
+      handleCloseAllAndExit(false, false);
+    } else {
+      // keep_running
+      handleKeepRunning(false);
+    }
+  }, [getRunningManagedEngines, exitPolicy, isExecuting]);
+
+  // Hook into native Tauri window close button / Alt+F4
+  useEffect(() => {
+    let unlistenClose: (() => void) | undefined;
+    if (isTauri()) {
+      getCurrentWindow()
+        .onCloseRequested(async (event) => {
+          event.preventDefault();
+          await handleCloseRequested();
+        })
+        .then((fn) => {
+          unlistenClose = fn;
+        })
+        .catch(() => {});
+    }
+    return () => {
+      if (unlistenClose) unlistenClose();
+    };
+  }, [getRunningManagedEngines, exitPolicy]);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -100,7 +344,11 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-950 text-slate-100 select-none overflow-hidden">
+    <div
+      className={`flex flex-col h-screen w-screen bg-slate-950 text-slate-100 select-none overflow-hidden transition-all duration-150 ${
+        isMaximized ? 'rounded-none border-0' : 'rounded-lg border border-white/[0.08] shadow-2xl'
+      }`}
+    >
       {/* Hidden File Input for Image Import */}
       <input
         type="file"
@@ -110,155 +358,187 @@ export default function App() {
         className="hidden"
       />
 
-      {/* Top Header Bar */}
-      <header className="h-14 border-b border-slate-800 bg-slate-900/85 backdrop-blur px-4 flex items-center justify-between z-20">
-        <div className="flex items-center gap-3">
-          <div className="p-1.5 rounded-xl bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
-            <Sparkles className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="font-semibold text-sm tracking-wide">Berry AI Studio</h1>
-            <p className="text-[11px] text-slate-400">Creative Workspace & Infinite Canvas</p>
-          </div>
-        </div>
+      {/* Modern Custom Frameless Titlebar */}
+      <Titlebar
+        backendOnline={backendOnline}
+        comfyStatus={comfyStatus}
+        runtimeStatus={runtimeStatus}
+        toggleRuntime={toggleRuntime}
+        onImportImage={() => fileInputRef.current?.click()}
+        onOpenCloud={openModelAccess}
+        onOpenManager={() => setShowManagerModal(true)}
+        onOpenProjectManager={() => setShowProjectModal(true)}
+        showAgentPanel={showAgentPanel}
+        onToggleAgent={() => setShowAgentPanel(!showAgentPanel)}
+        showNodePalette={showNodePalette}
+        onToggleNodePalette={() => setShowNodePalette(!showNodePalette)}
+        onRunWorkflow={runWorkflow}
+        isExecuting={isExecuting}
+        hasNodes={nodeCount > 0}
+        onClearCanvas={clearCanvas}
+        onMaximizeChange={setIsMaximized}
+        onCloseRequested={handleCloseRequested}
+      />
 
-        {/* Action Controls: Import, Run Workflow, Clear */}
-        <div className="flex items-center gap-2">
-          {/* Import Image Button */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            title="Import an image directly onto the canvas"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
-          >
-            <Upload className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Import Image</span>
-          </button>
-
-          {/* Cloud BYOK Settings Button */}
-          <button
-            onClick={() => setShowCloudModal(true)}
-            title="Configure BYOK Cloud Providers (OpenAI, Fal.ai, SiliconFlow)"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
-          >
-            <Cloud className="w-3.5 h-3.5 text-sky-400" />
-            <span>Cloud BYOK</span>
-          </button>
-
-          {/* Environment Manager Button */}
-          <button
-            onClick={() => setShowManagerModal(true)}
-            title="Open Environment Manager (Engines, Models, Updates, Core)"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition"
-          >
-            <Server className="w-3.5 h-3.5 text-purple-400" />
-            <span>Environment</span>
-          </button>
-
-          {/* Conversational Agent Assistant Button */}
-          <button
-            onClick={() => setShowAgentPanel(!showAgentPanel)}
-            title="Conversational AI Assistant (Natural Language Workflows & Human-in-the-Loop)"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-              showAgentPanel
-                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-sm shadow-indigo-500/20'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-            <span>Agent</span>
-          </button>
-
-          {/* Toggle Node Palette for Power Users */}
-          <button
-            onClick={() => setShowNodePalette(!showNodePalette)}
-            title="Toggle Node Palette"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
-              showNodePalette
-                ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-400 border-slate-700'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Nodes</span>
-          </button>
-
-          {/* Legacy/Power Workflow Runner */}
-          {showNodePalette && (
-            <button
-              onClick={() => runWorkflow()}
-              disabled={nodes.length === 0 || isExecuting}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium shadow-lg shadow-indigo-600/20 transition"
-            >
-              <Play className={`w-3.5 h-3.5 fill-current ${isExecuting ? 'animate-pulse' : ''}`} />
-              {isExecuting ? 'Running...' : 'Run Graph'}
-            </button>
-          )}
-
-          {/* Clear Canvas */}
-          <button
-            onClick={clearCanvas}
-            disabled={nodes.length === 0 || isExecuting}
-            title="Clear all objects from canvas"
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-300 hover:text-rose-400 border border-slate-700 transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Engine Status Indicators & Native UI Entry Points */}
-        <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700">
-            <Activity className={`w-3.5 h-3.5 ${backendOnline ? 'text-emerald-400' : 'text-rose-400 animate-pulse'}`} />
-            <span className="text-slate-300">Backend: {backendOnline ? 'Online' : 'Connecting...'}</span>
-          </div>
-
-          {/* ComfyUI Indicator with Native Link */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700">
-            <Cpu className={`w-3.5 h-3.5 ${comfyStatus?.online ? 'text-emerald-400' : 'text-slate-400'}`} />
-            <span className="text-slate-300">
-              ComfyUI: {comfyStatus?.online ? 'Online' : 'Standby'}
-            </span>
-            {comfyStatus?.online && (
-              <a
-                href="http://127.0.0.1:8188"
-                target="_blank"
-                rel="noreferrer"
-                title="Open ComfyUI native web interface in a new tab"
-                className="p-0.5 rounded text-slate-400 hover:text-indigo-400 transition"
-              >
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-            {runtimeStatus?.installed && (
-              <button
-                onClick={toggleRuntime}
-                title={runtimeStatus.running ? 'Stop isolated engine' : 'Start isolated engine'}
-                className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-indigo-400 transition"
-              >
-                <Power className={`w-3 h-3 ${runtimeStatus.running ? 'text-emerald-400' : 'text-slate-400'}`} />
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Main Workspace Layout */}
+      {/* Main Workspace Layout with Global Navigation Rail and Keep-Alive View Container */}
       <div className="flex-1 flex overflow-hidden relative">
-        {showNodePalette && <NodePalette />}
-        <main className="flex-1 relative">
-          <FlowCanvas />
-          {/* Newcomer Creative Creation Dock */}
-          <CreationDock />
-        </main>
+        <GlobalNavRail
+          comfyOnline={comfyStatus?.online}
+          comfyRunning={runtimeStatus?.running}
+          webuiOnline={instances.some((instance) => instance.type === 'webui' && instance.status === 'running')}
+          webuiRunning={instances.some((instance) => instance.type === 'webui' && instance.process_running)}
+          isGenerating={isExecuting}
+        />
+        <Suspense fallback={<div role="status" className="flex flex-1 items-center justify-center text-slate-300">{ui("ui_loading_workspace")}</div>}>
+        <ViewContainer>
+          {{
+            launcher: (
+              <LauncherHub
+                comfyOnline={comfyStatus?.online}
+                comfyRunning={runtimeStatus?.running}
+                webuiOnline={instances.some((instance) => instance.type === 'webui' && instance.status === 'running')}
+                webuiRunning={instances.some((instance) => instance.type === 'webui' && instance.process_running)}
+                onOpenAddEngine={() => {
+                  setAddEngineInitialTab('detected');
+                  setShowAddEngineModal(true);
+                }}
+                onConfigureEngine={(inst) => setSelectedConfigInstance(inst)}
+                onViewLogs={(inst) => setSelectedLogInstance(inst)}
+                onUninstallEngine={setRemovalTarget}
+                onOpenDirectory={(instance) => void handleOpenEngineDirectory(instance.id)}
+                onOpenAgent={() => setShowAgentPanel(true)}
+                onDeployEngine={(inst) => handlePromptDeployment(inst)}
+                onLaunchFailed={(inst, err) => handlePromptDeployment(inst, err)}
+                onOpenSetupWizard={() => setShowSetupWizard(true)}
+              />
+            ),
+            canvas: (
+              <ErrorBoundary fallbackTitle={ui("ui_canvas_rendering_error")} onReset={clearCanvas}>
+                <div className="flex-1 flex w-full h-full overflow-hidden relative">
+                  {showNodePalette && <NodePalette />}
+                  <main className="flex-1 relative w-full h-full">
+                    <FlowCanvas />
+                    <TaskHistory />
+                    <CreationDock onCloudSetup={openModelAccess}
+                      onLocalSetup={() => { setManagerInitialTab('engines'); setShowManagerModal(true); }}
+                      onOpenModels={() => { setManagerInitialTab('models'); setShowManagerModal(true); }} />
+                  </main>
+                </div>
+              </ErrorBoundary>
+            ),
+            models: (
+              <ErrorBoundary fallbackTitle={ui("ui_model_hub_error")}>
+                <ModelHubView />
+              </ErrorBoundary>
+            ),
+            comfyui: (
+              <ErrorBoundary fallbackTitle={ui('ui_comfyui_view_error')}>
+                <ConnectedEngineView engineType="comfyui" onDeployEngine={() => handleStartDeployment('comfyui')}
+                  onOpenDirectory={(id) => void handleOpenEngineDirectory(id)} />
+              </ErrorBoundary>
+            ),
+            webui: (
+              <ErrorBoundary fallbackTitle={ui('ui_sd_webui_view_error')}>
+                <ConnectedEngineView engineType="webui" onDeployEngine={() => handleStartDeployment('webui')}
+                  onOpenDirectory={(id) => void handleOpenEngineDirectory(id)} />
+              </ErrorBoundary>
+            ),
+            settings: (
+              <SettingsView
+                initialSection="cloud"
+                onOpenEnvironmentManager={() => setShowManagerModal(true)}
+              />
+            ),
+          }}
+        </ViewContainer>
+        </Suspense>
+
+        {/* Persistent Collapsible Right Sidebar AI Agent */}
+        {showAgentPanel && (
+          <aside className="w-96 flex-shrink-0 h-full border-l border-slate-800 bg-slate-900 shadow-2xl z-30 transition-all duration-200">
+            <Suspense fallback={<p role="status" className="p-4">{ui("ui_loading_assistant")}</p>}><AgentPanel
+              isOpen={showAgentPanel}
+              onClose={() => setShowAgentPanel(false)}
+              inline={true}
+            /></Suspense>
+          </aside>
+        )}
       </div>
 
       {/* Contextual Action Modals */}
+      {engineNotice && <div role="status" className="fixed bottom-5 left-20 z-50 max-w-lg rounded-xl border border-slate-600 bg-slate-900 p-4 text-sm text-slate-100 shadow-xl">
+        <p className="break-all">{engineNotice}</p>
+        <button onClick={() => setEngineNotice(null)} className="mt-2 rounded bg-slate-700 px-3 py-1">{ui("ui_dismiss")}</button>
+      </div>}
+      {removalTarget && <EngineRemovalDialog key={removalTarget.id} instance={instances.find((instance) => instance.id === removalTarget.id) ?? removalTarget}
+        onClose={() => setRemovalTarget(null)} onCompleted={() => { void fetchInstances(); refreshStatus(); }} />}
       <InpaintModal />
       <UpscaleModal />
       <VideoModal />
-      <CloudSettingsModal isOpen={showCloudModal} onClose={() => setShowCloudModal(false)} />
-      <EnvironmentManagerModal isOpen={showManagerModal} onClose={() => setShowManagerModal(false)} />
-      <AgentPanel isOpen={showAgentPanel} onClose={() => setShowAgentPanel(false)} />
+      <EnvironmentManagerModal isOpen={showManagerModal} initialTab={managerInitialTab}
+        onClose={() => { setShowManagerModal(false); setManagerInitialTab('overview'); }} />
+      <ProjectManagerModal isOpen={showProjectModal} onClose={() => setShowProjectModal(false)} />
+      <AddEngineModal
+        isOpen={showAddEngineModal}
+        initialTab={addEngineInitialTab}
+        initialEngineType={deploymentEngineType}
+        onClose={() => setShowAddEngineModal(false)}
+        onStartDeployment={handleStartDeployment}
+      />
+      <DeploymentDrawer
+        isOpen={showDeploymentDrawer}
+        engineType={deploymentEngineType}
+        mirrorPreset={deploymentMirror}
+        onClose={() => setShowDeploymentDrawer(false)}
+      />
+      <EngineNotInstalledModal
+        isOpen={!!notInstalledTarget}
+        instance={notInstalledTarget}
+        errorMessage={notInstalledError}
+        onClose={() => {
+          setNotInstalledTarget(null);
+          setNotInstalledError(null);
+        }}
+        onDeploy={(type) => handleStartDeployment(type)}
+        onLocate={(type) => handleLocateExisting(type)}
+      />
+      <SetupWizardModal
+        isOpen={showSetupWizard}
+        onClose={() => setShowSetupWizard(false)}
+        onNavigateToAgent={() => {
+          setShowSetupWizard(false);
+          setShowAgentPanel(true);
+        }}
+      />
+      <EngineConfigModal
+        isOpen={!!selectedConfigInstance}
+        instance={
+          selectedConfigInstance
+            ? instances.find((i) => i.id === selectedConfigInstance.id) || selectedConfigInstance
+            : null
+        }
+        onClose={() => setSelectedConfigInstance(null)}
+        onSave={async (instanceId, config) => {
+          return await saveEngineConfig(instanceId, config);
+        }}
+      />
+      <EngineLogViewer
+        isOpen={!!selectedLogInstance}
+        instance={selectedLogInstance}
+        onClose={() => setSelectedLogInstance(null)}
+      />
+      <ExitConfirmDialog
+        isOpen={showExitDialog}
+        runningEngines={getRunningManagedEngines()}
+        activeTasksCount={activeTasksCount}
+        onKeepRunning={handleKeepRunning}
+        onCloseAllAndExit={handleCloseAllAndExit}
+        onCancel={() => setShowExitDialog(false)}
+      />
+
+      {/* Model Hub Download Manager & Floating Widget (MH-M5) */}
+      <FloatingDownloadWidget />
+      <DownloadManagerDrawer />
     </div>
   );
 }

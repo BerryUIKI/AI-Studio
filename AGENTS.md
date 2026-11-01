@@ -135,6 +135,9 @@ async def execute_flux_node(inputs: dict, params: dict, context: ExecutionContex
 - **GitFlow**: Follow `BRANCHING_STRATEGY.md`. Feature, ordinary bug-fix, and documentation branches start from and target `dev`; release branches start from `dev` and target `main`, then synchronize back to `dev`; hotfix branches start from `main` and target `main`, then synchronize back to `dev`. Never commit directly to `main` or `dev`.
 - **Commit Messages**: Follow Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`).
 - **Clean Commits**: Keep changes atomic. Do not bundle formatting refactors with behavioral feature additions.
+- **Commit Frequency and Size**: Please commit frequently; large commits are prohibited. Commit each small, coherent, verified increment before moving to the next increment. Keep related implementation and tests together; never accumulate an entire task or milestone into one large commit.
+- **Preserve Small Commits**: Do not squash small commits into a large aggregate commit. Follow the merge guidance in `BRANCHING_STRATEGY.md`.
+- **Model Cost**: Prefer Gemini for routine implementation, UI, documentation, tests, and well-scoped fixes. Use Opus sparingly for complex architecture or difficult defects when needed. Assign one issue at a time unless the user requests otherwise.
 
 ---
 

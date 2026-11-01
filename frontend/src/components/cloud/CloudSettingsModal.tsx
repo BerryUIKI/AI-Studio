@@ -1,3 +1,8 @@
+import { useUiText } from '../../i18n/useUiText';
+import { errorMessage as getErrorMessage } from '../../utils/errors';
+import { Dialog } from '../ui/Dialog';
+import { useCreationSetupStore } from '../../stores/useCreationSetupStore';
+import { CustomPlatformSettings } from './CustomPlatformSettings';
 import { useEffect, useState } from 'react';
 import { CheckCircle2, Cloud, ExternalLink, Key, Loader2, ShieldCheck, Trash2, X, XCircle } from 'lucide-react';
 
@@ -11,6 +16,7 @@ interface CloudProviderInfo {
   capabilities: string[];
   upload_disclosure: string;
   website_url: string;
+  key_test_supported?: boolean;
 }
 
 interface CloudSettingsModalProps {
@@ -19,6 +25,7 @@ interface CloudSettingsModalProps {
 }
 
 export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps) => {
+  const ui = useUiText();
   const [providers, setProviders] = useState<CloudProviderInfo[]>([]);
   const [inputKeys, setInputKeys] = useState<Record<string, string>>({});
   const [testResults, setTestResults] = useState<Record<string, { loading: boolean; valid?: boolean; message?: string }>>({});
@@ -29,7 +36,8 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
       const res = await fetch('/api/v1/cloud/providers');
       if (res.ok) {
         const data = await res.json();
-        setProviders(data);
+        useCreationSetupStore.setState({ providers: data });
+        setProviders(data.filter((provider: CloudProviderInfo) => provider.capabilities.some((action) => ['txt2img', 'img2img', 'inpaint', 'upscale'].includes(action))));
       }
     } catch {
       // ignore fetch error
@@ -104,20 +112,20 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
           message: data.message,
         },
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestResults((prev) => ({
         ...prev,
         [providerId]: {
           loading: false,
           valid: false,
-          message: err.message || 'Connection test failed',
+          message: getErrorMessage(err, ui("ui_connection_test_failed")),
         },
       }));
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <Dialog title={ui("ui_cloud_providers")} onClose={onClose} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-900/90">
@@ -126,12 +134,13 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
               <Cloud className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="font-semibold text-sm text-slate-100">BYOK Cloud Providers</h2>
-              <p className="text-[11px] text-slate-400">Bring Your Own Key for cloud creation with zero local GPU required</p>
+              <h2 className="font-semibold text-sm text-slate-100">{ui("ui_byok_cloud_providers")}</h2>
+              <p className="text-[11px] text-slate-400">{ui("ui_bring_your_own_key_for_cloud_creation_with")}</p>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label={ui("ui_close_dialog")}
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
           >
             <X className="w-4 h-4" />
@@ -141,11 +150,12 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
         {/* Security & Privacy Notice */}
         <div className="px-6 py-2.5 bg-indigo-950/30 border-b border-indigo-900/30 flex items-center gap-2 text-xs text-indigo-300">
           <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0" />
-          <span>Keys are stored in your protected local application data and never committed to workflows or logs.</span>
+          <span>{ui("ui_keys_are_stored_in_your_protected_local_application")}</span>
         </div>
 
         {/* Providers List */}
         <div className="p-6 overflow-y-auto flex flex-col gap-4">
+          <CustomPlatformSettings onChanged={fetchProviders} />
           {providers.map((p) => {
             const test = testResults[p.id];
             return (
@@ -160,12 +170,11 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
                       {p.is_configured ? (
                         <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 text-[10px] font-medium">
                           <CheckCircle2 className="w-3 h-3" />
-                          <span>Configured ({p.redacted_key})</span>
+                          <span>{ui("ui_configured")}{p.redacted_key})</span>
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px]">
-                          Not Configured
-                        </span>
+                          {ui("ui_not_configured")}</span>
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">{p.description}</p>
@@ -177,14 +186,14 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
                     rel="noreferrer"
                     className="flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 transition"
                   >
-                    <span>Get Key</span>
+                    <span>{ui("ui_get_key")}</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>
 
                 {/* Capabilities & Upload Disclosure */}
                 <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-                  <span className="text-slate-400">Models: {p.supported_models.join(', ')}</span>
+                  <span className="text-slate-400">{ui("ui_models_2")}{p.supported_models.join(', ')}</span>
                   <span>•</span>
                   <span>{p.upload_disclosure}</span>
                 </div>
@@ -195,11 +204,12 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
                     <Key className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="password"
+                      aria-label={ui("ui_provider_api_key", { provider: p.name })}
                       value={inputKeys[p.id] || ''}
                       onChange={(e) =>
                         setInputKeys((prev) => ({ ...prev, [p.id]: e.target.value }))
                       }
-                      placeholder={p.is_configured ? `Enter new key to replace ${p.redacted_key}` : "Enter API key (e.g. sk-...)"}
+                      placeholder={p.is_configured ? ui("ui_enter_new_key_to_replace_value", { value1: p.redacted_key }) : ui("ui_enter_api_key_e_g_sk")}
                       className="w-full bg-slate-900 border border-slate-700/80 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
@@ -210,29 +220,32 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
                       disabled={savingId === p.id}
                       className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition"
                     >
-                      {savingId === p.id ? 'Saving...' : 'Save'}
+                      {savingId === p.id ? ui("ui_saving_2") : ui("ui_save")}
                     </button>
                   )}
 
                   <button
                     onClick={() => handleTestKey(p.id)}
-                    disabled={(!p.is_configured && !inputKeys[p.id]) || test?.loading}
+                    disabled={p.key_test_supported === false || (!p.is_configured && !inputKeys[p.id]) || test?.loading}
+                    title={p.key_test_supported === false ? ui("ui_no_free_key_test") : undefined}
                     className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5 whitespace-nowrap"
                   >
                     {test?.loading && <Loader2 className="w-3 h-3 animate-spin text-indigo-400" />}
-                    <span>Test Connection</span>
+                    <span>{ui("ui_test_connection")}</span>
                   </button>
 
                   {p.is_configured && (
                     <button
                       onClick={() => handleDeleteKey(p.id)}
-                      title="Remove key"
+                      title={ui("ui_remove_key")}
                       className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
+
+                {p.key_test_supported === false && <p className="text-xs text-amber-200">{ui("ui_no_free_key_test")}</p>}
 
                 {/* Test Feedback Result */}
                 {test && !test.loading && (
@@ -256,12 +269,12 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
         <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-end">
           <button
             onClick={onClose}
+            aria-label={ui("ui_close_dialog")}
             className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition"
           >
-            Done
-          </button>
+            {ui("ui_done")}</button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 };

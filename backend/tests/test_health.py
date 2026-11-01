@@ -18,3 +18,26 @@ def test_system_info():
     data = response.json()
     assert data["name"] == "Berry AI Studio"
     assert "runners" in data
+
+
+def test_cors_configuration():
+    # Whitelisted origin should receive CORS header
+    resp_valid = client.get("/health", headers={"Origin": "http://localhost:5173"})
+    assert resp_valid.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+    # Untrusted external origin must NOT receive access-control-allow-origin header
+    resp_invalid = client.get("/health", headers={"Origin": "http://malicious-site.com"})
+    assert resp_invalid.headers.get("access-control-allow-origin") != "http://malicious-site.com"
+
+
+def test_logging_configuration():
+    """Verify centralized logging setup configures root logger format and respects LOG_LEVEL."""
+    import logging
+    import os
+    from app.main import setup_logging
+
+    os.environ["LOG_LEVEL"] = "DEBUG"
+    setup_logging()
+    root_logger = logging.getLogger()
+    assert root_logger.level == logging.DEBUG
+

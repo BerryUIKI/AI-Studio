@@ -6,15 +6,15 @@ and Apple Silicon (Metal) discrete GPUs without heavy dependencies (no PyTorch, 
 Formulates vendor-optimized engine launch flags and classification.
 """
 
-import asyncio
 import os
 import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
+from app.core.workers import run_blocking
 from app.runtime.supervisor import get_default_engine_dir
 from app.schemas.hardware import GpuInfo, HardwareReadiness, StorageInfo
 
@@ -277,9 +277,9 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
     root_dir = engine_dir or get_default_engine_dir()
     models_dir = root_dir / "models"
 
-    gpus = await asyncio.to_thread(detect_all_gpus)
-    engine_storage = await asyncio.to_thread(get_storage_readiness, root_dir, 10.0)
-    model_storage = await asyncio.to_thread(get_storage_readiness, models_dir, 15.0)
+    gpus = await run_blocking(detect_all_gpus)
+    engine_storage = await run_blocking(get_storage_readiness, root_dir, 10.0)
+    model_storage = await run_blocking(get_storage_readiness, models_dir, 15.0)
 
     guidance: List[str] = []
     has_nvidia = any(g.vendor == "nvidia" for g in gpus)
@@ -347,6 +347,20 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
     if not model_storage.is_sufficient:
         guidance.append(f"Low model storage space: {model_storage.free_gb}GB available on {model_storage.path} (15GB recommended).")
 
+    from app.runtime.hardware_evaluator import get_system_ram_mb
+    ram_total_mb, ram_avail_mb = await run_blocking(get_system_ram_mb)
+
+    rec_llms: List[str] = []
+    primary_vram = gpus[0].vram_total_mb if gpus else 0
+    if primary_vram >= 15000:
+        rec_llms = ["qwen2.5:14b", "qwen2.5:7b", "deepseek-r1:14b", "llama3.1:8b"]
+    elif primary_vram >= 7000:
+        rec_llms = ["qwen2.5:7b", "deepseek-r1:8b", "llama3.2:3b", "gemma2:9b"]
+    elif primary_vram >= 4000:
+        rec_llms = ["qwen2.5:3b", "llama3.2:3b", "qwen2.5:1.5b"]
+    else:
+        rec_llms = ["qwen2.5:1.5b", "llama3.2:1b"]
+
     return HardwareReadiness(
         has_nvidia_gpu=has_nvidia,
         has_discrete_gpu=has_discrete,
@@ -360,4 +374,121 @@ async def check_hardware_readiness(engine_dir: Optional[Path] = None) -> Hardwar
         summary_message=summary,
         guidance_notes=guidance,
         status_classification=status if has_discrete else "cloud_recommended",
+        ram_total_mb=ram_total_mb,
+        ram_avail_mb=ram_avail_mb,
+        recommended_llm_models=rec_llms,
     )
+
+
+def get_gpu_stats() -> Any:
+    """Retrieve real-time GPU utilization, VRAM usage, and active compute processes (LH-M4)."""
+    from app.schemas.hardware import GpuProcessInfo, GpuStatsResponse
+    from app.runtime.supervisor import supervisor as comfy_supervisor
+    from app.runtime.webui_supervisor import webui_supervisor
+
+    fallback = GpuStatsResponse(
+        has_gpu=False,
+        vendor="none",
+        name="No Dedicated GPU",
+        driver_version=None,
+        temperature_c=None,
+        utilization_pct=None,
+        vram_total_mb=0,
+        vram_used_mb=0,
+        vram_free_mb=0,
+        processes=[],
+    )
+
+    try:
+        res = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,driver_version,temperature.gpu,utilization.gpu,memory.total,memory.used,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+
+        if res.returncode != 0 or not res.stdout.strip():
+            return fallback
+
+        line = res.stdout.strip().splitlines()[0]
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 7:
+            return fallback
+
+        name = parts[0]
+        driver_version = parts[1]
+        temperature_c = int(parts[2]) if parts[2].isdigit() else None
+        utilization_pct = int(parts[3]) if parts[3].isdigit() else None
+        vram_total_mb = int(float(parts[4]))
+        vram_used_mb = int(float(parts[5]))
+        vram_free_mb = int(float(parts[6]))
+
+        processes: List[GpuProcessInfo] = []
+        try:
+            proc_res = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-compute-apps=pid,used_memory",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            )
+            if proc_res.returncode == 0 and proc_res.stdout.strip():
+                comfy_pid = getattr(getattr(comfy_supervisor, "_process", None), "pid", None)
+                webui_pid = getattr(getattr(webui_supervisor, "_process", None), "pid", None)
+                current_pid = os.getpid()
+
+                for proc_line in proc_res.stdout.strip().splitlines():
+                    p_parts = [p.strip() for p in proc_line.split(",")]
+                    if len(p_parts) >= 2:
+                        try:
+                            p_pid = int(p_parts[0])
+                            p_vram = int(float(p_parts[1]))
+
+                            if p_pid == current_pid:
+                                p_name = "Berry Backend"
+                            elif comfy_pid and p_pid == comfy_pid:
+                                p_name = "ComfyUI"
+                            elif webui_pid and p_pid == webui_pid:
+                                p_name = "SD WebUI"
+                            else:
+                                p_name = f"Process ({p_pid})"
+
+                            processes.append(
+                                GpuProcessInfo(
+                                    pid=p_pid,
+                                    process_name=p_name,
+                                    vram_used_mb=p_vram,
+                                )
+                            )
+                        except (ValueError, IndexError):
+                            continue
+        except Exception:
+            pass
+
+        return GpuStatsResponse(
+            has_gpu=True,
+            vendor="nvidia",
+            name=name,
+            driver_version=driver_version,
+            temperature_c=temperature_c,
+            utilization_pct=utilization_pct,
+            vram_total_mb=vram_total_mb,
+            vram_used_mb=vram_used_mb,
+            vram_free_mb=vram_free_mb,
+            processes=processes,
+        )
+
+    except (FileNotFoundError, OSError, subprocess.TimeoutExpired, Exception):
+        return fallback
+

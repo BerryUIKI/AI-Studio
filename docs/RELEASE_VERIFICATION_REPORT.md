@@ -1,5 +1,9 @@
 # Berry AI Studio Release Verification Report
 
+The [release acceptance workflow](RELEASE_ACCEPTANCE_GATE.md) enforces current-head evidence for pull requests targeting `main`.
+
+> **Current-head acceptance gate (2026-10-13):** This is a historical implementation report. The VERIFIED labels below describe the original evidence only; they do not establish present release acceptance. Live ComfyUI/WebUI, paid-provider and clean Windows package acceptance are pending separate testing. Before release promotion, run `python scripts/verify-release-evidence.py --evidence <external-evidence.json> --commit <full-tested-commit>` against current-head R01–R18, L01–L12 and end-to-end scenario artifacts. Mock, historical, incomplete and wrong-commit evidence must fail this gate. Keep the evidence bundle outside Git; record the checker result and tested commit in the release PR.
+
 Date: **2026-09-23**  
 Branch: `feature/berry-product-alignment`  
 Milestone Gate: **Milestone 6 (Rust Launcher & Environment Manager L01–L12)**  

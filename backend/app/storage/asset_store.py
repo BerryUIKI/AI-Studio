@@ -1,15 +1,66 @@
 """Content-addressable asset storage for durable generated media."""
 
 import hashlib
+import json
 import os
+import tempfile
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional, Tuple
 import httpx
 
 from app.schemas.project import AssetRecord
 from app.storage.db import DatabaseManager, db_manager, get_default_data_dir
+from app.core.media_validator import inspect_media_metadata
+from app.core.content_identity import hash_file
+from app.core.workers import run_blocking
+
+
+# Bounded stripes serialize identical owned paths, including separate store
+# instances, so Windows writers do not replace a file another writer is hashing.
+_asset_write_locks = tuple(threading.Lock() for _ in range(64))
+
+
+def _metadata_for_bytes(data: bytes) -> dict[str, Any]:
+    try:
+        return inspect_media_metadata(data)
+    except Exception:
+        # Legacy non-media records remain readable without fabricated MIME metadata.
+        return {}
+
+
+def _metadata_for_file(path: Path) -> dict[str, Any]:
+    try:
+        return _metadata_for_bytes(path.read_bytes())
+    except OSError:
+        return {}
+
+
+def _dimensions_for_file(path: Path, filename: str) -> Tuple[Optional[int], Optional[int]]:
+    return _inspect_media_dimensions(path.read_bytes(), filename)
+
+
+def _inspect_media_dimensions(data: bytes, filename: str) -> Tuple[Optional[int], Optional[int]]:
+    """Inspect media bytes to detect true pixel dimensions."""
+    try:
+        from app.core.media_validator import validate_and_inspect_media
+        _, w, h = validate_and_inspect_media(data, filename)
+        if w > 0 and h > 0:
+            return w, h
+    except Exception:
+        pass
+
+    try:
+        from PIL import Image
+        import io
+        with Image.open(io.BytesIO(data)) as img:
+            return img.width, img.height
+    except Exception:
+        pass
+
+    return None, None
 
 
 class AssetStore:
@@ -25,8 +76,32 @@ class AssetStore:
             d = self._base_dir / "assets"
         else:
             d = get_default_data_dir() / "assets"
-        d.mkdir(parents=True, exist_ok=True)
         return d
+
+    def _persist_bytes(self, data: bytes, content_hash: str, extension: str) -> str:
+        with _asset_write_locks[int(content_hash[:2], 16) % len(_asset_write_locks)]:
+            return self._persist_bytes_locked(data, content_hash, extension)
+
+    def _persist_bytes_locked(self, data: bytes, content_hash: str, extension: str) -> str:
+        target_path = self.assets_dir / content_hash[:2] / f"{content_hash}{extension}"
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        if target_path.is_file() and hash_file(target_path) == content_hash:
+            return str(target_path.relative_to(self.assets_dir))
+
+        # A retry must repair corrupt owned content, and readers must never observe
+        # a partial new output. Publish only after the complete file is flushed.
+        descriptor, staging_name = tempfile.mkstemp(prefix=f".{content_hash}-", suffix=".tmp",
+                                                    dir=target_path.parent)
+        staging_path = Path(staging_name)
+        try:
+            with os.fdopen(descriptor, "wb") as staging:
+                staging.write(data)
+                staging.flush()
+                os.fsync(staging.fileno())
+            os.replace(staging_path, target_path)
+        finally:
+            staging_path.unlink(missing_ok=True)
+        return str(target_path.relative_to(self.assets_dir))
 
     async def save_bytes(
         self,
@@ -34,13 +109,19 @@ class AssetStore:
         filename: str,
         media_type: str = "image",
         project_id: Optional[str] = None,
+        width: Optional[int] = None,
+        height: Optional[int] = None,
     ) -> AssetRecord:
-        content_hash = hashlib.sha256(data).hexdigest()
+        content_hash = await run_blocking(lambda: hashlib.sha256(data).hexdigest())
         byte_size = len(data)
+        media_metadata = await run_blocking(_metadata_for_bytes, data)
 
         # Content-addressable subfolder structure: assets/{hash[:2]}/{hash}{ext}
         ext = Path(filename).suffix or (".mp4" if media_type == "video" else ".png")
-        if media_type == "video":
+        if media_metadata:
+            ext = str(media_metadata["extension"])
+            filename = f"{Path(filename).stem}{ext}"
+        elif media_type == "video":
             if data[:4] == b"\x1a\x45\xdf\xa3":
                 ext = ".webm"
             elif len(data) >= 8 and data[4:8] in (b"ftyp", b"moov", b"wide", b"mdat"):
@@ -50,28 +131,29 @@ class AssetStore:
             if Path(filename).suffix != ext:
                 filename = f"{Path(filename).stem}{ext}"
 
-        subdir = self.assets_dir / content_hash[:2]
-        subdir.mkdir(parents=True, exist_ok=True)
-        target_path = subdir / f"{content_hash}{ext}"
+        rel_path = await run_blocking(self._persist_bytes, data, content_hash, ext)
 
-        if not target_path.exists():
-            target_path.write_bytes(data)
+        # Decode actual dimensions if not provided
+        if width is None or height is None or width <= 0 or height <= 0:
+            detected_w, detected_h = await run_blocking(_inspect_media_dimensions, data, filename)
+            width = width or detected_w
+            height = height or detected_h
 
         asset_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
-        rel_path = str(target_path.relative_to(self.assets_dir))
 
         conn = await self.manager.get_connection()
         await conn.execute(
             """
-            INSERT INTO assets (id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO assets (id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at, media_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (asset_id, project_id, filename, rel_path, media_type, content_hash, byte_size, None, None, now),
+            (asset_id, project_id, filename, rel_path, media_type, content_hash, byte_size, width, height, now, json.dumps(media_metadata)),
         )
         await conn.commit()
 
         return AssetRecord(
+            **media_metadata,
             id=asset_id,
             project_id=project_id,
             filename=filename,
@@ -79,6 +161,9 @@ class AssetStore:
             media_type=media_type,
             content_hash=content_hash,
             byte_size=byte_size,
+            width=width,
+            height=height,
+            file_exists=True,
             created_at=now,
         )
 
@@ -114,7 +199,7 @@ class AssetStore:
         conn = await self.manager.get_connection()
         async with conn.execute(
             """
-            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at
+            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at, media_json
             FROM assets WHERE id = ?
             """,
             (asset_id,),
@@ -122,7 +207,29 @@ class AssetStore:
             row = await cursor.fetchone()
             if not row:
                 return None
+
+            w = row["width"]
+            h = row["height"]
+            if (w is None or h is None) and row["media_type"] == "image":
+                disk_file = self.assets_dir / row["file_path"]
+                if disk_file.is_file():
+                    det_w, det_h = await run_blocking(_dimensions_for_file, disk_file, row["filename"])
+                    if det_w and det_h:
+                        w, h = det_w, det_h
+                        await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
+                        await conn.commit()
+
+            disk_file = self.assets_dir / row["file_path"]
+            file_exists = disk_file.is_file()
+            metadata = json.loads(row["media_json"] or "{}")
+            if not metadata and file_exists:
+                metadata = await run_blocking(_metadata_for_file, disk_file)
+                if metadata:
+                    await conn.execute("UPDATE assets SET media_json = ? WHERE id = ?", (json.dumps(metadata), asset_id))
+                    await conn.commit()
+
             return AssetRecord(
+                **metadata,
                 id=row["id"],
                 project_id=row["project_id"],
                 filename=row["filename"],
@@ -130,8 +237,9 @@ class AssetStore:
                 media_type=row["media_type"],
                 content_hash=row["content_hash"],
                 byte_size=row["byte_size"],
-                width=row["width"],
-                height=row["height"],
+                width=w,
+                height=h,
+                file_exists=file_exists,
                 created_at=row["created_at"],
             )
 
@@ -139,7 +247,7 @@ class AssetStore:
         conn = await self.manager.get_connection()
         async with conn.execute(
             """
-            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at
+            SELECT id, project_id, filename, file_path, media_type, content_hash, byte_size, width, height, created_at, media_json
             FROM assets WHERE content_hash = ? ORDER BY created_at DESC LIMIT 1
             """,
             (content_hash,),
@@ -147,7 +255,23 @@ class AssetStore:
             row = await cursor.fetchone()
             if not row:
                 return None
+
+            w = row["width"]
+            h = row["height"]
+            if (w is None or h is None) and row["media_type"] == "image":
+                disk_file = self.assets_dir / row["file_path"]
+                if disk_file.is_file():
+                    det_w, det_h = await run_blocking(_dimensions_for_file, disk_file, row["filename"])
+                    if det_w and det_h:
+                        w, h = det_w, det_h
+                        await conn.execute("UPDATE assets SET width = ?, height = ? WHERE id = ?", (w, h, row["id"]))
+                        await conn.commit()
+
+            disk_file = self.assets_dir / row["file_path"]
+            file_exists = disk_file.is_file()
+
             return AssetRecord(
+                **json.loads(row["media_json"] or "{}"),
                 id=row["id"],
                 project_id=row["project_id"],
                 filename=row["filename"],
@@ -155,8 +279,9 @@ class AssetStore:
                 media_type=row["media_type"],
                 content_hash=row["content_hash"],
                 byte_size=row["byte_size"],
-                width=row["width"],
-                height=row["height"],
+                width=w,
+                height=h,
+                file_exists=file_exists,
                 created_at=row["created_at"],
             )
 
@@ -176,6 +301,7 @@ class AssetStore:
             rows = await cursor.fetchall()
             return [
                 AssetRecord(
+                    **json.loads(row["media_json"] or "{}"),
                     id=row["id"],
                     project_id=row["project_id"],
                     filename=row["filename"],
@@ -185,6 +311,7 @@ class AssetStore:
                     byte_size=row["byte_size"],
                     width=row["width"],
                     height=row["height"],
+                    file_exists=(self.assets_dir / row["file_path"]).is_file(),
                     created_at=row["created_at"],
                 )
                 for row in rows

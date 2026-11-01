@@ -113,7 +113,7 @@ async def test_scenario_3_cloud_only_creation():
         assert res.success is True
         assert res.asset_id == "asset_dalle_crystal"
         assert res.provenance.model == "dall-e-3"
-        assert res.provenance.engine_id == "cloud_openai"
+        assert res.provenance.engine_id == "openai"
 
 
 def test_scenario_4_failure_recovery_actionable_states():
@@ -145,13 +145,20 @@ def test_scenario_4_failure_recovery_actionable_states():
 
 
 @pytest.mark.asyncio
-async def test_scenario_5_persistence_and_caching_across_restarts():
+async def test_scenario_5_persistence_and_caching_across_restarts(mock_engine_manager):
     """Scenario 5: Restart preserves cache and deterministic reuse."""
     runner = CreativeRunner()
     unique_prompt = f"tranquil forest {uuid.uuid4()}"
     b64_dummy = base64.b64encode(DUMMY_PNG).decode("utf-8")
 
-    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+    with (
+        patch("app.core.creative_identity.local_model_identity", new=AsyncMock(return_value="verified-fixture-model")),
+        patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post,
+        patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get,
+    ):
+        checkpoint_response = MagicMock()
+        checkpoint_response.json.return_value = [{"title": "test.safetensors", "model_name": "test"}]
+        mock_get.return_value = checkpoint_response
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = {"images": [b64_dummy]}
@@ -161,10 +168,12 @@ async def test_scenario_5_persistence_and_caching_across_restarts():
             action=CreativeActionType.TXT2IMG,
             prompt=unique_prompt,
             engine_id="managed_webui",
+            model="test.safetensors",
             seed=777,
         )
 
         res1 = await runner.execute(req)
+        assert res1.success is True, res1.error_message
         assert res1.is_cached is False
 
         # Emulate restart: create a new CreativeRunner instance
@@ -172,6 +181,7 @@ async def test_scenario_5_persistence_and_caching_across_restarts():
         res2 = await runner_after_restart.execute(req)
         assert res2.is_cached is True
         assert res2.asset_id == res1.asset_id
+        mock_post.assert_awaited_once()
 
 
 def test_scenario_6_cancellation_semantics():

@@ -1,18 +1,20 @@
+import { useUiText } from '../../i18n/useUiText';
 import { memo } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Play, CheckCircle2, Clock, AlertCircle } from 'lucide-react';
 import { CustomNodeData, DataType } from '../../types/workflow';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
-const TYPE_COLORS: Record<DataType, string> = {
-  string: '#fbbf24', // Amber
-  image: '#34d399',  // Emerald
-  audio: '#c084fc',  // Purple
-  video: '#f43f5e',  // Rose
-  json: '#60a5fa',   // Blue
+const TYPE_CLASSES: Record<DataType, string> = {
+  string: '!bg-amber-400', // Amber
+  image: '!bg-emerald-400',  // Emerald
+  audio: '!bg-purple-400',  // Purple
+  video: '!bg-rose-500',  // Rose
+  json: '!bg-blue-400',   // Blue
 };
 
 function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
+  const ui = useUiText();
   const customData = data as CustomNodeData;
   const { definition, params, status, output } = customData;
   const updateNodeParam = useCanvasStore((state) => state.updateNodeParam);
@@ -23,26 +25,22 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
       case 'running':
         return (
           <span className="flex items-center gap-1 text-[10px] text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">
-            <Clock className="w-2.5 h-2.5 animate-spin" /> Running
-          </span>
+            <Clock className="w-2.5 h-2.5 animate-spin" /> {ui("ui_running")}</span>
         );
       case 'cached':
         return (
           <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-            <CheckCircle2 className="w-2.5 h-2.5" /> Cached
-          </span>
+            <CheckCircle2 className="w-2.5 h-2.5" /> {ui("ui_cached")}</span>
         );
       case 'completed':
         return (
           <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-            <CheckCircle2 className="w-2.5 h-2.5" /> Done
-          </span>
+            <CheckCircle2 className="w-2.5 h-2.5" /> {ui("ui_done")}</span>
         );
       case 'error':
         return (
           <span className="flex items-center gap-1 text-[10px] text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-            <AlertCircle className="w-2.5 h-2.5" /> Error
-          </span>
+            <AlertCircle className="w-2.5 h-2.5" /> {ui("ui_error")}</span>
         );
       default:
         return null;
@@ -65,7 +63,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
           {getStatusBadge()}
           <button
             onClick={() => runWorkflow(id)}
-            title="Run this node"
+            title={ui("ui_run_this_node")}
             className="p-1 rounded hover:bg-slate-700/60 text-slate-400 hover:text-indigo-400 transition"
           >
             <Play className="w-3 h-3 fill-current" />
@@ -83,12 +81,7 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 type="target"
                 position={Position.Left}
                 id={input.id}
-                style={{
-                  backgroundColor: TYPE_COLORS[input.type] || '#94a3b8',
-                  width: '9px',
-                  height: '9px',
-                  left: '-17px',
-                }}
+                className={`!w-[9px] !h-[9px] !-left-[17px] ${TYPE_CLASSES[input.type] || "!bg-slate-400"}`}
               />
               <span className="text-[11px] font-medium text-slate-300">{input.name}</span>
               <span className="text-[9px] uppercase px-1 rounded bg-slate-800 text-slate-400 border border-slate-700/50 ml-auto">
@@ -107,19 +100,19 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 {param.type === 'textarea' ? (
                   <textarea
                     rows={2}
-                    value={params[param.name] ?? ''}
+                    value={params[param.name] !== undefined ? String(params[param.name]) : ''}
                     onChange={(e) => updateNodeParam(id, param.name, e.target.value)}
                     placeholder={param.description}
                     className="w-full text-xs bg-slate-950/80 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500 resize-none"
                   />
                 ) : param.type === 'select' ? (
                   <select
-                    value={params[param.name] ?? param.default}
+                    value={params[param.name] !== undefined ? String(params[param.name]) : String(param.default ?? '')}
                     onChange={(e) => updateNodeParam(id, param.name, e.target.value)}
                     className="w-full text-xs bg-slate-950/80 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                   >
                     {param.options?.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
+                      <option key={String(opt.value)} value={String(opt.value)}>
                         {opt.label}
                       </option>
                     ))}
@@ -127,14 +120,20 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 ) : (
                   <input
                     type={param.type === 'number' ? 'number' : 'text'}
-                    value={params[param.name] ?? ''}
-                    onChange={(e) =>
-                      updateNodeParam(
-                        id,
-                        param.name,
-                        param.type === 'number' ? parseFloat(e.target.value) : e.target.value,
-                      )
-                    }
+                    value={params[param.name] !== undefined ? String(params[param.name]) : ''}
+                    onChange={(e) => {
+                      if (param.type === 'number') {
+                        const val = e.target.value.trim();
+                        if (val === '') {
+                          updateNodeParam(id, param.name, (param.default as number) ?? 0);
+                        } else {
+                          const parsed = parseFloat(val);
+                          updateNodeParam(id, param.name, isNaN(parsed) ? ((param.default as number) ?? 0) : parsed);
+                        }
+                      } else {
+                        updateNodeParam(id, param.name, e.target.value);
+                      }
+                    }}
                     className="w-full text-xs bg-slate-950/80 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:outline-none focus:border-indigo-500"
                   />
                 )}
@@ -155,31 +154,26 @@ function WorkflowNodeComponent({ id, data, selected }: NodeProps) {
                 type="source"
                 position={Position.Right}
                 id={outputPort.id}
-                style={{
-                  backgroundColor: TYPE_COLORS[outputPort.type] || '#94a3b8',
-                  width: '9px',
-                  height: '9px',
-                  right: '-17px',
-                }}
+                className={`!w-[9px] !h-[9px] !-right-[17px] ${TYPE_CLASSES[outputPort.type] || "!bg-slate-400"}`}
               />
             </div>
           ))}
         </div>
 
         {/* Output Previews (Images, Text) */}
-        {output?.image && (
+        {output?.image && typeof output.image === 'string' && (
           <div className="mt-2 pt-2 border-t border-slate-800/60">
             <img
               src={output.image}
-              alt="Node Output"
+              alt={ui("ui_node_output")}
               className="w-full h-32 object-cover rounded-lg border border-slate-800 shadow-md"
             />
           </div>
         )}
-        {output?.result && (
+        {output?.result !== undefined && (
           <div className="mt-2 pt-2 border-t border-slate-800/60">
             <div className="text-[11px] text-slate-300 bg-slate-950/70 p-2 rounded border border-slate-800 max-h-24 overflow-y-auto whitespace-pre-wrap">
-              {output.result}
+              {String(output.result)}
             </div>
           </div>
         )}

@@ -1,5 +1,6 @@
 """SQLite database connection and schema management."""
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ class DatabaseManager:
     def __init__(self, db_path: Optional[str | Path] = None) -> None:
         self.db_path = db_path
         self._conn: Optional[aiosqlite.Connection] = None
+        self._initialization_lock = asyncio.Lock()
 
     def get_effective_db_path(self) -> Path | str:
         if self.db_path:
@@ -35,17 +37,26 @@ class DatabaseManager:
         return data_dir / "berry.db"
 
     async def get_connection(self) -> aiosqlite.Connection:
-        if self._conn is None:
+        if self._conn is not None:
+            return self._conn
+        async with self._initialization_lock:
+            if self._conn is not None:
+                return self._conn
             path = self.get_effective_db_path()
             if isinstance(path, Path):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path_str = str(path)
             else:
                 path_str = str(path)
-            self._conn = await aiosqlite.connect(path_str)
-            self._conn.row_factory = aiosqlite.Row
-            await self._init_schema(self._conn)
-        return self._conn
+            connection = await aiosqlite.connect(path_str)
+            connection.row_factory = aiosqlite.Row
+            try:
+                await self._init_schema(connection)
+            except BaseException:
+                await connection.close()
+                raise
+            self._conn = connection
+            return connection
 
     async def close(self) -> None:
         if self._conn is not None:
@@ -62,6 +73,7 @@ class DatabaseManager:
             CREATE TABLE IF NOT EXISTS projects (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                version INTEGER DEFAULT 1,
                 canvas_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
@@ -110,14 +122,52 @@ class DatabaseManager:
 
             CREATE INDEX IF NOT EXISTS idx_tasks_run ON tasks(run_id);
 
+            CREATE TABLE IF NOT EXISTS task_events (
+                task_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                event_json TEXT NOT NULL,
+                PRIMARY KEY (task_id, sequence),
+                FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS workflow_events (
+                run_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                event_json TEXT NOT NULL,
+                PRIMARY KEY (run_id, sequence),
+                FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS cache_entries (
                 node_hash TEXT PRIMARY KEY,
                 output_json TEXT NOT NULL,
                 asset_ids_json TEXT,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS agent_conversations (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                messages_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_agent_conversations_project
+                ON agent_conversations(project_id, updated_at);
             """
         )
+        # Migrate existing schema if needed
+        for table, column in (("runs", "request_json"), ("tasks", "metadata_json"), ("assets", "media_json")):
+            async with conn.execute(f"PRAGMA table_info({table});") as cursor:
+                columns = [row["name"] for row in await cursor.fetchall()]
+            if column not in columns:
+                await conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT;")
+        async with conn.execute("PRAGMA table_info(projects);") as cursor:
+            cols = [row["name"] for row in await cursor.fetchall()]
+            if "version" not in cols:
+                await conn.execute("ALTER TABLE projects ADD COLUMN version INTEGER DEFAULT 1;")
+
+        await conn.execute("PRAGMA user_version = 4;")
         await conn.commit()
 
 

@@ -5,11 +5,16 @@ action plan formulation, and human-in-the-loop proposal execution. Bounded heuri
 does not claim unconstrained natural-language understanding or arbitrary workflow synthesis.
 """
 
+import asyncio
+import json
 import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from app.storage.conversation_store import ConversationStore, conversation_store
+
 from app.core.workflow_catalog import WorkflowCatalog
+from app.core.llm_client import LLMClient, AGENT_TOOLS_SCHEMA, SYSTEM_PROMPT
 from app.schemas.agent import (
     AgentActionStep,
     AgentChatMessage,
@@ -32,18 +37,40 @@ class AgentService:
         model_catalog=None,
         credential_manager=None,
         creative_runner=None,
+        history_store: ConversationStore = conversation_store,
     ):
         self.model_catalog = model_catalog
         self.credential_manager = credential_manager
         self.creative_runner = creative_runner
+        self.history_store = history_store
+        self._conversation_locks = [asyncio.Lock() for _ in range(16)]
         # In-memory conversation state: conversation_id -> list of AgentChatMessage
         self.conversations: Dict[str, List[AgentChatMessage]] = {}
 
+    def _get_llm_client(self) -> Optional[LLMClient]:
+        """Obtain active LLMClient if configured and enabled."""
+        if not self.credential_manager:
+            return None
+        try:
+            cfg = self.credential_manager.get_llm_config()
+            if cfg.enabled:
+                if cfg.provider == "llama_server":
+                    try:
+                        from app.runtime.llama_server.llama_supervisor import llama_server_supervisor
+                        if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
+                            llama_server_supervisor.start(cfg.model)
+                    except Exception:
+                        pass
+                return LLMClient(config=cfg)
+        except Exception:
+            pass
+        return None
+
     def _extract_aspect_ratio(self, text: str) -> str:
         lower = text.lower()
-        if "16:9" in lower or "landscape" in lower or "widescreen" in lower or "wide" in lower:
+        if "16:9" in lower or "landscape" in lower or "widescreen" in lower or "wide" in lower or "横版" in text or "横屏" in text or "宽屏" in text:
             return "16:9"
-        if "9:16" in lower or "portrait" in lower or "vertical" in lower:
+        if "9:16" in lower or "portrait" in lower or "vertical" in lower or "竖版" in text or "竖屏" in text:
             return "9:16"
         if "4:3" in lower:
             return "4:3"
@@ -52,36 +79,42 @@ class AgentService:
         return "1:1"
 
     def _extract_steps(self, text: str) -> int:
-        match = re.search(r"(\d+)\s*steps?", text, re.IGNORECASE)
+        match = re.search(r"(\d+)\s*(?:steps?|步)", text, re.IGNORECASE)
         if match:
             return min(max(int(match.group(1)), 1), 60)
         lower = text.lower()
-        if "high quality" in lower or "ultra detail" in lower or "photorealistic" in lower:
+        if "high quality" in lower or "ultra detail" in lower or "photorealistic" in lower or "高清" in text or "精细" in text or "写实" in text:
             return 30
-        if "draft" in lower or "fast" in lower or "quick" in lower:
+        if "draft" in lower or "fast" in lower or "quick" in lower or "草图" in text or "快速" in text:
             return 15
         return 20
 
     def _extract_seed(self, text: str) -> int:
-        match = re.search(r"seed\s*[:=]?\s*(\d+)", text, re.IGNORECASE)
+        match = re.search(r"(?:seed|种子)\s*[:=]?\s*(\d+)", text, re.IGNORECASE)
         if match:
             return int(match.group(1))
         return -1
 
     def _extract_clean_prompt(self, text: str) -> str:
-        # Strip common conversational commands
+        # Strip common English & Chinese conversational commands
         cleaned = re.sub(
             r"^(please\s+)?(can\s+you\s+)?(create|generate|make|render|draw|animate)\s+(an?\s+)?(image|picture|video|animation)?(\s+of)?\s*",
             "",
             text,
             flags=re.IGNORECASE,
         ).strip()
-        # Remove trailing chain instructions like "then upscale 2x"
+        cleaned = re.sub(
+            r"^(请|帮我|为我)?(生成|绘制|画一张|画一个|创建|制作|渲染)?(图片|图像|画作|照片|视频|动图)?\s*[:：]?\s*",
+            "",
+            cleaned,
+        ).strip()
+        # Remove trailing chain instructions like "then upscale 2x" or "然后放大2倍"
         cleaned = re.sub(r"(,\s*)?(and\s+)?then\s+upscale.*$", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"(，\s*)?(然后|接着)?(放大|超分辨率|超分).*$", "", cleaned).strip()
         return cleaned if cleaned else text
 
     def _detect_engine(self, text: str, preferred: Optional[str] = None) -> tuple[str, str]:
-        """Returns (engine_id, cost_disclaimer)."""
+        """Returns (engine_id, cost_disclaimer). Intelligently recommends Cloud if local engine is unconfigured."""
         lower = text.lower()
         if preferred:
             if preferred in ("fal_ai", "fal"):
@@ -94,12 +127,43 @@ class AgentService:
 
         if "fal" in lower:
             return "fal_ai", "Cloud BYOK: Uses your configured Fal.ai API key"
-        if "silicon" in lower:
+        if "silicon" in lower or "硅基" in text or "siliconflow" in lower:
             return "siliconflow", "Cloud BYOK: Uses your configured SiliconFlow API key"
         if "webui" in lower:
             return "managed_webui", "Local SD WebUI: Free local execution on your hardware"
 
+        # Check if user has active cloud credentials (BYOK)
+        has_fal = False
+        has_silicon = False
+        if self.credential_manager:
+            try:
+                from app.schemas.cloud import CloudProviderId
+                has_fal = bool(self.credential_manager.get_key(CloudProviderId.FAL))
+                has_silicon = bool(self.credential_manager.get_key(CloudProviderId.SILICONFLOW))
+            except Exception:
+                pass
+
+        # If user explicitly requests cloud
+        if "cloud" in lower or "云端" in text or "api" in lower:
+            if has_silicon:
+                return "siliconflow", "Cloud BYOK: Uses your configured SiliconFlow API key"
+            return "fal_ai", "Cloud BYOK: Uses your configured Fal.ai API key"
+
+        # Default to managed ComfyUI for privacy & free local generation, or fall back to configured cloud key
+        if not self._is_comfyui_ready() and (has_fal or has_silicon):
+            if has_fal:
+                return "fal_ai", "Cloud BYOK (Auto-routed: Local ComfyUI is not running)"
+            return "siliconflow", "Cloud BYOK (Auto-routed: Local ComfyUI is not running)"
+
         return "managed_comfyui", "Local ComfyUI: Free local execution, 100% private"
+
+    def _is_comfyui_ready(self) -> bool:
+        """Helper to check if managed ComfyUI is currently installed and running."""
+        try:
+            from app.runtime.supervisor import supervisor
+            return supervisor.is_running()
+        except Exception:
+            return False
 
     def _resolve_model(self, engine_id: str, action: CreativeActionType) -> str:
         """Finds suitable default or catalog-indexed model for the engine and action."""
@@ -126,6 +190,20 @@ class AgentService:
         return "v1-5-pruned-emaonly.safetensors"
 
     async def process_chat(self, req: AgentChatRequest) -> AgentChatResponse:
+        """Serialize each conversation and restore durable context after restart."""
+        conv_id = req.conversation_id or str(uuid4())
+        lock = self._conversation_locks[sum(conv_id.encode()) % len(self._conversation_locks)]
+        async with lock:
+            history = await self.history_store.load(conv_id, req.project_id)
+            self.conversations[conv_id] = history
+            try:
+                response = await self._process_chat(req.model_copy(update={"conversation_id": conv_id}))
+                await self.history_store.save(conv_id, req.project_id, history)
+                return response
+            finally:
+                self.conversations.pop(conv_id, None)
+
+    async def _process_chat(self, req: AgentChatRequest) -> AgentChatResponse:
         """Process conversational user message and formulate a transparent action plan."""
         conv_id = req.conversation_id or str(uuid4())
         if conv_id not in self.conversations:
@@ -135,6 +213,19 @@ class AgentService:
         user_msg = AgentChatMessage(role="user", content=req.message)
         history.append(user_msg)
 
+        # 1. First attempt inference via LLM Base (Local llama-server / SiliconFlow / OpenAI)
+        llm_client = self._get_llm_client()
+        if llm_client:
+            try:
+                llm_response = await self._process_with_llm(req, conv_id, history, llm_client)
+                if llm_response:
+                    return llm_response
+            except Exception as e:
+                # Log and fallback gracefully to deterministic heuristic engine
+                import logging
+                logging.getLogger(__name__).warning(f"LLM Agent invocation failed ({e}), falling back to heuristic engine.")
+
+        # 2. Fallback to Deterministic Heuristic Engine
         msg_lower = req.message.lower()
 
         # Check for informational questions without creative action intent
@@ -175,10 +266,13 @@ class AgentService:
             return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
 
         # Detect intent
-        is_video = any(w in msg_lower for w in ["video", "animate", "animation", "motion", "clip"])
-        is_upscale = any(w in msg_lower for w in ["upscale", "super resolution", "enlarge", "2x", "4x"])
-        is_inpaint = any(w in msg_lower for w in ["inpaint", "mask", "replace object", "fill in"])
-        has_compound_upscale = is_upscale and any(w in msg_lower for w in ["then", "and", "after", "create", "generate"])
+        is_video = any(w in msg_lower for w in ["video", "animate", "animation", "motion", "clip"]) or any(w in req.message for w in ["视频", "动画", "动图", "动态"])
+        is_upscale = any(w in msg_lower for w in ["upscale", "super resolution", "enlarge", "2x", "4x"]) or any(w in req.message for w in ["放大", "超分", "超分辨率", "高清化", "提升画质"])
+        is_inpaint = any(w in msg_lower for w in ["inpaint", "mask", "replace object", "fill in"]) or any(w in req.message for w in ["局部重绘", "重绘", "消除", "替换", "涂抹"])
+        has_compound_upscale = is_upscale and (
+            any(w in msg_lower for w in ["then", "and", "after", "create", "generate"]) or
+            any(w in req.message for w in ["然后", "接着", "并", "再", "生成", "绘制", "画"])
+        )
 
         target_engine, cost_disclaimer = self._detect_engine(req.message, req.preferred_engine)
         aspect_ratio = self._extract_aspect_ratio(req.message)
@@ -417,9 +511,169 @@ class AgentService:
                 project_id=project_id,
                 **params,
             )
-            result = await self.creative_runner.execute(req)
+            from app.core.creative_tasks import creative_tasks
+
+            result = await creative_tasks.execute_and_wait(req, self.creative_runner.execute)
             results.append(result)
+            if not result.success:
+                break
             if result.asset_id:
                 last_asset_id = result.asset_id
 
         return results
+
+    async def _process_with_llm(
+        self,
+        req: AgentChatRequest,
+        conv_id: str,
+        history: List[AgentChatMessage],
+        llm_client: LLMClient,
+    ) -> Optional[AgentChatResponse]:
+        """Execute conversational inference with LLM and resolve function calls."""
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
+
+        # Append last 6 turns of conversation history
+        for msg in history[-7:-1]:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": req.message})
+
+        resp_data = await llm_client.chat_completion(
+            messages=messages,
+            tools=AGENT_TOOLS_SCHEMA,
+            tool_choice="auto",
+        )
+
+        choices = resp_data.get("choices", [])
+        if not choices:
+            return None
+
+        first_choice = choices[0]
+        choice_msg = first_choice.get("message", {})
+        content = choice_msg.get("content") or ""
+        tool_calls = choice_msg.get("tool_calls") or []
+
+        proposal: Optional[AgentProposal] = None
+
+        if tool_calls:
+            for tc in tool_calls:
+                fn_name = tc.get("function", {}).get("name")
+                fn_args_raw = tc.get("function", {}).get("arguments", "{}")
+                if isinstance(fn_args_raw, dict):
+                    fn_args = fn_args_raw
+                elif isinstance(fn_args_raw, str):
+                    try:
+                        fn_args = json.loads(fn_args_raw)
+                    except Exception:
+                        fn_args = {}
+                else:
+                    fn_args = {}
+
+                if fn_name == "propose_creative_plan":
+                    action_str = fn_args.get("action", "txt2img")
+                    prompt_val = fn_args.get("prompt", req.message)
+                    neg_val = fn_args.get("negative_prompt", "blurry, low quality, deformed")
+                    aspect = fn_args.get("aspect_ratio", "1:1")
+                    steps_cnt = int(fn_args.get("steps", 25))
+                    target_eng = fn_args.get("engine") or self._detect_engine(req.message, req.preferred_engine)[0]
+                    chain_up = bool(fn_args.get("chain_upscale", False))
+
+                    action_type = CreativeActionType(action_str) if action_str in CreativeActionType._value2member_map_ else CreativeActionType.TXT2IMG
+                    model_name = fn_args.get("model") or self._resolve_model(target_eng, action_type)
+                    cost_disc = self._detect_engine(target_eng)[1]
+
+                    chain_steps: List[AgentActionStep] = [
+                        AgentActionStep(
+                            step_number=1,
+                            action=action_type,
+                            engine_id=target_eng,
+                            model=model_name,
+                            parameters={
+                                "prompt": prompt_val,
+                                "negative_prompt": neg_val,
+                                "aspect_ratio": aspect,
+                                "steps": steps_cnt,
+                                "input_image_id": req.selected_asset_id or "",
+                            },
+                            description=f"Generate {aspect} asset using {target_eng}",
+                        )
+                    ]
+
+                    if chain_up:
+                        chain_steps.append(
+                            AgentActionStep(
+                                step_number=2,
+                                action=CreativeActionType.UPSCALE,
+                                engine_id=target_eng,
+                                model=model_name,
+                                parameters={"upscale_factor": 2.0},
+                                description="Upscale result 2x",
+                            )
+                        )
+
+                    # Build bounded reviewable workflow graph if using ComfyUI
+                    wf_graph = None
+                    if target_eng == "managed_comfyui":
+                        wf_map = {
+                            "txt2img": "comfy.txt2img.standard",
+                            "img2img": "comfy.img2img.standard",
+                            "inpaint": "comfy.inpaint.standard",
+                            "upscale": "comfy.upscale.esrgan",
+                            "img2video": "comfy.img2video.svd",
+                            "txt2video": "comfy.txt2video.animatediff",
+                        }
+                        wid = wf_map.get(action_str)
+                        if wid:
+                            try:
+                                _, wf_graph = WorkflowCatalog.construct_workflow(
+                                    workflow_id=wid,
+                                    parameters=chain_steps[0].parameters,
+                                    model_catalog=self.model_catalog,
+                                )
+                            except Exception as ex:
+                                wf_graph = ReviewableWorkflowGraph(
+                                    workflow_id=wid,
+                                    workflow_title=wid,
+                                    node_count=0,
+                                    stages=[],
+                                    required_nodes=[],
+                                    required_models=[],
+                                    missing_models=[],
+                                    is_valid=False,
+                                    validation_issues=[str(ex)],
+                                    recovery_guidance=str(ex),
+                                )
+
+                    proposal = AgentProposal(
+                        intent=action_str,
+                        title=f"AI Agent Plan: {action_str.upper()}",
+                        summary=f"Synthesize {aspect} via {target_eng} powered by LLM Agent",
+                        target_engine=target_eng,
+                        model=model_name,
+                        parameters=chain_steps[0].parameters,
+                        chain_steps=chain_steps,
+                        workflow_graph=wf_graph,
+                        estimated_calls=len(chain_steps),
+                        cost_disclaimer=cost_disc,
+                        explanation=f"LLM Agent formulated prompt: '{prompt_val}'",
+                        requires_user_approval=True,
+                        approved=False,
+                    )
+                    break
+
+        if not content and proposal:
+            content = f"I've designed an action plan for you: **{proposal.title}**.\n\nPlease review the details below and click **Approve & Run** when ready."
+
+        if not content and not proposal:
+            return None
+
+        assistant_msg = AgentChatMessage(role="assistant", content=content, proposal=proposal)
+        history.append(assistant_msg)
+
+        return AgentChatResponse(
+            conversation_id=conv_id,
+            message=assistant_msg,
+            proposal=proposal,
+        )
+
