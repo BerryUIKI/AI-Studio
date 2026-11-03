@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -86,6 +86,12 @@ class AgentChatResponse(BaseModel):
     conversation_id: str
     message: AgentChatMessage
     proposal: Optional[AgentProposal] = None
+    # How this reply was produced. "llm" used the configured language model;
+    # "heuristic" is the bounded rule engine, which understands far less.
+    # "heuristic_fallback" means the model was tried and failed, so the reply
+    # is weaker than the conversation implies.
+    agent_mode: Literal["llm", "heuristic", "heuristic_fallback"] = "heuristic"
+    agent_notice: Optional[str] = None
 
 
 class AgentExecuteProposalRequest(BaseModel):
