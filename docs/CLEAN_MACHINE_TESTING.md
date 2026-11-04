@@ -158,10 +158,13 @@ On the clean VM:
 Test cloud-only operation (no local GPU required):
 
 1. **Configure cloud provider**:
-   - Click "Cloud BYOK" in the top navigation
-   - Select provider (e.g., OpenAI, Fal.ai, SiliconFlow)
+   - Click "Cloud BYOK" in the top navigation. It opens Settings → **Model Access**
+     (the button label is unchanged, but the screen is the Model Access console).
+   - Under **Access type**, choose **Image models**.
+   - Pick a provider (e.g., OpenAI Images, fal.ai, SiliconFlow Images), or use
+     **Add custom** for an endpoint the directory does not list.
    - Enter a valid API key (use a test key with minimal balance)
-   - Click "Test Connection"
+   - Click **Test connection**
 
 2. **Expected behaviors**:
    - ✅ Connection test succeeds
