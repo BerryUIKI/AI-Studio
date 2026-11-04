@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useCreativeStore } from '../../stores/useCreativeStore';
 import { useCreationSetupStore, modelsForProvider, providerConnection, localModelAvailable, localModelFilename } from '../../stores/useCreationSetupStore';
 import { useEngineStore } from '../../stores/useEngineStore';
+import { useCanvasStore } from '../../stores/useCanvasStore';
 import { CreativeActionType } from '../../types/creative';
 
 interface CreationSetupProps {
@@ -38,6 +39,9 @@ export function CreationSetup({ onCloudSetup, onLocalSetup }: CreationSetupProps
   const refresh = useCreationSetupStore((state) => state.refresh);
   const instances = useEngineStore((state) => state.instances);
   const reference = useCreativeStore((state) => state.referenceImage);
+  // The first-image guide states the same blockers on an empty canvas; repeating the
+  // two setup links there is noise. The pickers above still show what is unusable.
+  const guideVisible = useCanvasStore((state) => state.nodes.length === 0);
   const action = reference ? 'img2img' : 'txt2img';
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -67,7 +71,7 @@ export function CreationSetup({ onCloudSetup, onLocalSetup }: CreationSetupProps
     <button type="button" onClick={() => void refresh()} className="rounded border border-slate-700 px-2 py-1">{ui("ui_refresh_readiness")}</button>
     {!readiness.ready && <div role="status" className="w-full text-amber-200">
       {readiness.loading ? ui("ui_checking_setup") : readiness.error || (readiness.unsupportedAction ? ui('ui_custom_selected_image_actions') : readiness.provider?.setup_guidance || ui("ui_choose_a_configured_cloud_provider_or_start_an"))}
-      {!readiness.unsupportedAction && <div className="mt-1 flex gap-3">
+      {!readiness.unsupportedAction && !guideVisible && <div className="mt-1 flex gap-3">
         <button type="button" className="underline" onClick={onCloudSetup}>{ui("ui_set_up_cloud_no_gpu_required")}</button>
         <button type="button" className="underline" onClick={onLocalSetup}>{ui("ui_set_up_local_engine_and_models")}</button>
       </div>}
