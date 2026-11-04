@@ -7,6 +7,7 @@ import { ViewContainer } from '../components/navigation/ViewContainer';
 import { useNavigationStore } from '../stores/useNavigationStore';
 import { useCreationSetupStore } from '../stores/useCreationSetupStore';
 import { useCreativeStore } from '../stores/useCreativeStore';
+import { useCanvasStore } from '../stores/useCanvasStore';
 import { CreationDock } from '../components/canvas/CreationDock';
 import { AgentPanel } from '../components/agent/AgentPanel';
 import { useAgentStore } from '../stores/useAgentStore';
@@ -50,6 +51,9 @@ describe('rendered first-image and accessibility journeys', () => {
 
   it('offers a repair path and prevents generation with no provider or validated model', async () => {
     const cloud = vi.fn();
+    // Setup links sit in the dock while the canvas is empty; a populated canvas is
+    // where the dock carries them, since the first-image guide is gone by then.
+    useCanvasStore.setState({ nodes: [{ id: 'seeded' } as never] });
     render(<CreationDock onCloudSetup={cloud} />);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate Image' }).hasAttribute('disabled')).toBe(true));
     fireEvent.click(screen.getByText('Set up cloud — no GPU required'));
