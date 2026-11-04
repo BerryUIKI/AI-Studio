@@ -7,6 +7,7 @@ does not claim unconstrained natural-language understanding or arbitrary workflo
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -48,19 +49,18 @@ class AgentService:
         self.conversations: Dict[str, List[AgentChatMessage]] = {}
 
     def _get_llm_client(self) -> Optional[LLMClient]:
-        """Obtain active LLMClient if configured and enabled."""
+        """Obtain the configured LLM client without starting anything on the request path.
+
+        Starting llama-server loads model weights and can take minutes or fail outright.
+        The chat request must not block on it: a stopped local model is reported as a
+        configuration problem, not waited for. Startup belongs to the supervisor and
+        the explicit start endpoint.
+        """
         if not self.credential_manager:
             return None
         try:
             cfg = self.credential_manager.get_llm_config()
             if cfg.enabled:
-                if cfg.provider == "llama_server":
-                    try:
-                        from app.runtime.llama_server.llama_supervisor import llama_server_supervisor
-                        if llama_server_supervisor.is_installed() and not llama_server_supervisor.is_running():
-                            llama_server_supervisor.start(cfg.model)
-                    except Exception:
-                        pass
                 return LLMClient(config=cfg)
         except Exception:
             pass
@@ -214,16 +214,32 @@ class AgentService:
         history.append(user_msg)
 
         # 1. First attempt inference via LLM Base (Local llama-server / SiliconFlow / OpenAI)
+        # A failed call must not masquerade as an understood reply, so the fallback is
+        # recorded and reported instead of being silently absorbed.
         llm_client = self._get_llm_client()
+        llm_failure: Optional[str] = None
         if llm_client:
             try:
                 llm_response = await self._process_with_llm(req, conv_id, history, llm_client)
                 if llm_response:
                     return llm_response
+                llm_failure = "the model returned no usable reply"
             except Exception as e:
-                # Log and fallback gracefully to deterministic heuristic engine
-                import logging
-                logging.getLogger(__name__).warning(f"LLM Agent invocation failed ({e}), falling back to heuristic engine.")
+                llm_failure = str(e) or e.__class__.__name__
+                logging.getLogger(__name__).warning(
+                    "LLM Agent invocation failed (%s), falling back to heuristic engine.", llm_failure
+                )
+        else:
+            llm_failure = "no language model is configured"
+
+        agent_mode = "heuristic_fallback" if llm_client else "heuristic"
+        agent_notice = (
+            f"The language model could not be used ({llm_failure}). This reply comes from the "
+            "built-in rule engine, which only matches keywords and cannot reason about your request. "
+            "Check the model configuration in Settings > Model Access and try again."
+            if agent_mode == "heuristic_fallback"
+            else None
+        )
 
         # 2. Fallback to Deterministic Heuristic Engine
         msg_lower = req.message.lower()
@@ -240,7 +256,8 @@ class AgentService:
             content = f"You have {len(model_names)} model(s) indexed: {', '.join(model_names) if model_names else 'No models found yet.'} You can rescan or add directories in the Environment Manager."
             assistant_msg = AgentChatMessage(role="assistant", content=content)
             history.append(assistant_msg)
-            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
+            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None,
+                                    agent_mode=agent_mode, agent_notice=agent_notice)
 
         if any(q in msg_lower for q in ["how are you", "help", "what can you do", "who are you"]):
             content = (
@@ -251,7 +268,8 @@ class AgentService:
             )
             assistant_msg = AgentChatMessage(role="assistant", content=content)
             history.append(assistant_msg)
-            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
+            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None,
+                                    agent_mode=agent_mode, agent_notice=agent_notice)
 
         if any(w in msg_lower for w in ["validate workflow", "repair workflow", "diagnose workflow", "check graph"]):
             content = (
@@ -263,7 +281,8 @@ class AgentService:
             )
             assistant_msg = AgentChatMessage(role="assistant", content=content)
             history.append(assistant_msg)
-            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None)
+            return AgentChatResponse(conversation_id=conv_id, message=assistant_msg, proposal=None,
+                                    agent_mode=agent_mode, agent_notice=agent_notice)
 
         # Detect intent
         is_video = any(w in msg_lower for w in ["video", "animate", "animation", "motion", "clip"]) or any(w in req.message for w in ["视频", "动画", "动图", "动态"])
@@ -479,6 +498,8 @@ class AgentService:
             conversation_id=conv_id,
             message=assistant_msg,
             proposal=proposal,
+            agent_mode=agent_mode,
+            agent_notice=agent_notice,
         )
 
     async def execute_proposal(self, proposal: AgentProposal, project_id: Optional[str] = None) -> List[CreativeActionResult]:

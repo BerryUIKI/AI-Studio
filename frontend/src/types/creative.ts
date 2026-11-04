@@ -154,6 +154,9 @@ export interface AgentChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   proposal?: AgentProposal;
+  /** How the backend produced this reply; absent on older or local messages. */
+  agent_mode?: 'llm' | 'heuristic' | 'heuristic_fallback';
+  agent_notice?: string | null;
   created_at: string;
 }
 
