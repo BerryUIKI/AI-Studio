@@ -76,3 +76,10 @@ pnpm-debug.log*
 *.sw?
 .DS_Store
 Thumbs.db
+
+# Local build and preview artifacts (never shipped)
+runtime/
+.pnpm-store/
+.review-runtime/
+.claude/
+frontend/src-tauri/installer-staging/
