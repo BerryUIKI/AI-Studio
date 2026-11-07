@@ -83,3 +83,4 @@ runtime/
 .pnpm-store/
 .review-runtime/
 .claude/
+frontend/src-tauri/installer-staging/

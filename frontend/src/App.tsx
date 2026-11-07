@@ -5,6 +5,7 @@ import { Titlebar, type ComfyStatus, type RuntimeStatus } from './components/tit
 import { NodePalette } from './components/canvas/NodePalette';
 import { FlowCanvas } from './components/canvas/FlowCanvas';
 import { CreationDock } from './components/canvas/CreationDock';
+import { FirstImageGuide } from './components/canvas/FirstImageGuide';
 import { InpaintModal } from './components/canvas/InpaintModal';
 import { UpscaleModal } from './components/canvas/UpscaleModal';
 import { VideoModal } from './components/canvas/VideoModal';
@@ -418,6 +419,11 @@ export default function App() {
                   {showNodePalette && <NodePalette />}
                   <main className="flex-1 relative w-full h-full">
                     <FlowCanvas />
+                    <FirstImageGuide
+                      onCloudSetup={() => setShowCloudModal(true)}
+                      onLocalSetup={() => { setManagerInitialTab('engines'); setShowManagerModal(true); }}
+                      onOpenModels={() => { setManagerInitialTab('models'); setShowManagerModal(true); }}
+                    />
                     <TaskHistory />
                     <CreationDock onCloudSetup={openModelAccess}
                       onLocalSetup={() => { setManagerInitialTab('engines'); setShowManagerModal(true); }}

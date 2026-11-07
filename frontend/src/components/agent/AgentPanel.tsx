@@ -19,6 +19,7 @@ import {
   PanelRightClose,
 } from 'lucide-react';
 import { AgentChatMessage, AgentProposal, CreativeActionResult, ImageCardData } from '../../types/creative';
+import { AgentPanelNotice } from './AgentPanelNotice';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAgentStore } from '../../stores/useAgentStore';
@@ -120,9 +121,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         throw new Error(ui("ui_agent_error_http_value", { value1: resp.status }));
       }
 
-      const data: { conversation_id: string; message: AgentChatMessage } = await resp.json();
+      const data: { conversation_id: string; message: AgentChatMessage; agent_mode?: AgentChatMessage['agent_mode']; agent_notice?: string | null } = await resp.json();
       useAgentStore.getState().setIdentity(conversationKey, data.conversation_id);
-      appendMessage(data.message);
+      appendMessage({ ...data.message, agent_mode: data.agent_mode, agent_notice: data.agent_notice });
     } catch (err: unknown) {
       const errorMessage: AgentChatMessage = {
         id: `err-${Date.now()}`,
@@ -309,6 +310,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
               }`}
             >
               <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+
+              {/* A weaker reply must say so instead of reading as model reasoning */}
+              <AgentPanelNotice message={msg} />
 
               {/* Structured Transparent Proposal Card */}
               {msg.proposal && (
