@@ -1,0 +1,45 @@
+name: Release Evidence Upload
+
+# Uploads a reviewed acceptance bundle as the artifact the release gate looks for.
+# The bundle is produced outside the repository (docs/RELEASE_ACCEPTANCE_GATE.md)
+# and passed in as a base64 zip. This workflow stores evidence only; it does not
+# run acceptance journeys, merge, tag or publish anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_base64:
+        description: base64-encoded zip containing evidence.json at its root
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Upload release acceptance evidence
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode the reviewed bundle
+        env:
+          BUNDLE_BASE64: ${{ inputs.bundle_base64 }}
+        run: |
+          printf '%s' "$BUNDLE_BASE64" | base64 --decode > bundle.zip
+          mkdir -p bundle
+          unzip -q bundle.zip -d bundle
+          test -s bundle/evidence.json || { echo "bundle is missing evidence.json"; exit 1; }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate evidence against this exact commit
+        env:
+          TESTED_COMMIT: ${{ github.sha }}
+        run: python scripts/verify-release-evidence.py --evidence bundle/evidence.json --commit "$TESTED_COMMIT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-acceptance
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 90
