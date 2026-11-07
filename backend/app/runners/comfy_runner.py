@@ -9,7 +9,9 @@ Polls /history for real output files and persists them to managed asset storage.
 import asyncio
 import json
 import logging
+import mimetypes
 import uuid
+from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional
 import httpx
 
@@ -29,12 +31,27 @@ logger = logging.getLogger(__name__)
 class ComfyUIClient:
     """Client for communicating with ComfyUI REST API and WebSocket events."""
 
-    def __init__(self, host: str = "127.0.0.1", port: int = 8188, timeout: float = 5.0) -> None:
+    def __init__(self, host: str = "127.0.0.1", port: int = 8188, timeout: float = 5.0, base_url: Optional[str] = None) -> None:
         self.host = host
         self.port = port
         self.timeout = timeout
-        self.base_url = f"http://{self.host}:{self.port}"
+        # Use provided base_url if given, otherwise construct from host:port (Issue #127)
+        self.base_url = base_url if base_url else f"http://{self.host}:{self.port}"
         self.ws_url = f"ws://{self.host}:{self.port}/ws"
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Reuse long-lived pooled client to prevent socket exhaustion, bypassing proxy for local host."""
+        if self._client is None or self._client.is_closed:
+            is_local = self.host in ("127.0.0.1", "localhost", "0.0.0.0")
+            self._client = httpx.AsyncClient(timeout=self.timeout, trust_env=not is_local)
+        return self._client
+
+    async def aclose(self) -> None:
+        """Close pooled HTTP connections."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def check_status(self) -> Dict[str, Any]:
         """
@@ -42,18 +59,18 @@ class ComfyUIClient:
         Returns a dict with 'online' boolean and device stats if available.
         """
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(f"{self.base_url}/system_stats")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    devices = data.get("devices", [])
-                    return {
-                        "online": True,
-                        "host": self.host,
-                        "port": self.port,
-                        "devices": devices,
-                        "system": data.get("system", {}),
-                    }
+            client = self._get_client()
+            resp = await client.get(f"{self.base_url}/system_stats")
+            if resp.status_code == 200:
+                data = resp.json()
+                devices = data.get("devices", [])
+                return {
+                    "online": True,
+                    "host": self.host,
+                    "port": self.port,
+                    "devices": devices,
+                    "system": data.get("system", {}),
+                }
         except (httpx.ConnectError, httpx.TimeoutException, Exception) as err:
             logger.debug("ComfyUI offline or unreachable: %s", err)
 
@@ -71,21 +88,21 @@ class ComfyUIClient:
         loras: List[str] = []
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.get(f"{self.base_url}/object_info")
-                if resp.status_code == 200:
-                    info = resp.json()
-                    ckpt_loader = info.get("CheckpointLoaderSimple", {})
-                    input_info = ckpt_loader.get("input", {}).get("required", {})
-                    ckpt_names = input_info.get("ckpt_name", [[]])[0]
-                    if isinstance(ckpt_names, list):
-                        checkpoints = ckpt_names
+            client = self._get_client()
+            resp = await client.get(f"{self.base_url}/object_info")
+            if resp.status_code == 200:
+                info = resp.json()
+                ckpt_loader = info.get("CheckpointLoaderSimple", {})
+                input_info = ckpt_loader.get("input", {}).get("required", {})
+                ckpt_names = input_info.get("ckpt_name", [[]])[0]
+                if isinstance(ckpt_names, list):
+                    checkpoints = ckpt_names
 
-                    lora_loader = info.get("LoraLoader", {})
-                    lora_input = lora_loader.get("input", {}).get("required", {})
-                    lora_names = lora_input.get("lora_name", [[]])[0]
-                    if isinstance(lora_names, list):
-                        loras = lora_names
+                lora_loader = info.get("LoraLoader", {})
+                lora_input = lora_loader.get("input", {}).get("required", {})
+                lora_names = lora_input.get("lora_name", [[]])[0]
+                if isinstance(lora_names, list):
+                    loras = lora_names
         except Exception as err:
             logger.debug("Failed to retrieve ComfyUI models: %s", err)
 
@@ -102,28 +119,37 @@ class ComfyUIClient:
         cid = client_id or str(uuid.uuid4())
         payload = {"prompt": prompt_graph, "client_id": cid}
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(f"{self.base_url}/prompt", json=payload)
-            resp.raise_for_status()
-            return resp.json()
+        client = self._get_client()
+        resp = await client.post(f"{self.base_url}/prompt", json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("prompt_id"):
+            from app.storage.task_store import record_remote_job
+            await record_remote_job(str(data["prompt_id"]))
+        return data
 
     async def get_history(self, prompt_id: str) -> Dict[str, Any]:
         """Retrieve execution history for a given prompt_id."""
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(f"{self.base_url}/history/{prompt_id}")
-            resp.raise_for_status()
-            return resp.json()
+        client = self._get_client()
+        resp = await client.get(f"{self.base_url}/history/{prompt_id}")
+        resp.raise_for_status()
+        return resp.json()
 
     async def poll_history_outputs(
         self, prompt_id: str, max_wait: float = 120.0, interval: float = 0.5
     ) -> List[Dict[str, Any]]:
         """
         Poll /history/{prompt_id} until completion, returning actual image output metadata.
+        Fails fast if connection is refused or consecutive network errors occur.
         """
         elapsed = 0.0
+        consecutive_connection_failures = 0
+        max_consecutive_failures = 5
+
         while elapsed < max_wait:
             try:
                 history_data = await self.get_history(prompt_id)
+                consecutive_connection_failures = 0
                 if prompt_id in history_data:
                     prompt_record = history_data[prompt_id]
                     status_info = prompt_record.get("status", {})
@@ -138,8 +164,32 @@ class ComfyUIClient:
                             images.extend(node_output["images"])
                     if images:
                         return images
+            except (httpx.ConnectError, httpx.ConnectTimeout, ConnectionRefusedError) as net_err:
+                consecutive_connection_failures += 1
+                logger.warning(
+                    "ComfyUI connection error during polling (%d/%d): %s",
+                    consecutive_connection_failures,
+                    max_consecutive_failures,
+                    net_err,
+                )
+                if consecutive_connection_failures >= max_consecutive_failures:
+                    raise RuntimeError(
+                        f"ComfyUI server unreachable or crashed during execution of {prompt_id}: {net_err}"
+                    ) from net_err
+            except httpx.HTTPStatusError as http_err:
+                if http_err.response.status_code >= 500:
+                    consecutive_connection_failures += 1
+                    if consecutive_connection_failures >= max_consecutive_failures:
+                        raise RuntimeError(
+                            f"ComfyUI server error ({http_err.response.status_code}) during execution: {http_err}"
+                        ) from http_err
+                elif http_err.response.status_code == 404:
+                    # 404 on history is common before execution finishes, reset counter
+                    consecutive_connection_failures = 0
+                else:
+                    raise
             except Exception as err:
-                if "ComfyUI execution error" in str(err):
+                if "ComfyUI execution error" in str(err) or "ComfyUI server" in str(err):
                     raise
                 logger.debug("Polling history for %s: %s", prompt_id, err)
 
@@ -155,12 +205,64 @@ class ComfyUIClient:
     async def interrupt(self) -> bool:
         """Interrupt active execution on ComfyUI via POST /interrupt."""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(f"{self.base_url}/interrupt")
-                return resp.status_code == 200
+            client = self._get_client()
+            resp = await client.post(f"{self.base_url}/interrupt")
+            return resp.status_code == 200
         except Exception as err:
             logger.debug("ComfyUI interrupt failed or not reachable: %s", err)
             return False
+
+    async def upload_image(self, image_path: str, subfolder: str = "", overwrite: bool = False) -> Dict[str, Any]:
+        """
+        Upload an image to ComfyUI's input directory via POST /upload/image.
+
+        Returns the engine's filename and subfolder references for use in LoadImage nodes.
+        Raises RuntimeError if upload fails.
+        """
+        file_path = Path(image_path)
+        if not await asyncio.to_thread(file_path.is_file):
+            raise FileNotFoundError(f"Image file not found: {image_path}")
+
+        try:
+            client = self._get_client()
+
+            content = await asyncio.to_thread(file_path.read_bytes)
+            mime_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+            files = {"image": (file_path.name, content, mime_type)}
+            data = {"subfolder": subfolder, "overwrite": str(overwrite).lower(), "type": "input"}
+            resp = await client.post(f"{self.base_url}/upload/image", files=files, data=data)
+            resp.raise_for_status()
+
+            result = resp.json()
+            if (
+                not isinstance(result, dict)
+                or not isinstance(result.get("name"), str)
+                or not result["name"].strip()
+                or not isinstance(result.get("subfolder", subfolder), str)
+                or result.get("type", "input") != "input"
+            ):
+                raise RuntimeError(f"ComfyUI upload returned unexpected response: {result}")
+
+            return {
+                "name": result["name"],
+                "subfolder": result.get("subfolder", subfolder),
+                "type": result.get("type", "input"),
+            }
+        except httpx.HTTPStatusError as http_err:
+            raise RuntimeError(f"ComfyUI upload failed with status {http_err.response.status_code}: {http_err}") from http_err
+        except Exception as err:
+            raise RuntimeError(f"Failed to upload image to ComfyUI: {err}") from err
+
+    async def upload_mask(self, mask_path: str, subfolder: str = "", overwrite: bool = False) -> Dict[str, Any]:
+        """
+        Upload an independent mask file without changing its pixel/alpha data.
+
+        ComfyUI's /upload/mask edits the alpha channel of an existing image and
+        requires original_ref. Our graphs load a separate mask asset, so both
+        source images and masks use /upload/image. Mask semantics are handled
+        separately by the inpainting adapter.
+        """
+        return await self.upload_image(mask_path, subfolder=subfolder, overwrite=overwrite)
 
 
 # Global default ComfyUI client instance

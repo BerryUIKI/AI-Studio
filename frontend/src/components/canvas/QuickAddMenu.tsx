@@ -1,3 +1,4 @@
+import { useUiText } from '../../i18n/useUiText';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
@@ -160,6 +161,7 @@ export function QuickAddMenu({
   onSelectNode,
   onImportImage,
 }: QuickAddMenuProps) {
+  const ui = useUiText();
   const [nodes, setNodes] = useState<NodeDefinition[]>(FALLBACK_NODES);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -174,7 +176,7 @@ export function QuickAddMenu({
     fetch('/api/v1/nodes')
       .then((res) => {
         if (res.ok) return res.json();
-        throw new Error('Failed to load nodes');
+        throw new Error(ui("ui_failed_to_load_nodes"));
       })
       .then((data: NodeDefinition[]) => {
         if (Array.isArray(data) && data.length > 0) {
@@ -228,9 +230,9 @@ interface QuickAddItem {
     return [
       {
         key: 'action_import_image',
-        title: 'Import Image Card',
+        title: ui("ui_import_image_card"),
         category: 'image',
-        description: 'Upload an image file directly to this canvas coordinate',
+        description: ui("ui_upload_an_image_file_directly_to_this_canvas"),
         isAction: true,
         action: () => onImportImage(flowPosition),
       },
@@ -366,7 +368,7 @@ interface QuickAddItem {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search nodes or actions..."
+          placeholder={ui("ui_search_nodes_or_actions")}
           className="flex-1 bg-transparent text-xs text-slate-100 placeholder-slate-400 focus:outline-none"
         />
         {search && (
@@ -378,8 +380,7 @@ interface QuickAddItem {
           </button>
         )}
         <kbd className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700 font-mono">
-          Esc
-        </kbd>
+          {ui("ui_esc")}</kbd>
       </div>
 
       {/* Category Filter Pills */}
@@ -409,8 +410,7 @@ interface QuickAddItem {
       >
         {filteredItems.length === 0 ? (
           <div className="py-8 text-center text-xs text-slate-400">
-            No matching nodes or actions
-          </div>
+            {ui("ui_no_matching_nodes_or_actions")}</div>
         ) : (
           filteredItems.map((item, idx) => {
             const isSelected = idx === selectedIndex;
@@ -442,14 +442,14 @@ interface QuickAddItem {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold tracking-tight truncate">
-                      {item.title}
+                      {ui.lookup(item.title)}
                     </span>
                     <span className="text-[9px] uppercase tracking-wider text-slate-400 font-medium">
                       {item.category}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-400 line-clamp-1 leading-snug">
-                    {item.description}
+                    {ui.lookup(item.description)}
                   </p>
                 </div>
 
@@ -467,11 +467,11 @@ interface QuickAddItem {
       <div className="px-3 py-1.5 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between text-[10px] text-slate-400">
         <span className="flex items-center gap-1">
           <kbd className="px-1 rounded bg-slate-800 border border-slate-700 font-mono">↑↓</kbd>
-          <span>Navigate</span>
+          <span>{ui("ui_navigate")}</span>
           <kbd className="px-1 ml-1 rounded bg-slate-800 border border-slate-700 font-mono">↵</kbd>
-          <span>Select</span>
+          <span>{ui("ui_select")}</span>
         </span>
-        <span>Right-click or Double-click</span>
+        <span>{ui("ui_right_click_or_double_click")}</span>
       </div>
     </div>
   );

@@ -1,0 +1,219 @@
+import { formatDownloadDuration, formatNumber } from '../../i18n/format';
+import { useUiText } from '../../i18n/useUiText';
+import { ProgressBar } from '../ui/ProgressBar';
+import { Dialog } from '../ui/Dialog';
+import React, { useState } from 'react';
+import {
+  X,
+  Pause,
+  Play,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  HardDrive,
+  Download,
+} from 'lucide-react';
+import { useDownloadStore, DownloadTask } from '../../stores/useDownloadStore';
+
+export const DownloadManagerDrawer: React.FC = () => {
+  const ui = useUiText();
+  const isDrawerOpen = useDownloadStore((state) => state.isDrawerOpen);
+  const setDrawerOpen = useDownloadStore((state) => state.setDrawerOpen);
+  const tasks = useDownloadStore((state) => state.tasks);
+  const pauseTask = useDownloadStore((state) => state.pauseTask);
+  const resumeTask = useDownloadStore((state) => state.resumeTask);
+  const cancelTask = useDownloadStore((state) => state.cancelTask);
+
+  const [removing, setRemoving] = useState<string[]>([]);
+  const [actionError, setActionError] = useState<'downloadRemoveError' | 'downloadActionError' | null>(null);
+  const removeTask = async (taskId: string) => {
+    setRemoving((ids) => [...ids, taskId]);
+    setActionError(null);
+    try {
+      if (!await cancelTask(taskId)) setActionError('downloadRemoveError');
+    } finally {
+      setRemoving((ids) => ids.filter((id) => id !== taskId));
+    }
+  };
+
+  const controlTask = async (action: (id: string) => Promise<boolean>, taskId: string) => {
+    setActionError(null);
+    if (!await action(taskId)) setActionError('downloadActionError');
+  };
+
+  if (!isDrawerOpen) return null;
+
+  const activeCount = tasks.filter((t) => t.status === 'downloading' || t.status === 'pending').length;
+  const completedCount = tasks.filter((t) => t.status === 'completed').length;
+
+  const formatBytes = (bytes: number) => {
+    if (bytes >= 1024 * 1024 * 1024) return `${formatNumber((bytes / (1024 * 1024 * 1024)), 1, 1)} GB`;
+    if (bytes >= 1024 * 1024) return `${formatNumber((bytes / (1024 * 1024)), 1, 1)} MB`;
+    if (bytes >= 1024) return `${formatNumber((bytes / 1024), 1, 1)} KB`;
+    return `${bytes} B`;
+  };
+
+  const formatSpeed = (bps: number) => {
+    if (bps >= 1024 * 1024 * 1024) return `${formatNumber((bps / (1024 * 1024 * 1024)), 1, 1)} GB/s`;
+    if (bps >= 1024 * 1024) return `${formatNumber((bps / (1024 * 1024)), 1, 1)} MB/s`;
+    if (bps >= 1024) return `${formatNumber((bps / 1024), 1, 1)} KB/s`;
+    return `${bps} B/s`;
+  };
+
+
+  return (
+    <Dialog title={ui("ui_downloads")} onClose={() => setDrawerOpen(false)} className="fixed inset-0 z-50 flex justify-end">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
+        onClick={() => setDrawerOpen(false)}
+      />
+
+      {/* Drawer Body */}
+      <div className="relative w-full max-w-lg bg-neutral-900 border-l border-neutral-800 shadow-2xl flex flex-col h-full z-10 animate-in slide-in-from-right duration-200">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 bg-neutral-900/80">
+          <div className="flex items-center gap-2">
+            <Download className="w-5 h-5 text-blue-400" />
+            <h2 className="text-base font-semibold text-neutral-100">{ui("ui_downloads")}</h2>
+            <span className="text-xs text-neutral-400 bg-neutral-800 px-2 py-0.5 rounded-full border border-neutral-700">
+              {ui('downloadCounts', { active: formatNumber(activeCount, 0), completed: formatNumber(completedCount, 0) })}</span>
+          </div>
+          <button
+            onClick={() => setDrawerOpen(false)}
+            aria-label={ui("ui_close_downloads")}
+            className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 rounded-md transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Task List */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {actionError && <p role="alert" className="text-sm text-rose-400">{ui(actionError)}</p>}
+          {tasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-neutral-500 gap-2">
+              <Download className="w-8 h-8 opacity-40" />
+              <p className="text-sm">{ui("ui_no_download_tasks_yet")}</p>
+            </div>
+          ) : (
+            tasks.map((task: DownloadTask) => {
+              const isFinished = task.status === 'completed';
+              const isPaused = task.status === 'paused';
+              const isDownloading = task.status === 'downloading';
+              const isFailed = task.status === 'failed';
+              const remaining = formatDownloadDuration(task.eta_seconds);
+
+              return (
+                <div
+                  key={task.task_id}
+                  className="bg-neutral-800/60 border border-neutral-700/60 rounded-xl p-4 space-y-3 hover:border-neutral-600/60 transition-colors"
+                >
+                  {/* Task Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        {isFinished && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                        {isFailed && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+                        <h3 className="text-sm font-semibold text-neutral-200 truncate">
+                          {task.model_name}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-neutral-400 mt-1">
+                        <HardDrive className="w-3 h-3 text-neutral-500" />
+                        <span className="truncate">
+                          {ui("ui_target")}{task.target_engine.toUpperCase()} ({task.target_path})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isDownloading && (
+                        <button
+                          onClick={() => void controlTask(pauseTask, task.task_id)}
+                          title={ui("ui_pause")}
+                          aria-label={ui("ui_pause")}
+                          className="p-1.5 text-neutral-400 hover:text-amber-400 hover:bg-neutral-700 rounded-lg transition-colors"
+                        >
+                          <Pause className="w-4 h-4" />
+                        </button>
+                      )}
+                      {isPaused && (
+                        <button
+                          onClick={() => void controlTask(resumeTask, task.task_id)}
+                          title={ui("ui_resume")}
+                          aria-label={ui("ui_resume")}
+                          className="p-1.5 text-neutral-400 hover:text-emerald-400 hover:bg-neutral-700 rounded-lg transition-colors"
+                        >
+                          <Play className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                          disabled={removing.includes(task.task_id)}
+                          onClick={() => void removeTask(task.task_id)}
+                          title={ui(isFinished ? 'downloadRemoveHistory' : 'downloadCancelRemove')}
+                          aria-label={ui(isFinished ? 'downloadRemoveHistory' : 'downloadCancelRemove')}
+                          className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-neutral-700 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1.5">
+                    <div className="w-full bg-neutral-900 rounded-full h-1.5 overflow-hidden">
+                      <ProgressBar label={ui("ui_observed_progress")} value={task.progress_pct} className={`h-full transition-all duration-300 ${
+                          isFinished
+                            ? 'text-emerald-500'
+                            : isFailed
+                            ? 'text-rose-500'
+                            : isPaused
+                            ? 'text-amber-500'
+                            : 'text-blue-500'
+                        }`} />
+                    </div>
+
+                    {/* Progress Info Footer */}
+                    <div className="flex items-center justify-between text-xs font-mono text-neutral-400">
+                      <span>
+                        {formatNumber(task.progress_pct)}% · {formatBytes(task.downloaded_bytes)} / {formatBytes(task.total_bytes)}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {isDownloading && (
+                          <>
+                            <span className="text-emerald-400 font-medium">{formatSpeed(task.speed_bps)}</span>
+                            {remaining && (
+                              <span className="text-neutral-500">({ui('downloadRemaining', { duration: remaining })})</span>
+                            )}
+                          </>
+                        )}
+                        {task.status === 'pending' && <span>{ui('downloadPending')}</span>}
+                        {task.status === 'cancelled' && <span>{ui('downloadCancelled')}</span>}
+                        {isPaused && <span className="text-amber-400 font-medium">{ui("ui_paused")}</span>}
+                        {isFinished && <span className="text-emerald-400 font-medium">{ui("ui_installed")}</span>}
+                        {isFailed && <span className="text-rose-400 font-medium">{ui("ui_failed")}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Failure details if any */}
+                  {isFailed && task.error_message && (
+                    <p className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-md p-2">
+                      {ui('downloadFailedMessage')}
+                    </p>
+                  )}
+                  {isFailed && task.error_message && <details className="text-xs text-neutral-400 break-words">
+                    <summary>{ui('downloadDetails')}</summary>
+                    <p className="mt-2">{task.error_message}</p>
+                  </details>}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </Dialog>
+  );
+};

@@ -1,0 +1,46 @@
+{
+  "credential_saved_as_plaintext": true,
+  "unauthenticated_llm_config_returns_raw_key": true,
+  "cross_origin_simple_post_reaches_sensitive_handler": true,
+  "unknown_runner_final_status": "completed",
+  "cross_origin_websocket_accepted": true,
+  "comfy_accepts_unrelated_python_pid": true,
+  "webui_accepts_unrelated_python_pid": true,
+  "unknown_invalid_model_ready": {
+    "ready": true,
+    "architecture": "unknown",
+    "compatibility": [
+      "comfyui"
+    ]
+  },
+  "custom_model_root_lost_after_reconstruction": true,
+  "incomplete_engine_reported_completed": {
+    "phase": "completed",
+    "entrypoint_exists": false
+  },
+  "missing_asset_cache_hit_returns_success": {
+    "success": true,
+    "cached": true,
+    "actual_calls": 1,
+    "file_exists": false
+  },
+  "creative_execution_persisted_runs": 0,
+  "creative_execution_persisted_tasks": 0,
+  "webui_payload_honors_selected_model": false,
+  "cloud_provider_resolution_dispatch_mismatch": {
+    "hash_provider": "fal_ai",
+    "actual_provider": [
+      "siliconflow"
+    ]
+  },
+  "engine_update_detects_running_creative_task": [
+    false
+  ],
+  "bad_checksum_model_download_completed": {
+    "status": "completed",
+    "actual_size": 13,
+    "expected_size": 100
+  },
+  "active_install_status_read_changes_phase": "interrupted",
+  "successful_llama_stop_result": null
+}

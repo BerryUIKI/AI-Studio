@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Berry AI Studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.berry.aistudio",
   "build": {
     "frontendDist": "../dist",
@@ -19,11 +19,14 @@
         "minHeight": 700,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "decorations": false,
+        "shadow": true,
+        "url": "startup.html"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' tauri: http://127.0.0.1:* http://localhost:*; img-src 'self' tauri: asset: data: blob: http://127.0.0.1:* http://localhost:* https:; media-src 'self' data: blob: http://127.0.0.1:* http://localhost:* https:; connect-src 'self' tauri: http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:* https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'"
     }
   },
   "bundle": {

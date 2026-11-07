@@ -1,0 +1,457 @@
+import { useUiText } from '../../i18n/useUiText';
+import React, { useEffect, useState } from 'react';
+import {
+  Sparkles,
+  Upload,
+  Cloud,
+  Server,
+  Layers,
+  Play,
+  Trash2,
+  Cpu,
+  ExternalLink,
+  Power,
+  Minus,
+  Square,
+  Copy,
+  X,
+  PanelRight,
+  Folder,
+  Save,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { GpuStatusIndicator } from './GpuStatusIndicator';
+import { useProjectStore } from '../../stores/useProjectStore';
+import { useEngineStore } from '../../stores/useEngineStore';
+
+export interface ComfyStatus {
+  online: boolean;
+  port: number;
+  devices?: { name: string }[];
+}
+
+export interface RuntimeStatus {
+  installed: boolean;
+  running: boolean;
+  pid?: number;
+}
+
+export interface TitlebarProps {
+  backendOnline: boolean;
+  comfyStatus: ComfyStatus | null;
+  runtimeStatus: RuntimeStatus | null;
+  toggleRuntime: () => void;
+  onImportImage: () => void;
+  onOpenCloud: () => void;
+  onOpenManager: () => void;
+  onOpenProjectManager?: () => void;
+  showAgentPanel: boolean;
+  onToggleAgent: () => void;
+  showNodePalette: boolean;
+  onToggleNodePalette: () => void;
+  onRunWorkflow: () => void;
+  isExecuting: boolean;
+  hasNodes: boolean;
+  onClearCanvas: () => void;
+  onMaximizeChange?: (isMaximized: boolean) => void;
+  onCloseRequested?: () => void;
+}
+
+export const Titlebar: React.FC<TitlebarProps> = ({
+  backendOnline,
+  comfyStatus,
+  runtimeStatus,
+  toggleRuntime,
+  onImportImage,
+  onOpenCloud,
+  onOpenManager,
+  onOpenProjectManager,
+  showAgentPanel,
+  onToggleAgent,
+  showNodePalette,
+  onToggleNodePalette,
+  onRunWorkflow,
+  isExecuting,
+  hasNodes,
+  onClearCanvas,
+  onMaximizeChange,
+  onCloseRequested,
+}) => {
+  const ui = useUiText();
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  const currentProject = useProjectStore((s) => s.currentProject);
+  const autosaveStatus = useProjectStore((s) => s.autosaveStatus);
+  const saveProject = useProjectStore((s) => s.saveProject);
+  const setIsManagerModalOpen = useProjectStore((s) => s.setIsManagerModalOpen);
+  const configuredComfyEndpoint = useEngineStore((state) => state.instances.find((instance) =>
+    instance.connection_id === 'comfyui-managed' || instance.id === 'comfyui-managed')?.endpoint);
+  const nativeComfyUrl = configuredComfyEndpoint || (comfyStatus?.port ? `http://127.0.0.1:${comfyStatus.port}` : undefined);
+
+  useEffect(() => {
+    let unlistenResize: (() => void) | undefined;
+
+    const setupTauri = async () => {
+      try {
+        if (!isTauri()) return;
+        setIsDesktop(true);
+        const appWindow = getCurrentWindow();
+        const initialMax = await appWindow.isMaximized();
+        setIsMaximized(initialMax);
+        onMaximizeChange?.(initialMax);
+
+        unlistenResize = await appWindow.onResized(async () => {
+          const max = await appWindow.isMaximized();
+          setIsMaximized(max);
+          onMaximizeChange?.(max);
+        });
+      } catch (err) {
+        console.warn('Tauri window API not available or errored:', err);
+      }
+    };
+
+    setupTauri();
+
+    return () => {
+      if (unlistenResize) {
+        unlistenResize();
+      }
+    };
+  }, [onMaximizeChange]);
+
+  const handleMinimize = async () => {
+    try {
+      if (isTauri()) {
+        const appWindow = getCurrentWindow();
+        await appWindow.minimize();
+      }
+    } catch (e) {
+      console.error('Failed to minimize window:', e);
+    }
+  };
+
+  const handleToggleMaximize = async () => {
+    try {
+      if (isTauri()) {
+        const appWindow = getCurrentWindow();
+        await appWindow.toggleMaximize();
+        const max = await appWindow.isMaximized();
+        setIsMaximized(max);
+        onMaximizeChange?.(max);
+      }
+    } catch (e) {
+      console.error('Failed to toggle maximize:', e);
+    }
+  };
+
+  const handleClose = async () => {
+    if (onCloseRequested) {
+      onCloseRequested();
+      return;
+    }
+    try {
+      const isDesktopEnv = isTauri() || (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window));
+      if (isDesktopEnv) {
+        const { invoke } = await import('@tauri-apps/api/core');
+        try {
+          await invoke('close_app');
+          return;
+        } catch (err) {
+          console.warn('invoke close_app failed:', err);
+        }
+        const appWindow = getCurrentWindow();
+        try {
+          await appWindow.destroy();
+          return;
+        } catch {
+          await appWindow.close();
+          return;
+        }
+      } else {
+        window.close();
+      }
+    } catch (e) {
+      console.error('Failed to close window:', e);
+      try {
+        window.close();
+      } catch {
+        // Browser policies may reject script-driven window closure.
+      }
+    }
+  };
+
+  const handleTitlebarDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Only toggle maximize if clicking directly on the drag surface, not on interactive child controls
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('a') || target.closest('input')) {
+      return;
+    }
+    handleToggleMaximize();
+  };
+
+  return (
+    <header
+      data-tauri-drag-region
+      onDoubleClick={handleTitlebarDoubleClick}
+      className="h-11 border-b border-white/[0.08] bg-slate-900/90 backdrop-blur-md px-3 flex items-center justify-between z-30 select-none transition-all duration-200"
+    >
+      {/* Left: Brand Identity */}
+      <div className="flex items-center gap-2.5 min-w-max pointer-events-none" data-tauri-drag-region>
+        <div className="flex items-center justify-center w-6 h-6 rounded-lg bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 shadow-md shadow-indigo-500/20 text-white">
+          <Sparkles className="w-3.5 h-3.5" />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="hidden md:inline font-semibold text-xs tracking-wide text-slate-100">
+            {ui("ui_berry_ai_studio")}</span>
+          <span className="hidden xl:inline text-[10px] font-mono font-medium px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+            {ui("ui_v0_1_0")}</span>
+        </div>
+      </div>
+
+      {/* Project Selector & Autosave Status */}
+      <div className="flex items-center gap-1.5 ml-3" data-no-drag>
+        <button
+          onClick={onOpenProjectManager ? onOpenProjectManager : () => setIsManagerModalOpen(true)}
+          title={ui("ui_open_project_manager_switch_create_or_rename_projects")}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm max-w-[170px]"
+          data-testid="project-manager-btn"
+        >
+          <Folder className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span className="truncate">{currentProject ? currentProject.name : ui("ui_projects")}</span>
+        </button>
+
+        <button
+          onClick={() => saveProject()}
+          disabled={autosaveStatus === 'saving'}
+          title={
+            autosaveStatus === 'saving'
+              ? ui("ui_saving_project")
+              : autosaveStatus === 'dirty'
+              ? ui("ui_unsaved_changes_click_to_save_or_ctrl_s")
+              : autosaveStatus === 'error'
+              ? ui("ui_save_failed_click_to_retry")
+              : ui("ui_project_saved")
+          }
+          className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition shadow-sm ${
+            autosaveStatus === 'dirty'
+              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/30'
+              : autosaveStatus === 'saving'
+              ? 'bg-slate-800/80 text-indigo-300 border-slate-700/60'
+              : autosaveStatus === 'error'
+              ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30'
+              : 'bg-slate-800/60 hover:bg-slate-800/90 text-slate-400 border-slate-700/40'
+          }`}
+          data-testid="project-save-btn"
+        >
+          {autosaveStatus === 'saving' ? (
+            <Loader2 className="w-3 h-3 text-indigo-400 animate-spin" />
+          ) : autosaveStatus === 'dirty' ? (
+            <Save className="w-3 h-3 text-amber-400" />
+          ) : autosaveStatus === 'error' ? (
+            <AlertCircle className="w-3 h-3 text-rose-400" />
+          ) : (
+            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+          )}
+          <span className="text-[11px]">
+            {autosaveStatus === 'saving'
+              ? ui("ui_saving")
+              : autosaveStatus === 'dirty'
+              ? ui("ui_save")
+              : autosaveStatus === 'error'
+              ? ui("ui_error")
+              : ui("ui_saved")}
+          </span>
+        </button>
+      </div>
+
+      {/* Center: Action Controls */}
+      <div className="flex items-center gap-1.5" data-no-drag>
+        {/* Import Image Button */}
+        <button
+          onClick={onImportImage}
+          title={ui("ui_import_an_image_directly_onto_the_canvas")}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
+        >
+          <Upload className="w-3 h-3 text-indigo-400" />
+          <span>{ui("ui_import")}</span>
+        </button>
+
+        {/* Cloud BYOK Settings Button */}
+        <button
+          onClick={onOpenCloud}
+          aria-label={ui("ui_cloud_byok")}
+          title={ui("ui_configure_byok_cloud_providers_openai_fal_ai_siliconflow")}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
+        >
+          <Cloud className="w-3 h-3 text-sky-400" />
+          <span className="hidden xl:inline">{ui("ui_cloud_byok")}</span>
+        </button>
+
+        {/* Environment Manager Button */}
+        <button
+          onClick={onOpenManager}
+          aria-label={ui("ui_environment")}
+          title={ui("ui_open_environment_manager_engines_models_updates_core")}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 text-xs font-medium border border-slate-700/60 hover:border-slate-600 transition shadow-sm"
+        >
+          <Server className="w-3 h-3 text-purple-400" />
+          <span className="hidden xl:inline">{ui("ui_environment")}</span>
+        </button>
+
+        <details className="relative" data-no-drag>
+          <summary aria-label={ui("ui_advanced_tools")} className="cursor-pointer rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs">{ui("ui_advanced")}</summary>
+          <div className="absolute right-0 top-full mt-2 flex w-56 flex-col gap-2 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl z-50">
+            <p className="text-xs text-amber-200">{ui("ui_experimental_workflows_and_agent")}</p>
+        {/* Toggle Node Palette for Power Users */}
+        <button
+          onClick={onToggleNodePalette}
+          title={ui("ui_toggle_node_palette_node_graph_mode")}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium border transition shadow-sm ${
+            showNodePalette
+              ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500/40'
+              : 'bg-slate-800/80 hover:bg-slate-700/90 text-slate-400 border-slate-700/60'
+          }`}
+        >
+          <Layers className="w-3 h-3" />
+          <span>{ui("ui_nodes")}</span>
+        </button>
+
+        {/* Graph Execution Runner */}
+        {showNodePalette && (
+          <button
+            onClick={onRunWorkflow}
+            disabled={!hasNodes || isExecuting}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-medium shadow-md shadow-indigo-600/20 transition"
+          >
+            <Play className={`w-3 h-3 fill-current ${isExecuting ? 'animate-pulse' : ''}`} />
+            <span>{isExecuting ? ui("ui_running_3") : ui("ui_run_graph")}</span>
+          </button>
+        )}
+
+        {/* AI Agent Sidebar Toggle Button (Persistent Right Sidebar Anchor) */}
+        <div className="flex items-center ml-1 border-l border-white/[0.06] pl-1.5" data-no-drag>
+          <button
+            onClick={onToggleAgent}
+            title={ui("ui_toggle_ai_creative_agent_natural_language_workflows_comfy")}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-all duration-150 shadow-sm ${
+              showAgentPanel
+                ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 shadow-indigo-500/20 ring-1 ring-indigo-500/30'
+                : 'bg-slate-800/80 hover:bg-slate-700/90 text-slate-200 hover:text-white border-slate-700/60'
+            }`}
+          >
+            <Sparkles className={`w-3.5 h-3.5 ${showAgentPanel ? 'text-amber-400 animate-spin-slow' : 'text-amber-400'}`} />
+            <span>{ui("ui_agent")}</span>
+            <PanelRight className={`w-3 h-3 ml-0.5 transition-transform duration-150 ${showAgentPanel ? 'text-indigo-300 rotate-180' : 'text-slate-400'}`} />
+          </button>
+        </div>
+
+          </div>
+        </details>
+
+        {/* Clear Canvas */}
+        <button
+          onClick={onClearCanvas}
+          disabled={!hasNodes || isExecuting}
+          title={ui("ui_clear_canvas_objects")}
+          className="p-1 rounded-md bg-slate-800/80 hover:bg-slate-700/90 disabled:opacity-40 disabled:cursor-not-allowed text-slate-400 hover:text-rose-400 border border-slate-700/60 transition shadow-sm"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
+
+      {/* Right: Status Indicators + Window Controls */}
+      <div className="flex items-center gap-2">
+        {/* Backend & ComfyUI Status Indicators */}
+        <div className="flex items-center gap-1.5 text-xs" data-no-drag>
+          {/* Backend Connection */}
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/70 border border-white/[0.06] text-[11px]"
+            title={ui("ui_backend_service_value", { value1: backendOnline ? 'Online (Ready)' : 'Connecting or Offline' })}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                backendOnline ? 'bg-emerald-400 shadow-sm shadow-emerald-400/50' : 'bg-rose-400 animate-pulse'
+              }`}
+            />
+            <span className="hidden lg:inline text-slate-300 font-medium">{ui("ui_backend")}</span>
+          </div>
+
+          {/* ComfyUI Indicator */}
+          <div
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-800/70 border border-white/[0.06] text-[11px]"
+            title={ui("ui_comfyui_engine_value", { value1: comfyStatus?.online ? 'Online' : 'Standby' })}
+          >
+            <Cpu className={`w-3 h-3 ${comfyStatus?.online ? 'text-emerald-400' : 'text-slate-400'}`} />
+            <span className="hidden lg:inline text-slate-300">
+              {comfyStatus?.online ? ui("ui_engine_active") : ui("ui_standby")}
+            </span>
+            {comfyStatus?.online && nativeComfyUrl && (
+              <a
+                href={nativeComfyUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={ui("ui_open_comfyui_native_web_interface_in_a_new")}
+                className="p-0.5 rounded text-slate-400 hover:text-indigo-400 transition"
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+            )}
+            {runtimeStatus?.installed && (
+              <button
+                onClick={toggleRuntime}
+                title={runtimeStatus.running ? ui("ui_stop_isolated_engine") : ui("ui_start_isolated_engine")}
+                className="p-0.5 rounded hover:bg-slate-700 text-slate-400 hover:text-indigo-400 transition"
+              >
+                <Power className={`w-2.5 h-2.5 ${runtimeStatus.running ? 'text-emerald-400' : 'text-slate-400'}`} />
+              </button>
+            )}
+          </div>
+
+          {/* Real-Time GPU Status & Telemetry (LH-M4) */}
+          <GpuStatusIndicator />
+        </div>
+
+        {/* Windows / Desktop Native Window Control Buttons */}
+        {isDesktop ? (
+          <div className="flex items-center ml-1 border-l border-white/[0.06] pl-1 h-8" data-no-drag>
+            {/* Minimize */}
+            <button
+              onClick={handleMinimize}
+              title={ui("ui_minimize")}
+              className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Maximize / Restore */}
+            <button
+              onClick={handleToggleMaximize}
+              title={isMaximized ? ui("ui_restore_down") : ui("ui_maximize")}
+              className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-slate-100 hover:bg-white/[0.08] active:bg-white/[0.12] transition-colors"
+            >
+              {isMaximized ? (
+                <Copy className="w-3 h-3 rotate-180" />
+              ) : (
+                <Square className="w-3 h-3" />
+              )}
+            </button>
+
+            {/* Close */}
+            <button
+              onClick={handleClose}
+              title={ui("ui_close")}
+              className="w-8 h-8 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-rose-600 active:bg-rose-700 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </header>
+  );
+};

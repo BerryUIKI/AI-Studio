@@ -3,13 +3,20 @@
 
 param (
     [string]$Version = "0.1.0",
-    [string]$OutputDir = "$PSScriptRoot\..\dist"
+    [string]$OutputDir = "$PSScriptRoot\..\dist",
+    [string]$PythonRuntimeDir = "$PSScriptRoot\..\runtime\python-standalone",
+    [switch]$SkipPythonBuild = $false
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = (Resolve-Path "$PSScriptRoot\..").Path
+if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$') { throw "Invalid package version." }
+$OutputDir = [IO.Path]::GetFullPath($OutputDir)
 $DistName = "Berry-AI-Studio-v$Version-windows-x64"
 $TargetDir = Join-Path $OutputDir $DistName
+if (-not $TargetDir.StartsWith("$OutputDir\", [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Package staging must remain inside the explicitly selected output directory."
+}
 $ZipFile = Join-Path $OutputDir "$DistName.zip"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
@@ -17,107 +24,236 @@ Write-Host "  Berry AI Studio - Windows Portable Release Packager" -ForegroundCo
 Write-Host "  Target Package: $DistName" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# 1. Build Rust launcher
-Write-Host "`n[1/5] Building native Rust launcher (release profile)..." -ForegroundColor Yellow
+# Helper function to verify required files
+function Assert-FileExists {
+    param([string]$Path, [string]$Description)
+    if (-not (Test-Path $Path)) {
+        throw "PACKAGING FAILED: Missing required file: $Description at $Path"
+    }
+}
+
+# Step 0: Prepare standalone Python runtime (if not already done)
+Write-Host "`n[0/6] Preparing standalone Python runtime..." -ForegroundColor Yellow
+$StandalonePython = [IO.Path]::GetFullPath($PythonRuntimeDir)
+if ($SkipPythonBuild -and (Test-Path "$StandalonePython\python.exe")) {
+    Write-Host "  -> Skipping Python build (using existing runtime at $StandalonePython)" -ForegroundColor Gray
+} else {
+    & "$PSScriptRoot\prepare-standalone-python.ps1" -TargetDir $StandalonePython
+    if ($LASTEXITCODE -ne 0) {
+        throw "Standalone Python preparation failed"
+    }
+}
+
+# Verify standalone Python exists and is complete
+Assert-FileExists "$StandalonePython\python.exe" "Standalone Python executable"
+& "$PSScriptRoot\test-standalone-python.ps1" -PythonDir $StandalonePython
+Write-Host "  -> Standalone Python runtime verified" -ForegroundColor Green
+
+# Prepare pinned portable Git. Both the portable archive and the installer payload need it,
+# and the extraction is cached in the repository runtime directory so it happens only once.
+# This enables isolated engine installation without requiring system Git.
+$PortableGitUrl = "https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/PortableGit-2.56.0.2-64-bit.7z.exe"
+$PortableGitSha256 = "075e158ef8e1f0ab80b347e245405d3eca735c2dc88fd8e032e137d0ca61f61b"
+$PortableGitCache = "$RepoRoot\runtime\portable-git"
+$CachedArchive = "$RepoRoot\runtime\PortableGit-$($PortableGitSha256.Substring(0,12)).7z.exe"
+
+Write-Host "  -> Preparing portable Git..." -ForegroundColor Yellow
+try {
+    if (Test-Path "$PortableGitCache\cmd\git.exe") {
+        Write-Host "  -> Reusing cached portable Git" -ForegroundColor Gray
+    } else {
+        if (-not (Test-Path $CachedArchive) -or
+            (Get-FileHash -LiteralPath $CachedArchive -Algorithm SHA256).Hash -ne $PortableGitSha256) {
+            Write-Host "  -> Downloading portable Git..." -ForegroundColor Yellow
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $PortableGitUrl -OutFile $CachedArchive -UseBasicParsing -TimeoutSec 600
+        }
+        if ((Get-FileHash -LiteralPath $CachedArchive -Algorithm SHA256).Hash -ne $PortableGitSha256) {
+            throw "Portable Git checksum mismatch."
+        }
+        Write-Host "  -> Extracting portable Git..." -ForegroundColor Yellow
+        New-Item -ItemType Directory -Path $PortableGitCache -Force | Out-Null
+        $7z = Get-Command 7z -ErrorAction SilentlyContinue
+        if ($7z) {
+            & 7z x $CachedArchive "-o$PortableGitCache" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Portable Git extraction failed." }
+        } else {
+            $Extractor = Start-Process -FilePath $CachedArchive -ArgumentList "-o`"$PortableGitCache`"","-y" -Wait -WindowStyle Hidden -PassThru
+            if ($Extractor.ExitCode -ne 0) { throw "Portable Git extraction failed: $($Extractor.ExitCode)" }
+        }
+    }
+    Assert-FileExists "$PortableGitCache\cmd\git.exe" "Portable Git executable"
+    & "$PortableGitCache\cmd\git.exe" --version
+    if ($LASTEXITCODE -ne 0) { throw "Portable Git cannot execute." }
+} catch {
+    throw "PACKAGING FAILED: Portable Git is required for isolated engine installation: $_"
+}
+
+# Step 1: Build Frontend assets FIRST (required before Tauri can embed them)
+Write-Host "`n[1/6] Building frontend production bundle..." -ForegroundColor Yellow
+Push-Location "$RepoRoot\frontend"
+try {
+    # Check if pnpm is available
+    $null = Get-Command pnpm -ErrorAction Stop
+    pnpm install --frozen-lockfile
+    if ($LASTEXITCODE -ne 0) { throw "Frontend dependency installation failed" }
+
+    pnpm build
+    if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
+} catch {
+    throw "Frontend build error: $_"
+} finally {
+    Pop-Location
+}
+
+$FrontendDist = "$RepoRoot\frontend\dist"
+Assert-FileExists "$FrontendDist\index.html" "Frontend production dist (index.html)"
+Assert-FileExists "$FrontendDist\startup.html" "Backend-independent environment onboarding"
+Assert-FileExists "$FrontendDist\assets" "Frontend assets directory"
+Write-Host "  -> Frontend assets built successfully" -ForegroundColor Green
+
+# Step 2: Build Tauri native desktop application (embeds frontend assets)
+Write-Host "`n[2/6] Building native Tauri desktop application..." -ForegroundColor Yellow
+
+# Copy the backend without __pycache__: stale bytecode from a different interpreter version
+# must never ship in a release artifact.
+function Copy-BackendSources([string]$SourceApp, [string]$DestinationApp) {
+    New-Item -ItemType Directory -Path $DestinationApp -Force | Out-Null
+    Get-ChildItem -Path $SourceApp -Recurse -File |
+        Where-Object { $_.FullName -notmatch '\\__pycache__\\' -and $_.Extension -ne '.pyc' } |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($SourceApp.Length).TrimStart('\')
+            $target = Join-Path $DestinationApp $relative
+            $parent = Split-Path $target -Parent
+            if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+            Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+        }
+}
+
+# The NSIS installer is only the native shell unless the backend and runtime are declared
+# as bundle resources. Stage the same payload the portable archive carries so the installed
+# app supervises a real backend instead of falling back to the environment wizard.
+$InstallerStaging = "$RepoRoot\frontend\src-tauri\installer-staging"
+$InstallerPayload = "$InstallerStaging\resources"
+$StageInstallerPayload = (Test-Path "$RepoRoot\backend\app\main.py") -and (Test-Path "$StandalonePython\python.exe")
+if ($StageInstallerPayload) {
+    Write-Host "  -> Staging installer resources (backend, Python runtime, Git)..." -ForegroundColor Yellow
+    if (Test-Path $InstallerStaging) { Remove-Item -Recurse -Force $InstallerStaging }
+    Copy-BackendSources "$RepoRoot\backend\app" "$InstallerPayload\backend\app"
+    if (Test-Path "$RepoRoot\backend\requirements.txt") {
+        Copy-Item "$RepoRoot\backend\requirements.txt" -Destination "$InstallerPayload\backend\" -Force
+    }
+    New-Item -ItemType Directory -Path "$InstallerPayload\runtime" -Force | Out-Null
+    Copy-Item -Recurse "$StandalonePython" -Destination "$InstallerPayload\runtime\python" -Force
+    Copy-Item -Recurse "$PortableGitCache" -Destination "$InstallerPayload\runtime\git" -Force
+    # The backend resolves the canvas bundle relative to its own source tree, so the
+    # installed layout needs frontend/dist beside backend/ or it serves the L02 page.
+    Copy-Item -Recurse "$FrontendDist" -Destination "$InstallerPayload\frontend\dist" -Force
+    Assert-FileExists "$InstallerPayload\frontend\dist\index.html" "Installer frontend index.html"
+    Assert-FileExists "$InstallerPayload\backend\app\main.py" "Installer backend main.py"
+    Assert-FileExists "$InstallerPayload\runtime\python\python.exe" "Installer Python runtime"
+    Assert-FileExists "$InstallerPayload\runtime\git\cmd\git.exe" "Installer portable Git"
+} else {
+    Write-Host "  -> Backend or Python runtime unavailable; packaging the native shell only." -ForegroundColor Yellow
+}
+
+Push-Location "$RepoRoot\frontend"
+try {
+    # Passed through the CLI so CI builds and the plain config keep their current shape.
+    $BuildArgs = @("tauri", "build", "--bundles", "nsis")
+    if ($StageInstallerPayload) {
+        $TauriOverride = @{ bundle = @{ resources = @{ "installer-staging/resources/" = "resources/" } } } | ConvertTo-Json -Depth 4 -Compress
+        $TauriOverridePath = Join-Path $env:TEMP "berry-tauri-resources-$PID.json"
+        if (Test-Path $TauriOverridePath) { Remove-Item -Force $TauriOverridePath }
+        Set-Content -LiteralPath $TauriOverridePath -Value $TauriOverride -Encoding utf8
+        $BuildArgs += @("--config", $TauriOverridePath)
+    }
+    try {
+        & pnpm @BuildArgs
+        if ($LASTEXITCODE -ne 0) { throw "Tauri build failed" }
+    } finally {
+        if ($TauriOverridePath) { Remove-Item -Force $TauriOverridePath -ErrorAction SilentlyContinue }
+    }
+} finally {
+    Pop-Location
+}
+
+$TauriExe = "$RepoRoot\frontend\src-tauri\target\release\berry-app.exe"
+Assert-FileExists $TauriExe "Tauri native application executable"
+Write-Host "  -> Tauri application built successfully" -ForegroundColor Green
+
+# Step 3: Build Rust launcher
+Write-Host "`n[3/6] Building native Rust launcher (release profile)..." -ForegroundColor Yellow
 Push-Location "$RepoRoot\launcher"
 try {
     cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw "Rust compilation failed" }
+    if ($LASTEXITCODE -ne 0) { throw "Rust launcher compilation failed" }
 } finally {
     Pop-Location
 }
+
 $LauncherExe = "$RepoRoot\launcher\target\release\berry.exe"
-if (-not (Test-Path $LauncherExe)) {
-    throw "Compiled launcher not found at $LauncherExe"
-}
+Assert-FileExists $LauncherExe "Rust launcher executable"
+Write-Host "  -> Rust launcher built successfully" -ForegroundColor Green
 
-# 1b. Build Tauri native desktop application
-Write-Host "`n[1b/5] Building native Tauri desktop application..." -ForegroundColor Yellow
-Push-Location "$RepoRoot\frontend\src-tauri"
-try {
-    cargo build --release
-    if ($LASTEXITCODE -ne 0) { throw "Tauri compilation failed" }
-} finally {
-    Pop-Location
-}
-$TauriExe = "$RepoRoot\frontend\src-tauri\target\release\berry-app.exe"
-
-# 2. Build Frontend assets
-Write-Host "`n[2/5] Building frontend production bundle..." -ForegroundColor Yellow
-Push-Location "$RepoRoot\frontend"
-try {
-    pnpm build
-    if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
-} finally {
-    Pop-Location
-}
-$FrontendDist = "$RepoRoot\frontend\dist"
-if (-not (Test-Path "$FrontendDist\index.html")) {
-    throw "Frontend production dist not found at $FrontendDist\index.html"
-}
-
-# 3. Clean and prepare staging directory
-Write-Host "`n[3/5] Staging distribution directory at: $TargetDir" -ForegroundColor Yellow
+# Step 4: Clean and prepare staging directory
+Write-Host "`n[4/6] Staging distribution directory at: $TargetDir" -ForegroundColor Yellow
 if (Test-Path $TargetDir) {
-    Remove-Item -Recurse -Force $TargetDir
+    Remove-Item -LiteralPath $TargetDir -Recurse -Force
 }
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 New-Item -ItemType Directory -Path "$TargetDir\runtime\python" -Force | Out-Null
 New-Item -ItemType Directory -Path "$TargetDir\backend" -Force | Out-Null
 New-Item -ItemType Directory -Path "$TargetDir\frontend\dist" -Force | Out-Null
+Write-Host "  -> Staging directories created" -ForegroundColor Green
 
-# 4. Copy assets into staging directory
-Write-Host "`n[4/5] Populating release components..." -ForegroundColor Yellow
+# Step 5: Copy assets into staging directory
+Write-Host "`n[5/6] Populating release components..." -ForegroundColor Yellow
 
 # Copy launcher
 Copy-Item $LauncherExe -Destination "$TargetDir\berry.exe" -Force
 Write-Host "  -> berry.exe copied" -ForegroundColor Green
 
 # Copy Tauri desktop application
-if (Test-Path $TauriExe) {
-    Copy-Item $TauriExe -Destination "$TargetDir\Berry AI Studio.exe" -Force
-    Write-Host "  -> Berry AI Studio.exe native app copied" -ForegroundColor Green
-}
-
+Copy-Item $TauriExe -Destination "$TargetDir\Berry AI Studio.exe" -Force
+Write-Host "  -> Berry AI Studio.exe native app copied" -ForegroundColor Green
 
 # Copy frontend assets
 Copy-Item -Recurse "$FrontendDist\*" -Destination "$TargetDir\frontend\dist\" -Force
 Write-Host "  -> frontend/dist assets copied" -ForegroundColor Green
 
 # Copy backend application files
-New-Item -ItemType Directory -Path "$TargetDir\backend\app" -Force | Out-Null
-Copy-Item -Recurse "$RepoRoot\backend\app\*" -Destination "$TargetDir\backend\app\" -Force
+Copy-BackendSources "$RepoRoot\backend\app" "$TargetDir\backend\app"
 if (Test-Path "$RepoRoot\backend\requirements.txt") {
     Copy-Item "$RepoRoot\backend\requirements.txt" -Destination "$TargetDir\backend\" -Force
 }
-Write-Host "  -> backend application code copied (backend/app/main.py verified)" -ForegroundColor Green
+Assert-FileExists "$TargetDir\backend\app\main.py" "Backend main.py"
+Write-Host "  -> backend application code copied" -ForegroundColor Green
 
-# Prepare controlled Python runtime in runtime/python
-# If an isolated venv exists in backend/.venv, stage it into runtime/python
-$SourceVenv = "$RepoRoot\backend\.venv"
-if (Test-Path "$SourceVenv\Scripts\python.exe") {
-    Write-Host "  -> Bundling isolated Python runtime from backend/.venv into runtime/python..." -ForegroundColor Yellow
-    # Copy python.exe and DLLs
-    Copy-Item "$SourceVenv\Scripts\python.exe" -Destination "$TargetDir\runtime\python\python.exe" -Force
-    Copy-Item "$SourceVenv\Scripts\pythonw.exe" -Destination "$TargetDir\runtime\python\pythonw.exe" -Force -ErrorAction SilentlyContinue
-    
-    # Copy Lib and Scripts
-    if (Test-Path "$SourceVenv\Lib") {
-        Copy-Item -Recurse "$SourceVenv\Lib" -Destination "$TargetDir\runtime\python\Lib" -Force
-    }
-    if (Test-Path "$SourceVenv\Scripts") {
-        Copy-Item -Recurse "$SourceVenv\Scripts" -Destination "$TargetDir\runtime\python\Scripts" -Force
-    }
-    if (Test-Path "$SourceVenv\DLLs") {
-        Copy-Item -Recurse "$SourceVenv\DLLs" -Destination "$TargetDir\runtime\python\DLLs" -Force
-    }
-    # pyvenv.cfg
-    if (Test-Path "$SourceVenv\pyvenv.cfg") {
-        Copy-Item "$SourceVenv\pyvenv.cfg" -Destination "$TargetDir\runtime\python\pyvenv.cfg" -Force
-    }
-    Write-Host "  -> runtime/python/python.exe hermetic runtime staged successfully" -ForegroundColor Green
-} else {
-    Write-Warning "backend/.venv not found; runtime/python was not bundled. Package will rely on host Python if not provided."
+# Copy complete standalone Python runtime
+Write-Host "  -> Copying standalone Python runtime to runtime/python..." -ForegroundColor Yellow
+Copy-Item -Recurse "$StandalonePython\*" -Destination "$TargetDir\runtime\python\" -Force
+Assert-FileExists "$TargetDir\runtime\python\python.exe" "Bundled Python executable"
+
+# Verify bundled Python is self-contained (no external base_prefix references)
+& "$PSScriptRoot\test-standalone-python.ps1" -PythonDir "$TargetDir\runtime\python" -BackendDir "$TargetDir\backend"
+
+# Copy the portable Git prepared in step 0 (shared with the installer payload)
+$PortableGitPath = "$TargetDir\runtime\git"
+Write-Host "  -> Copying portable Git to runtime/git..." -ForegroundColor Yellow
+New-Item -ItemType Directory -Path $PortableGitPath -Force | Out-Null
+Copy-Item -Recurse "$PortableGitCache\*" -Destination $PortableGitPath -Force
+Assert-FileExists "$PortableGitPath\cmd\git.exe" "Portable Git executable"
+& "$PortableGitPath\cmd\git.exe" --version
+if ($LASTEXITCODE -ne 0) { throw "Bundled Git cannot execute." }
+
+# Copy embedded llama-server runtime if present
+$SourceLlamaServer = "$RepoRoot\runtime\llama_server"
+if (Test-Path "$SourceLlamaServer\llama-server.exe") {
+    Write-Host "  -> Bundling embedded llama-server binary into runtime/llama_server..." -ForegroundColor Yellow
+    New-Item -ItemType Directory -Path "$TargetDir\runtime\llama_server" -Force | Out-Null
+    Copy-Item -Recurse "$SourceLlamaServer\*" -Destination "$TargetDir\runtime\llama_server\" -Force
+    Write-Host "  -> runtime/llama_server/llama-server.exe staged successfully" -ForegroundColor Green
 }
 
 # Create Berry.bat launcher wrapper
@@ -175,16 +311,61 @@ https://github.com/BerryUIKI/AI-Studio
 Set-Content -Path "$TargetDir\README.txt" -Value $ReadmeContent -Encoding ASCII
 Write-Host "  -> README.txt created" -ForegroundColor Green
 
-# 5. Compress package into .zip
-Write-Host "`n[5/5] Compressing package into: $ZipFile" -ForegroundColor Yellow
+# Step 6: Final validation before compression
+Write-Host "`n[6/6] Running final package validation..." -ForegroundColor Yellow
+
+$ValidationErrors = @()
+
+# Check all critical executables
+$CriticalFiles = @(
+    "$TargetDir\berry.exe",
+    "$TargetDir\Berry AI Studio.exe",
+    "$TargetDir\Berry.bat",
+    "$TargetDir\README.txt",
+    "$TargetDir\runtime\python\python.exe",
+    "$TargetDir\runtime\git\cmd\git.exe",
+    "$TargetDir\frontend\dist\index.html",
+    "$TargetDir\frontend\dist\startup.html",
+    "$TargetDir\backend\app\main.py"
+)
+
+foreach ($file in $CriticalFiles) {
+    if (-not (Test-Path $file)) {
+        $ValidationErrors += "Missing critical file: $file"
+    }
+}
+
+# A copied host venv is invalid; do not hide it by deleting its configuration.
+$PyvenvCfg = Get-ChildItem -Path "$TargetDir\runtime\python" -Filter "pyvenv.cfg" -ErrorAction SilentlyContinue
+if ($PyvenvCfg) {
+    throw "PACKAGING FAILED: runtime/python must be a full standalone interpreter, not a venv."
+}
+
+# Report validation results
+if ($ValidationErrors.Count -gt 0) {
+    Write-Host "`nVALIDATION FAILED:" -ForegroundColor Red
+    foreach ($error in $ValidationErrors) {
+        Write-Host "  X $error" -ForegroundColor Red
+    }
+    throw "Package validation failed with $($ValidationErrors.Count) error(s)"
+}
+
+Write-Host "  -> All critical files present" -ForegroundColor Green
+Write-Host "  -> No developer-machine paths detected" -ForegroundColor Green
+
+# Compress package into .zip
+Write-Host "`nCompressing package into: $ZipFile" -ForegroundColor Yellow
 if (Test-Path $ZipFile) {
     Remove-Item -Force $ZipFile
 }
-Compress-Archive -Path "$TargetDir" -DestinationPath $ZipFile -CompressionLevel Optimal
-Write-Host "  -> $ZipFile generated successfully ($( (Get-Item $ZipFile).Length / 1MB | ForEach-Object { [math]::Round($_, 1) } ) MB)" -ForegroundColor Green
+Compress-Archive -Path "$TargetDir\*" -DestinationPath $ZipFile -CompressionLevel Optimal
+
+$ZipSizeMB = (Get-Item $ZipFile).Length / 1MB | ForEach-Object { [math]::Round($_, 1) }
+Write-Host "  -> $ZipFile generated successfully ($ZipSizeMB MB)" -ForegroundColor Green
 
 Write-Host "`n==========================================================" -ForegroundColor Cyan
 Write-Host "  Packaging Complete!" -ForegroundColor Green
 Write-Host "  Directory: $TargetDir" -ForegroundColor Green
 Write-Host "  Archive  : $ZipFile" -ForegroundColor Green
+Write-Host "  Next: Run smoke-test-package.ps1 to verify" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan

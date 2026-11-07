@@ -11,11 +11,16 @@ import hashlib
 import json
 import logging
 import os
-import struct
+import threading
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from app.core.content_identity import hash_file
+from app.core.model_validation import identify_components, inspect_model
 from app.runtime.supervisor import get_default_engine_dir
+from app.storage.config_files import write_json_atomic
+from app.core.workers import run_blocking
 from app.schemas.model import (
     ModelArchitecture,
     ModelCategory,
@@ -35,22 +40,10 @@ def parse_safetensors_header(file_path: Path) -> Tuple[Dict[str, Any], Dict[str,
       [0..7]: 8-byte uint64 little-endian representing header size N
       [8..8+N]: UTF-8 JSON header containing metadata and tensor specs
     """
-    try:
-        with open(file_path, "rb") as f:
-            length_bytes = f.read(8)
-            if len(length_bytes) < 8:
-                return {}, {}
-            header_len = struct.unpack("<Q", length_bytes)[0]
-            if header_len <= 0 or header_len > 100 * 1024 * 1024:  # sanity limit 100MB
-                return {}, {}
-            header_bytes = f.read(header_len)
-            header_json = json.loads(header_bytes.decode("utf-8", errors="replace"))
-
-            metadata = header_json.get("__metadata__", {})
-            return header_json, metadata
-    except Exception as e:
-        logger.debug(f"Failed to parse safetensors header for {file_path}: {e}")
+    inspection = inspect_model(file_path)
+    if inspection.integrity != "structurally-valid":
         return {}, {}
+    return inspection.header, inspection.metadata
 
 
 def detect_architecture(
@@ -117,10 +110,10 @@ def detect_category(file_path: Path, header: Dict[str, Any]) -> ModelCategory:
         return ModelCategory.CHECKPOINT
 
     # Inspect tensor structure
-    keys = list(header.keys())
+    keys = [k for k in header if k != "__metadata__"]
     if any(k.startswith("lora_") or "lora_up" in k or "lora_down" in k for k in keys):
         return ModelCategory.LORA
-    if all(k.startswith("first_stage_model.") or k.startswith("encoder.") or k.startswith("decoder.") for k in keys if k != "__metadata__"):
+    if keys and all(k.startswith("first_stage_model.") or k.startswith("encoder.") or k.startswith("decoder.") for k in keys if k != "__metadata__"):
         return ModelCategory.VAE
     if any("diffusion_model" in k for k in keys):
         return ModelCategory.CHECKPOINT
@@ -134,8 +127,28 @@ class ModelStore:
     def __init__(self, engine_dir: Optional[Path] = None) -> None:
         self.engine_dir = engine_dir or get_default_engine_dir()
         self.roots: Dict[str, ModelRoot] = {}
-        self._cached_records: Dict[str, Tuple[float, int, ModelRecord]] = {}  # path -> (mtime, size, record)
+        self._cached_records: Dict[str, Tuple[Tuple[int, int], int, ModelRecord]] = {}  # path -> (times, size, record)
+        self._inventory: List[ModelRecord] = []
+        self._inventory_updated = 0.0
+        self._scan_lock = threading.RLock()
+        self._async_scan_locks: Dict[asyncio.AbstractEventLoop, asyncio.Lock] = {}
         self._init_default_roots()
+        self.config_file = self.engine_dir / "model_roots.json"
+        if self.config_file.is_file():
+            try:
+                items = json.loads(self.config_file.read_text(encoding="utf-8"))
+                if not isinstance(items, list):
+                    raise ValueError("Model roots must be a list")
+                restored = [ModelRoot.model_validate(item) for item in items]
+                self.roots = {}
+                for root in restored:
+                    root.exists = Path(root.path).is_dir()
+                    self.roots[root.id] = root
+            except (OSError, ValueError, TypeError) as error:
+                logger.warning("Could not restore model roots: %s", error)
+
+    def _save_roots(self) -> None:
+        write_json_atomic(self.config_file, [root.model_dump() for root in self.roots.values()])
 
     def _init_default_roots(self) -> None:
         """Register default model directories for ComfyUI and WebUI."""
@@ -150,6 +163,10 @@ class ModelStore:
             self.add_root("webui_internal", str(webui_models), "SD WebUI Models", engine_type="webui")
 
     def add_root(self, root_id: str, path_str: str, label: str, engine_type: Optional[str] = None) -> ModelRoot:
+        with self._scan_lock:
+            return self._add_root(root_id, path_str, label, engine_type)
+
+    def _add_root(self, root_id: str, path_str: str, label: str, engine_type: Optional[str] = None) -> ModelRoot:
         """Register a directory to scan for models."""
         p = Path(path_str).resolve()
         root = ModelRoot(
@@ -160,6 +177,9 @@ class ModelStore:
             exists=p.is_dir(),
         )
         self.roots[root_id] = root
+        self._inventory_updated = 0.0
+        if hasattr(self, "config_file"):
+            self._save_roots()
         return root
 
     def list_roots(self) -> List[ModelRoot]:
@@ -172,7 +192,7 @@ class ModelStore:
         """Scan a single model file using header inspection."""
         try:
             stat = file_path.stat()
-            mtime = stat.st_mtime
+            mtime = (stat.st_mtime_ns, stat.st_ctime_ns)
             size_bytes = stat.st_size
             path_str = str(file_path)
 
@@ -183,31 +203,22 @@ class ModelStore:
                     return record
 
             ext = file_path.suffix.lower()
-            header: Dict[str, Any] = {}
-            metadata: Dict[str, Any] = {}
-
-            if ext == ".safetensors":
-                header, metadata = parse_safetensors_header(file_path)
-
+            inspection = inspect_model(file_path)
+            header = inspection.header if inspection.integrity == "structurally-valid" else {}
+            metadata = inspection.metadata if header else {}
             category = detect_category(file_path, header)
             architecture = detect_architecture(file_path, header, metadata)
-
-            # Engine compatibility
-            engine_compat = ["comfyui"]
-            if ext in {".safetensors", ".ckpt"}:
-                engine_compat.append("webui")
-
-            # Missing dependencies / guidance
-            dependencies: List[str] = []
-            guidance: Optional[str] = None
-
-            if architecture == ModelArchitecture.FLUX:
-                dependencies = ["clip_l", "t5xxl", "ae (vae)"]
-                guidance = "Flux Schnell/Dev requires separate CLIP/T5 text encoders and VAE if unbundled."
-            elif architecture == ModelArchitecture.SDXL:
-                guidance = "SDXL model operates best with 1024x1024 resolution."
-
-            record_id = hashlib.sha256(f"{path_str}:{size_bytes}".encode("utf-8")).hexdigest()[:16]
+            recognized = bool(header) and detect_architecture(Path("model"), header, metadata) != ModelArchitecture.UNKNOWN
+            possible_engines: List[str] = []
+            if recognized and ext == ".safetensors":
+                possible_engines = ["comfyui"]
+                if architecture in {ModelArchitecture.SD15, ModelArchitecture.SD21, ModelArchitecture.SDXL}:
+                    possible_engines.append("webui")
+            content_hash = hash_file(file_path)
+            after = file_path.stat()
+            if (after.st_mtime_ns, after.st_ctime_ns, after.st_size) != (stat.st_mtime_ns, stat.st_ctime_ns, size_bytes):
+                raise ValueError("Model changed during inspection; rescan after the write completes")
+            record_id = hashlib.sha256(f"{path_str}:{content_hash}".encode("utf-8")).hexdigest()[:16]
             size_mb = round(size_bytes / (1024 * 1024), 2)
 
             record = ModelRecord(
@@ -219,10 +230,13 @@ class ModelStore:
                 format=ext.lstrip("."),
                 size_bytes=size_bytes,
                 size_mb=size_mb,
-                engine_compatibility=engine_compat,
-                is_ready=len(dependencies) == 0,
-                missing_dependencies=dependencies,
-                guidance=guidance,
+                content_hash=content_hash,
+                integrity_status=inspection.integrity,
+                format_recognized=inspection.format_recognized,
+                architecture_status="recognized" if recognized else "unverified",
+                possible_engines=possible_engines,
+                available_components=identify_components(header),
+                guidance=inspection.reason or "File structure inspected; engine compatibility has not been tested.",
                 metadata={k: v for k, v in metadata.items() if isinstance(v, (str, int, float, bool))},
             )
 
@@ -235,6 +249,25 @@ class ModelStore:
 
     def scan_all_roots(self) -> List[ModelRecord]:
         """Scan all active root directories and return discovered models."""
+        with self._scan_lock:
+            records = self._scan_all_roots()
+            available = {component for record in records for component in record.available_components}
+            for record in records:
+                if record.architecture == ModelArchitecture.FLUX and record.architecture_status == "recognized":
+                    record.missing_dependencies = [name for name in ("clip_l", "t5xxl", "ae (vae)") if name not in available]
+                    record.dependency_status = "missing" if record.missing_dependencies else "present"
+                    record.guidance = (
+                        "FLUX component tensor families are present in the catalog; mounting and engine inference remain unverified."
+                        if not record.missing_dependencies else
+                        "FLUX requires CLIP-L, T5-XXL and an autoencoder. Missing from catalog: " + ", ".join(record.missing_dependencies)
+                    )
+            self._inventory = records
+            self._inventory_updated = time.monotonic()
+            seen = {record.file_path for record in records}
+            self._cached_records = {path: cached for path, cached in self._cached_records.items() if path in seen}
+            return records
+
+    def _scan_all_roots(self) -> List[ModelRecord]:
         discovered: List[ModelRecord] = []
         for root in self.roots.values():
             root_path = Path(root.path)
@@ -263,15 +296,33 @@ class ModelStore:
         return self.scan_all_roots()
 
     def remove_root(self, root_id: str) -> bool:
+        with self._scan_lock:
+            return self._remove_root(root_id)
+
+    def _remove_root(self, root_id: str) -> bool:
         """Remove a registered model scan root without deleting files (L10)."""
         if root_id in self.roots:
             del self.roots[root_id]
+            self._inventory_updated = 0.0
+            self._save_roots()
             return True
         return False
 
-    async def scan_all_roots_async(self) -> List[ModelRecord]:
+    def inventory_count(self) -> int:
+        """Routine status uses the last completed inventory instead of scanning directories."""
+        return len(self._inventory)
+
+    async def scan_all_roots_async(self, force: bool = False) -> List[ModelRecord]:
         """Asynchronously scan all model roots."""
-        return await asyncio.to_thread(self.scan_all_roots)
+        loop = asyncio.get_running_loop()
+        lease = self._async_scan_locks.setdefault(loop, asyncio.Lock())
+        await lease.acquire()
+        if not force and time.monotonic() - self._inventory_updated < 5:
+            lease.release()
+            return list(self._inventory)
+        scan = asyncio.create_task(run_blocking(self.scan_all_roots))
+        scan.add_done_callback(lambda task: lease.release())
+        return await asyncio.shield(scan)
 
 
 # Global model store singleton

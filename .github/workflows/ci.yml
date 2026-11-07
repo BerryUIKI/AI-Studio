@@ -6,6 +6,25 @@ on:
     branches: [dev, main]
 
 jobs:
+  portable-core:
+    name: Portable Core (${{ matrix.os }})
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      BERRY_DATA_DIR: ${{ github.workspace }}/.review-data
+      AI_WORKFLOW_ENGINE_DIR: ${{ github.workspace }}/.review-engines
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Validate portable execution, persistence and release evidence gate
+        run: python -m pytest backend/tests/test_dag_cache.py backend/tests/test_workflow_spec.py backend/tests/test_task_store.py backend/tests/test_task_events.py backend/tests/test_content_identity.py backend/tests/test_release_evidence_gate.py -q
+
   backend-tests:
     name: Backend Tests
     runs-on: windows-latest
@@ -31,6 +50,10 @@ jobs:
           cd backend
           pytest -v
 
+      - name: Verify standalone Python relocation and engine bootstrap
+        shell: pwsh
+        run: ./scripts/prepare-standalone-python.ps1 -TargetDir "$pwd/.review-runtime/ci-python"
+
   frontend-build:
     name: Frontend Build & Typecheck
     runs-on: ubuntu-latest
@@ -42,22 +65,30 @@ jobs:
         with:
           version: 9
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: "pnpm"
-          cache-dependency-path: frontend/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        run: |
-          cd frontend
-          pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
+      - name: Run typecheck
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test
+
+      - name: Verify release evidence source boundary
+        run: node --test scripts/tests/release-evidence-source.test.cjs
 
       - name: Build frontend
-        run: |
-          cd frontend
-          pnpm build
+        run: pnpm build
 
   launcher-build:
     name: Rust Launcher Build & Test
@@ -86,3 +117,21 @@ jobs:
           cd launcher
           cargo build --release
           cargo test
+          cargo test --manifest-path ../desktop-runtime/Cargo.toml --locked
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Build bundled onboarding assets
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Compile and test the native desktop onboarding
+        run: cargo test --manifest-path frontend/src-tauri/Cargo.toml --locked --features custom-protocol
+      - name: Verify Tauri CLI packaging compatibility
+        run: pnpm tauri build --no-bundle --debug --ci

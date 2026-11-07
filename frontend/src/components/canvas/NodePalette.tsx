@@ -1,9 +1,10 @@
+import { useUiText } from '../../i18n/useUiText';
 import { useEffect, useState } from 'react';
-import { Plus, Type, Image as ImageIcon, Sparkles, Monitor } from 'lucide-react';
+import { Plus, Type, Image as ImageIcon, Sparkles, Monitor, type LucideIcon } from 'lucide-react';
 import { NodeDefinition, NodeCategory } from '../../types/workflow';
 import { useCanvasStore } from '../../stores/useCanvasStore';
 
-const CATEGORY_ICONS: Record<string, any> = {
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
   input: Type,
   text: Sparkles,
   image: ImageIcon,
@@ -11,6 +12,7 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 export function NodePalette() {
+  const ui = useUiText();
   const [nodes, setNodes] = useState<NodeDefinition[]>([]);
   const addNode = useCanvasStore((state) => state.addNode);
 
@@ -26,10 +28,9 @@ export function NodePalette() {
   return (
     <aside className="w-64 border-r border-slate-800/80 bg-slate-900/60 backdrop-blur-md flex flex-col h-full z-10 select-none">
       <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
-        <h2 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">Node Palette</h2>
+        <h2 className="text-xs font-semibold text-slate-200 uppercase tracking-wider">{ui("ui_node_palette")}</h2>
         <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
-          {nodes.length} Nodes
-        </span>
+          {nodes.length} {ui("ui_nodes")}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-4">

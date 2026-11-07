@@ -121,6 +121,7 @@ def test_failure_propagation_blocks_dependents():
     }
 
     statuses = {}
+    final_status = None
     with client.websocket_connect("/ws/workflow/run") as ws:
         ws.send_text(json.dumps(graph_payload))
         while True:
@@ -130,13 +131,14 @@ def test_failure_propagation_blocks_dependents():
                 if event.get("type") == "NODE_STATUS":
                     statuses[event["node_id"]] = event["status"]
                 elif event.get("type") == "GRAPH_FINISHED":
-                    assert event.get("status") == "failed"
+                    final_status = event.get("status")
                     break
             except Exception:
                 break
 
     assert statuses.get("n1") == "error"
     assert statuses.get("n2") == "cancelled"
+    assert final_status == "failed"
 
 
 # ---------------------------------------------------------------------------

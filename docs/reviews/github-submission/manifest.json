@@ -1,0 +1,550 @@
+[
+  {
+    "finding": "F01",
+    "title": "Security: Protect stored credentials and make API secret fields write-only",
+    "labels": [
+      "security",
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F01.md"
+  },
+  {
+    "finding": "F02",
+    "title": "Security: Enforce a session boundary for local control APIs and WebSockets",
+    "labels": [
+      "security",
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F02.md"
+  },
+  {
+    "finding": "F03",
+    "title": "Bug: Verify engine process ownership before terminating a stored PID",
+    "labels": [
+      "bug",
+      "security",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F03.md"
+  },
+  {
+    "finding": "F04",
+    "title": "Bug: Save and reopen the complete canvas as a durable project",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F04.md"
+  },
+  {
+    "finding": "F05",
+    "title": "Bug: Transfer source images and masks into ComfyUI before execution",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F05.md"
+  },
+  {
+    "finding": "F06",
+    "title": "Bug: Normalize painted inpainting masks for each provider",
+    "labels": [
+      "bug",
+      "backend",
+      "frontend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code, checked against upstream semantics",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F06.md"
+  },
+  {
+    "finding": "F07",
+    "title": "Bug: Connect downloaded and shared model directories to engine search paths",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F07.md"
+  },
+  {
+    "finding": "F08",
+    "title": "Bug: Correct managed WebUI launch flags and isolated Python compatibility",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F08.md"
+  },
+  {
+    "finding": "F09",
+    "title": "Bug: Apply the selected WebUI checkpoint and record the effective model",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F09.md"
+  },
+  {
+    "finding": "F10",
+    "title": "Bug: Use one provider resolution plan for dispatch, hashing, and provenance",
+    "labels": [
+      "bug",
+      "backend",
+      "architecture",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F10.md"
+  },
+  {
+    "finding": "F11",
+    "title": "Bug: Invalidate cached results whose output assets are missing",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F11.md"
+  },
+  {
+    "finding": "F12",
+    "title": "Bug: Validate engine installation completion and preserve live install state",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F12.md"
+  },
+  {
+    "finding": "F13",
+    "title": "Bug: Verify model download integrity before promoting an artifact",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F13.md"
+  },
+  {
+    "finding": "F14",
+    "title": "Bug: Protect active creative tasks during engine updates and restore full runtimes",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F14.md"
+  },
+  {
+    "finding": "F15",
+    "title": "Bug: Respect shutdown refusal, process ownership, and Keep Running",
+    "labels": [
+      "bug",
+      "backend",
+      "frontend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F15.md"
+  },
+  {
+    "finding": "F16",
+    "title": "Bug: Resume workflow subscriptions without resubmitting execution on reconnect",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F16.md"
+  },
+  {
+    "finding": "F17",
+    "title": "Bug: Fail workflows with missing runners and validate execution contracts",
+    "labels": [
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F17.md"
+  },
+  {
+    "finding": "F18",
+    "title": "Bug: Package a complete portable runtime and verify clean-machine startup",
+    "labels": [
+      "bug",
+      "backend",
+      "architecture",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code + Risk",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F18.md"
+  },
+  {
+    "finding": "F19",
+    "title": "Security: Validate uploaded media and isolate active content from the app origin",
+    "labels": [
+      "security",
+      "bug",
+      "backend",
+      "critical"
+    ],
+    "priority": "P1",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F19.md"
+  },
+  {
+    "finding": "F20",
+    "title": "Enhancement: Persist task transitions and generation history across restart",
+    "labels": [
+      "enhancement",
+      "backend",
+      "architecture"
+    ],
+    "priority": "P2",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F20.md"
+  },
+  {
+    "finding": "F21",
+    "title": "Enhancement: Return task IDs at submission and expose accurate cancellation states",
+    "labels": [
+      "enhancement",
+      "backend",
+      "frontend"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F21.md"
+  },
+  {
+    "finding": "F22",
+    "title": "Refactor: Share a canonical execution and cache-validity contract with planning",
+    "labels": [
+      "architecture",
+      "backend",
+      "enhancement"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F22.md"
+  },
+  {
+    "finding": "F23",
+    "title": "Bug: Use actual image dimensions and honor the selected upscale factor",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F23.md"
+  },
+  {
+    "finding": "F24",
+    "title": "Bug: Restore complete canvas transactions with undo and redo",
+    "labels": [
+      "bug",
+      "frontend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F24.md"
+  },
+  {
+    "finding": "F25",
+    "title": "Bug: Persist engine configuration before showing a successful save",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F25.md"
+  },
+  {
+    "finding": "F26",
+    "title": "Bug: Make Uninstall and Open Folder perform their advertised actions",
+    "labels": [
+      "bug",
+      "frontend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F26.md"
+  },
+  {
+    "finding": "F27",
+    "title": "Bug: Resolve lifecycle and execution through the selected engine connection",
+    "labels": [
+      "bug",
+      "backend",
+      "frontend",
+      "architecture"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F27.md"
+  },
+  {
+    "finding": "F28",
+    "title": "Bug: Persist library and connection settings and apply selected mirrors",
+    "labels": [
+      "bug",
+      "backend",
+      "frontend"
+    ],
+    "priority": "P2",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F28.md"
+  },
+  {
+    "finding": "F29",
+    "title": "Bug: Preserve unknown model compatibility and validate readiness dependencies",
+    "labels": [
+      "bug",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Reproduced",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F29.md"
+  },
+  {
+    "finding": "F30",
+    "title": "Enhancement: Connect Model Hub discovery to installation, selection, and truthful estimates",
+    "labels": [
+      "enhancement",
+      "frontend",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Code + Browser",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F30.md"
+  },
+  {
+    "finding": "F31",
+    "title": "Enhancement: Guide first-time users to a validated first image",
+    "labels": [
+      "enhancement",
+      "frontend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Browser + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F31.md"
+  },
+  {
+    "finding": "F32",
+    "title": "Enhancement: Prioritize the verified image workflow in first-release navigation",
+    "labels": [
+      "enhancement",
+      "frontend",
+      "ui/ux",
+      "architecture"
+    ],
+    "priority": "P2",
+    "evidence": "Product assessment",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F32.md"
+  },
+  {
+    "finding": "F33",
+    "title": "Bug: Report observed progress, real engine logs, and service health",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Code + Browser",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F33.md"
+  },
+  {
+    "finding": "F34",
+    "title": "Bug: Preserve Agent conversation identity and place outputs in project context",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F34.md"
+  },
+  {
+    "finding": "F35",
+    "title": "Bug: Complete embedded LLM lifecycle results and readiness checks",
+    "labels": [
+      "bug",
+      "backend",
+      "frontend"
+    ],
+    "priority": "P2",
+    "evidence": "Reproduced + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F35.md"
+  },
+  {
+    "finding": "F36",
+    "title": "Bug: Render and export managed media using verified MIME and format metadata",
+    "labels": [
+      "bug",
+      "frontend",
+      "backend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F36.md"
+  },
+  {
+    "finding": "F37",
+    "title": "Enhancement: Improve canvas information hierarchy and resilient visual feedback",
+    "labels": [
+      "enhancement",
+      "frontend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Browser; qualitative assessment",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F37.md"
+  },
+  {
+    "finding": "F38",
+    "title": "Enhancement: Standardize accessible dialogs and scope canvas keyboard shortcuts",
+    "labels": [
+      "accessibility",
+      "enhancement",
+      "frontend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Browser + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F38.md"
+  },
+  {
+    "finding": "F39",
+    "title": "Enhancement: Align advertised language support with complete workflow translations",
+    "labels": [
+      "enhancement",
+      "frontend",
+      "ui/ux"
+    ],
+    "priority": "P2",
+    "evidence": "Browser + Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F39.md"
+  },
+  {
+    "finding": "F40",
+    "title": "Performance: Move blocking inventory and hardware work off async request paths",
+    "labels": [
+      "performance",
+      "backend"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F40.md"
+  },
+  {
+    "finding": "F41",
+    "title": "Performance: Limit store subscriptions, polling, and inactive-view effects",
+    "labels": [
+      "performance",
+      "frontend"
+    ],
+    "priority": "P2",
+    "evidence": "Code + Build",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F41.md"
+  },
+  {
+    "finding": "F42",
+    "title": "Refactor: Consolidate typed execution, lifecycle, and API contracts",
+    "labels": [
+      "architecture",
+      "enhancement",
+      "backend",
+      "frontend"
+    ],
+    "priority": "P2",
+    "evidence": "Code",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F42.md"
+  },
+  {
+    "finding": "F43",
+    "title": "Test: Gate release verification on current-head end-to-end acceptance",
+    "labels": [
+      "enhancement",
+      "documentation",
+      "backend",
+      "frontend"
+    ],
+    "priority": "P2",
+    "evidence": "Code + Validation",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F43.md"
+  },
+  {
+    "finding": "F44",
+    "title": "Validation: Verify native capabilities and CSP on the production backend origin",
+    "labels": [
+      "question",
+      "security",
+      "frontend",
+      "architecture"
+    ],
+    "priority": "P2",
+    "evidence": "Risk",
+    "body_file": "D:\\dev\\AI-Studio\\docs\\reviews\\github-submission\\F44.md"
+  }
+]
