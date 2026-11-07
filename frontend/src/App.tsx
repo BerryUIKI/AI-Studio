@@ -420,7 +420,7 @@ export default function App() {
                   <main className="flex-1 relative w-full h-full">
                     <FlowCanvas />
                     <FirstImageGuide
-                      onCloudSetup={() => setShowCloudModal(true)}
+                      onCloudSetup={openModelAccess}
                       onLocalSetup={() => { setManagerInitialTab('engines'); setShowManagerModal(true); }}
                       onOpenModels={() => { setManagerInitialTab('models'); setShowManagerModal(true); }}
                     />
