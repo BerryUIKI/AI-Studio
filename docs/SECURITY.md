@@ -215,6 +215,19 @@ This ensures:
 4. **Use subprocess isolation** for engine execution (dedicated user accounts in production)
 5. **Never execute user-provided Python/JavaScript** in the backend process
 
+### Credential Storage (BYOK API keys)
+
+- **Windows**: the credential payload is encrypted at rest with DPAPI
+  (`CryptProtectData`); `credentials.json` holds an encrypted envelope only.
+- **Linux/macOS**: the credential file holds plaintext JSON protected by
+  enforced `0600` permissions. A chmod failure aborts the save with an
+  actionable error instead of storing a world-readable file. This is a
+  single-user local-file scheme; native OS keychain integration
+  (macOS Keychain, libsecret) remains a production-hardening item.
+- **All platforms**: API responses, logs, task records and project data carry
+  only redacted keys; secret fields in the UI are write-only (an empty or
+  redacted submission keeps the stored key).
+
 ### Rust/Tauri
 
 1. **Validate command payloads** before calling window APIs
