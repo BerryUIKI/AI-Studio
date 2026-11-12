@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from app.main import app
+from app.core.session import session_manager
 from app.core.task_registry import TaskLifecycleRegistry
 from app.storage.db import DatabaseManager
 from app.storage.task_store import TaskStore
@@ -26,7 +27,7 @@ async def test_cancellation_transports_share_run_state_and_unique_route(tmp_path
             await store.create_run(RunRecord(id=identity))
         with patch('app.main.task_store', store), patch('app.main.task_registry', registry), \
              patch('app.main.active_cancellations', events), patch('app.main.creative_tasks.cancel', AsyncMock(return_value=False)):
-            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://localhost:8000') as client:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://localhost:8000', headers={'X-Session-Token': session_manager.get_token()}) as client:
                 for identity, endpoint in [('legacy', '/api/v1/workflow/cancel/legacy'), ('task', '/api/v1/tasks/task/cancel')]:
                     response = await client.post(endpoint)
                     assert response.status_code == 200

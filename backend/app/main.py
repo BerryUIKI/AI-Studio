@@ -44,7 +44,7 @@ from app.schemas.workflow_analysis import (
     WorkflowValidationReport,
     WorkflowRepairResult,
 )
-from app.core.session import session_manager, ALLOWED_ORIGINS
+from app.core.session import session_manager, should_require_token, ALLOWED_ORIGINS
 from app.core.task_registry import task_registry
 from app.runtime.open_directory import open_directory
 from app.runtime.uninstall import uninstall_managed
@@ -232,13 +232,19 @@ async def security_boundary_middleware(request: Request, call_next):
             content={"detail": "Cross-origin request forbidden from untrusted origin"},
         )
 
-    # 2. Check session token if supplied
-    token = session_manager.extract_token(request)
-    if token and not session_manager.is_valid_token(token):
-        return JSONResponse(
-            status_code=401,
-            content={"detail": "Invalid or expired session token"},
-        )
+    # 2. Sensitive reads and mutations require the per-launch session token
+    if should_require_token(request.url.path, request.method):
+        token = session_manager.extract_token(request)
+        if not token:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Session token required for this operation"},
+            )
+        if not session_manager.is_valid_token(token):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or expired session token"},
+            )
 
     response = await call_next(request)
     return response
@@ -255,8 +261,16 @@ async def health_check() -> dict[str, str]:
 
 
 @app.get("/api/v1/auth/session")
-async def get_session_token() -> dict[str, str]:
-    """Get active session token for the current app launch."""
+async def get_session_token(request: Request) -> dict[str, str]:
+    """Deliver the per-launch token to trusted dev origins or local processes.
+
+    The packaged app receives the token through the injected index page instead;
+    this endpoint exists for the vite dev-server flow where the page is served
+    by a different origin that the backend already trusts.
+    """
+    origin = request.headers.get("origin")
+    if origin and not session_manager.is_origin_allowed(origin):
+        raise HTTPException(status_code=403, detail="Cross-origin request forbidden")
     return {"session_token": session_manager.get_token()}
 
 
@@ -266,7 +280,6 @@ async def system_info() -> dict[str, object]:
     return {
         "name": "Berry AI Studio",
         "version": "0.1.0",
-        "session_token": session_manager.get_token(),
         "runners": {
             "api": {"status": "ready", "type": "cloud"},
             "comfyui": {"status": "optional", "installed": installed, "connected": False},
@@ -1238,8 +1251,8 @@ async def websocket_run_workflow(websocket: WebSocket) -> None:
         return
 
     token = websocket.query_params.get("token") or websocket.headers.get("x-session-token")
-    if token and not session_manager.is_valid_token(token):
-        logger.warning("Rejecting WebSocket handshake with invalid session token")
+    if not token or not session_manager.is_valid_token(token):
+        logger.warning("Rejecting WebSocket handshake without a valid session token")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
@@ -1279,6 +1292,26 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
 frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if frontend_dist.is_dir() and (frontend_dist / "index.html").is_file():
     from fastapi.staticfiles import StaticFiles
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def session_bootstrapped_index() -> HTMLResponse:
+        """Serve index.html with the per-launch token injected for same-origin pages.
+
+        Only callers that received this page from the backend itself can read the
+        token; an attacker who can read it could already run script on the page,
+        so this grants no new capability while keeping the token out of JSON APIs.
+        """
+        index_path = frontend_dist / "index.html"
+        html = index_path.read_text(encoding="utf-8")
+        injection = (
+            "<script>window.__BERRY_SESSION__="
+            f"\"{session_manager.get_token()}\";</script>"
+        )
+        if "</head>" in html:
+            html = html.replace("</head>", f"{injection}</head>", 1)
+        else:
+            html = injection + html
+        return HTMLResponse(content=html)
 
     app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 else:
