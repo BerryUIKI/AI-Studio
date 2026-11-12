@@ -27,10 +27,10 @@ Use lowercase, short, descriptive names. Include an issue ID when one exists. On
 
 1. Update local `dev` from `origin/dev` and create a short-lived branch from it.
 2. Implement a focused change with the relevant tests and English documentation.
-3. Write English Conventional Commits, for example `feat(launcher): add startup readiness check` or `fix(runtime): preserve engine data during update`.
+3. Please commit frequently; large commits are prohibited. Commit each small, coherent, verified increment using English Conventional Commits, for example `feat(launcher): add startup readiness check` or `fix(runtime): preserve engine data during update`. Keep related implementation and tests together, separate unrelated changes, and do not accumulate an entire task or milestone into one commit.
 4. Open a PR targeting `dev`. Describe user-visible behavior, validation evidence, limitations and related requirement or issue IDs.
 5. Keep the branch current with `dev` before merging. Resolve conflicts on the working branch and rerun affected checks.
-6. Merge only after review and required checks pass. Prefer squash merge for feature, bug-fix and documentation PRs, yielding one clear change in `dev` per PR. Delete the temporary branch after merge.
+6. Merge only after review and required checks pass. Preserve small, atomic commits. Use a merge commit when squashing would create a large aggregate commit; squash only when the resulting commit remains small and focused. Split large tasks into focused PRs rather than using squashing to hide oversized changes. Delete the temporary branch after merge.
 
 Never merge a feature branch directly into `main`. Never force-push a shared integration or release branch. Rebasing a personal branch before review is allowed; do not rewrite a shared branch after others depend on it.
 

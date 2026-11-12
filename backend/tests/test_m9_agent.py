@@ -1,5 +1,4 @@
-"""Tests for Milestone M9: Conversational Agent workflow control & transparent action planning."""
-
+import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
@@ -55,6 +54,36 @@ def test_agent_compound_workflow_plan():
     assert proposal["chain_steps"][0]["action"] == "txt2img"
     assert proposal["chain_steps"][1]["action"] == "upscale"
     assert proposal["estimated_calls"] == 2
+
+
+def test_agent_chinese_intent_parsing():
+    """Agent parses Chinese natural language prompt into structured proposal."""
+    resp = client.post(
+        "/api/v1/agent/chat",
+        json={"message": "帮我画一张赛博朋克城市夜景，横版，30步"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    proposal = data["proposal"]
+    assert proposal is not None
+    assert proposal["intent"] == "txt2img"
+    assert proposal["parameters"]["aspect_ratio"] == "16:9"
+    assert proposal["parameters"]["steps"] == 30
+    assert "赛博朋克城市夜景" in proposal["parameters"]["prompt"]
+
+
+def test_agent_chinese_compound_workflow():
+    """Agent detects Chinese chained generation and upscaling."""
+    resp = client.post(
+        "/api/v1/agent/chat",
+        json={"message": "生成日出雪山风景，然后放大2倍"},
+    )
+    assert resp.status_code == 200
+    proposal = resp.json()["proposal"]
+    assert proposal is not None
+    assert len(proposal["chain_steps"]) == 2
+    assert proposal["chain_steps"][0]["action"] == "txt2img"
+    assert proposal["chain_steps"][1]["action"] == "upscale"
 
 
 def test_agent_video_intent_parsing():
@@ -148,3 +177,52 @@ async def test_agent_execution_gate_approved_succeeds(monkeypatch):
     assert results[0]["task_id"] == "agent-run-123"
     assert results[0]["asset_id"] == "asset-gen-001"
     assert mock_execute.called
+
+
+@pytest.mark.asyncio
+async def test_agent_with_mock_llm_function_calling(monkeypatch):
+    """LLM client with tool calling properly parses creative proposal."""
+    mock_llm_resp = {
+        "choices": [
+            {
+                "message": {
+                    "content": "I have created an optimized action plan for your cinematic artwork.",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "propose_creative_plan",
+                                "arguments": json.dumps({
+                                    "action": "txt2img",
+                                    "prompt": "Cinematic volumetric lighting, highly detailed cyberpunk street, 8k",
+                                    "aspect_ratio": "16:9",
+                                    "steps": 28,
+                                    "engine": "managed_comfyui",
+                                    "chain_upscale": True,
+                                }),
+                            }
+                        }
+                    ],
+                }
+            }
+        ]
+    }
+
+    from app.core.llm_client import LLMClient
+    async def fake_chat_comp(*args, **kwargs):
+        return mock_llm_resp
+
+    monkeypatch.setattr(LLMClient, "chat_completion", fake_chat_comp)
+
+    resp = client.post(
+        "/api/v1/agent/chat",
+        json={"message": "I need a cyberpunk masterpiece in landscape"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    proposal = data["proposal"]
+    assert proposal is not None
+    assert proposal["parameters"]["aspect_ratio"] == "16:9"
+    assert proposal["parameters"]["steps"] == 28
+    assert "cyberpunk street" in proposal["parameters"]["prompt"]
+    assert len(proposal["chain_steps"]) == 2  # Has chained upscale
+

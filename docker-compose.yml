@@ -1,0 +1,29 @@
+services:
+  ai-studio:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: berry-ai-studio
+    restart: unless-stopped
+    ports:
+      - "${BERRY_PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - BERRY_PORT=8000
+      - BERRY_DATA_DIR=/app/data
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com}
+      - FAL_KEY=${FAL_KEY:-}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY:-}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com}
+      - IMAGE_API_KEY=${IMAGE_API_KEY:-}
+    volumes:
+      - studio_data:/app/data
+
+volumes:
+  studio_data:
+    name: berry_ai_studio_data

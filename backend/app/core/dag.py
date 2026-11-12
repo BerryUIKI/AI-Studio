@@ -16,6 +16,13 @@ class DAGResolver:
     def __init__(self, graph: WorkflowGraph) -> None:
         self.graph = graph
         self.node_map: Dict[str, WorkflowNodeInstance] = {n.id: n for n in graph.nodes}
+        if len(self.node_map) != len(graph.nodes):
+            raise ValueError("Duplicate node IDs in workflow")
+        if len({edge.id for edge in graph.edges}) != len(graph.edges):
+            raise ValueError("Duplicate edge IDs in workflow")
+        for edge in graph.edges:
+            if edge.source not in self.node_map or edge.target not in self.node_map:
+                raise ValueError(f"Edge '{edge.id}' references a missing node")
 
         # Build adjacency list: parent -> children
         self.adjacency: Dict[str, List[str]] = defaultdict(list)

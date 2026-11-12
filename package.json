@@ -1,0 +1,13 @@
+{
+  "name": "berry-ai-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter ai-workflow-frontend dev:web",
+    "typecheck": "pnpm --filter ai-workflow-frontend typecheck",
+    "lint": "pnpm --filter ai-workflow-frontend lint",
+    "test": "pnpm --filter ai-workflow-frontend test",
+    "build": "pnpm --filter ai-workflow-frontend build",
+    "tauri": "pnpm --filter ai-workflow-frontend tauri"
+  }
+}

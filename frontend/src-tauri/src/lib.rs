@@ -1,13 +1,112 @@
 mod backend;
+mod startup;
 
-use std::sync::Mutex;
 use std::process::Child;
+use std::sync::Mutex;
 use tauri::Manager;
 
 pub struct AppState {
     pub backend_child: Mutex<Option<Child>>,
     pub port: u16,
-    pub is_ready: bool,
+    pub root_dir: std::path::PathBuf,
+    pub startup: Mutex<startup::StartupStatus>,
+    pub setup_running: std::sync::atomic::AtomicBool,
+    pub setup_cancel: std::sync::atomic::AtomicBool,
+}
+
+#[derive(serde::Deserialize)]
+pub struct CloseAppPayload {
+    pub mode: Option<String>, // "keep_running" | "stop_owned"
+    pub force: Option<bool>,
+    pub stop_managed_engines: Option<bool>,
+}
+
+#[derive(serde::Serialize)]
+pub struct CloseAppResult {
+    pub success: bool,
+    pub refused: bool,
+    pub message: String,
+}
+
+#[tauri::command]
+fn close_app(
+    app_handle: tauri::AppHandle,
+    window: tauri::Window,
+    payload: Option<CloseAppPayload>,
+) -> CloseAppResult {
+    let state = app_handle.state::<AppState>();
+    state
+        .setup_cancel
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let mode_str = payload
+        .as_ref()
+        .and_then(|p| p.mode.as_deref())
+        .unwrap_or("stop_owned");
+    let force = payload.as_ref().and_then(|p| p.force).unwrap_or(false);
+    let stop_engines = payload.as_ref().and_then(|p| p.stop_managed_engines);
+
+    let shutdown_mode = if mode_str == "keep_running" {
+        backend::ShutdownMode::KeepRunning
+    } else {
+        backend::ShutdownMode::StopOwned {
+            force,
+            stop_managed_engines: stop_engines,
+        }
+    };
+
+    let mut guard = state.backend_child.lock().unwrap();
+    let child = guard.take();
+    let (res, preserved_child) = backend::shutdown_backend(state.port, child, shutdown_mode);
+
+    match res {
+        backend::ShutdownResult::RefusedActiveTasks => {
+            // Restore child back into AppState
+            *guard = preserved_child;
+            CloseAppResult {
+                success: false,
+                refused: true,
+                message: "Shutdown refused: active generation tasks are running.".to_string(),
+            }
+        }
+        backend::ShutdownResult::Completed => {
+            // If keep_running, child is preserved in background or consumed
+            *guard = preserved_child;
+            let _ = window.destroy();
+            app_handle.exit(0);
+            CloseAppResult {
+                success: true,
+                refused: false,
+                message: "Application closed successfully.".to_string(),
+            }
+        }
+        backend::ShutdownResult::UnownedIgnored => {
+            *guard = None;
+            let _ = window.destroy();
+            app_handle.exit(0);
+            CloseAppResult {
+                success: true,
+                refused: false,
+                message: "Unowned backend preserved, window closed.".to_string(),
+            }
+        }
+    }
+}
+
+#[tauri::command]
+fn minimize_app(window: tauri::Window) {
+    let _ = window.minimize();
+}
+
+/// Resolve the package root, preferring the Tauri resource directory of an installed build.
+///
+/// The NSIS installer ships the backend and runtime as Tauri resources next to the
+/// executable. Development and portable layouts keep them beside the binary instead, so
+/// the resource directory is only used when it actually contains the backend.
+fn resolve_root_dir() -> std::path::PathBuf {
+    let resource_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("resources")));
+    berry_runtime::detect_root_dir_with(resource_dir.as_deref())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -18,7 +117,7 @@ pub fn run() {
         .and_then(|p| p.parse().ok())
         .unwrap_or(8000);
 
-    let root_dir = backend::detect_root_dir();
+    let root_dir = resolve_root_dir();
     backend::log_msg(&format!("Detected root directory: {:?}", root_dir));
 
     let mut child = match backend::spawn_backend(&root_dir, port) {
@@ -29,16 +128,46 @@ pub fn run() {
         }
     };
 
-    let is_ready = backend::wait_for_backend_ready(port, 30, &mut child);
-
+    let is_ready = (child.is_some() || berry_runtime::is_backend_healthy(port))
+        && backend::wait_for_backend_ready(port, 30, &mut child);
     let app_state = AppState {
         backend_child: Mutex::new(child),
         port,
-        is_ready,
+        startup: Mutex::new(startup::StartupStatus {
+            phase: if is_ready {
+                "ready"
+            } else {
+                "needs_environment"
+            }
+            .into(),
+            details: String::new(),
+            environment_path: berry_runtime::bootstrap::runtime_dir(&root_dir)
+                .display()
+                .to_string(),
+            can_install: berry_runtime::bootstrap::supported(),
+            error_code: String::new(),
+            volume: String::new(),
+            available_bytes: None,
+            required_bytes: None,
+            downloaded_bytes: None,
+            total_bytes: None,
+        }),
+        root_dir,
+        setup_running: std::sync::atomic::AtomicBool::new(false),
+        setup_cancel: std::sync::atomic::AtomicBool::new(false),
     };
-
     tauri::Builder::default()
         .manage(app_state)
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            close_app,
+            minimize_app,
+            startup::startup_status,
+            startup::discover_environments,
+            startup::inspect_environment,
+            startup::prepare_environment,
+            startup::cancel_environment_setup
+        ])
         .setup(move |app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -47,52 +176,31 @@ pub fn run() {
                         .build(),
                 )?;
             }
-
-            if let Some(main_window) = app.get_webview_window("main") {
-                if is_ready {
-                    let target_url = format!("http://127.0.0.1:{}", port);
-                    if let Ok(url) = tauri::Url::parse(&target_url) {
-                        let _ = main_window.navigate(url);
-                    }
-                } else {
-                    let error_html = format!(
-                        r#"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>Berry AI Studio - Diagnostics</title>
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh; }}
-        .card {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 32px; max-width: 600px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }}
-        h1 {{ color: #f43f5e; font-size: 20px; margin-top: 0; }}
-        p {{ line-height: 1.6; color: #cbd5e1; font-size: 14px; }}
-        code {{ background: #0f172a; padding: 3px 8px; border-radius: 6px; font-family: Consolas, monospace; color: #38bdf8; }}
-        .btn {{ display: inline-block; background: #2563eb; color: #fff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 500; cursor: pointer; margin-top: 16px; border: none; }}
-        .btn:hover {{ background: #1d4ed8; }}
-    </style>
-</head>
-<body>
-    <div class="card">
-        <h1>Berry Core Backend Did Not Start</h1>
-        <p>The Berry AI Studio core service on port <code>127.0.0.1:{}</code> did not become ready within 30s.</p>
-        <p>Please check <code>berry_desktop.log</code> in the workspace directory for details.</p>
-        <button class="btn" onclick="location.reload()">Retry Connection</button>
-    </div>
-</body>
-</html>"#,
-                        port
-                    );
-                    let _ = main_window.eval(&format!("document.write(`{}`); document.close();", error_html.replace('`', "\\`")));
+            if is_ready {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.navigate(tauri::Url::parse(&format!("http://127.0.0.1:{}", port))?)?;
                 }
             }
-
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 let state = window.state::<AppState>();
+                state
+                    .setup_cancel
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
                 let mut guard = state.backend_child.lock().unwrap();
-                backend::shutdown_backend(state.port, guard.take());
+                let child = guard.take();
+                // When window is destroyed directly (e.g. OS kill / Alt+F4), stop owned child cleanly
+                let (_, remaining) = backend::shutdown_backend(
+                    state.port,
+                    child,
+                    backend::ShutdownMode::StopOwned {
+                        force: false,
+                        stop_managed_engines: None,
+                    },
+                );
+                *guard = remaining;
             }
         })
         .run(tauri::generate_context!())

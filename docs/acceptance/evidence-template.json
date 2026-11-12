@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "cloud-image-journey"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "comfyui-image-journey"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "webui-image-journey"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "project-reopen"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "masked-edit"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "upscale-export"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "task-recovery"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "external-ownership"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "install-update-recovery"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "safe-exit"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "clean-windows-package"
+    }
+  ],
+  "commit": "REPLACE_WITH_EXACT_TESTED_SHA",
+  "requirements": [
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R01"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R02"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R03"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R04"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R05"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R06"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R07"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R08"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R09"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R10"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R11"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R12"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R13"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R14"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R15"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R16"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R17"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "R18"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L01"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L02"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L03"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L04"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L05"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L06"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L07"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L08"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L09"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L10"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L11"
+    },
+    {
+      "evidence_level": "unverified",
+      "artifacts": [],
+      "status": "unverified",
+      "id": "L12"
+    }
+  ],
+  "environment": {
+    "machine": "",
+    "os": "",
+    "tested_at": ""
+  },
+  "integrations": {
+    "providers": [],
+    "models": [],
+    "engines": []
+  }
+}

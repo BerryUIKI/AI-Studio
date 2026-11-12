@@ -15,11 +15,16 @@ class CreativeActionType(str, Enum):
 
 
 class CreativeActionRequest(BaseModel):
+    project_id: Optional[str] = None
     action: CreativeActionType
     prompt: str = ""
     negative_prompt: str = "low quality, blurry, deformed, bad anatomy"
     model: str = "v1-5-pruned-emaonly.safetensors"
-    engine_id: str = "managed_comfyui"  # managed_comfyui, managed_webui, or cloud
+    connection_id: Optional[str] = None  # Stable engine connection identifier (e.g., "comfyui-managed", "studio-comfy-a100")
+    provider_revision: str | None = Field(default=None, max_length=64)
+    credential_revision: int | None = Field(default=None, ge=0)
+    dependency_revision: str | None = Field(default=None, max_length=64)
+    engine_id: str = "managed_comfyui"  # Legacy fallback - deprecated in favor of connection_id
     aspect_ratio: str = "1:1"  # 1:1, 16:9, 9:16, 4:3
     width: int = 512
     height: int = 512
@@ -39,19 +44,24 @@ class CreativeActionRequest(BaseModel):
 
 
 class GenerationProvenance(BaseModel):
+    parameters: Dict[str, Any] = Field(default_factory=dict)
     action: CreativeActionType
     prompt: str
     negative_prompt: Optional[str] = None
     model: str
-    engine_id: str
-    seed: int
-    steps: int
-    cfg_scale: float
+    model_revision: Optional[str] = None
+    model_hash: Optional[str] = None
+    connection_id: str  # Connection used for generation
+    engine_id: str  # Legacy field, kept for backward compatibility
+    seed: int | None = None
+    steps: int | None = None
+    cfg_scale: float | None = None
     dimensions: str  # e.g. "512x512"
     created_at: str
     source_asset_id: Optional[str] = None
     mask_asset_id: Optional[str] = None
     execution_time_ms: Optional[float] = None
+    provider_id: Optional[str] = None
     # Video-specific provenance
     fps: Optional[int] = None
     num_frames: Optional[int] = None
@@ -59,7 +69,19 @@ class GenerationProvenance(BaseModel):
     motion_bucket_id: Optional[int] = None
 
 
+class CreativeExecutionPlan(BaseModel):
+    custom_identity: Dict[str, Any] | None = None
+    engine: str  # "comfyui", "webui", or "cloud"
+    provider_id: str  # "comfyui", "webui", "fal_ai", "siliconflow", "openai"
+    target_model: str
+    action: CreativeActionType
+
+
 class CreativeActionResult(BaseModel):
+    mime_type: Optional[str] = None
+    extension: Optional[str] = None
+    is_animated: bool = False
+    codec: Optional[str] = None
     success: bool
     task_id: str
     asset_id: Optional[str] = None

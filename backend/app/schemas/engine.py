@@ -1,7 +1,7 @@
 """Engine connection and installation manifest schemas."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -36,6 +36,8 @@ class InstallPhase(str, Enum):
 
 
 class EngineInstallManifest(BaseModel):
+    source_url: Optional[str] = None
+    pip_index_url: Optional[str] = None
     engine_type: EngineType
     phase: InstallPhase = InstallPhase.IDLE
     version: Optional[str] = None
@@ -123,4 +125,115 @@ class ShutdownResponse(BaseModel):
     message: str
     active_tasks_cancelled: int
     managed_engines_stopped: List[str]
+
+
+class EngineConfig(BaseModel):
+    instance_id: str
+    port: int
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class EngineConfigUpdateRequest(BaseModel):
+    port: int
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class EngineConfigResponse(BaseModel):
+    success: bool = True
+    instance_id: str
+    port: int
+    extra_args: List[str] = Field(default_factory=list)
+    requires_restart: bool = False
+    message: str = "Configuration saved successfully."
+
+
+class EngineInstanceInfo(BaseModel):
+    id: str
+    type: str  # canvas, comfyui, webui, agents, custom
+    name: str
+    version: Optional[str] = None
+    is_managed: bool = True
+    is_builtin: bool = False
+    install_path: Optional[str] = None
+    status: str  # ready, running, stopped, not_installed, error, updating
+    endpoint: Optional[str] = None
+    pid: Optional[int] = None
+    vram_used_mb: Optional[int] = None
+    capabilities: List[str] = Field(default_factory=list)
+    port: Optional[int] = None
+    extra_args: List[str] = Field(default_factory=list)
+    connection_id: Optional[str] = None
+    process_running: Optional[bool] = None
+    service_healthy: Optional[bool] = None
+    service_checked_at: Optional[float] = None
+    lifecycle_state: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class EngineInstancesResponse(BaseModel):
+    instances: List[EngineInstanceInfo]
+
+
+class DetectedEngineInfo(BaseModel):
+    engine_type: str  # comfyui, webui
+    path: str
+    version: Optional[str] = None
+    has_python_env: bool = False
+    python_executable: Optional[str] = None
+    recommended_name: str
+
+
+class EngineDetectResponse(BaseModel):
+    detected: List[DetectedEngineInfo]
+
+
+class EngineBindRequest(BaseModel):
+    engine_type: str  # comfyui, webui
+    name: str
+    path: str
+    port: Optional[int] = None
+    extra_args: List[str] = Field(default_factory=list)
+
+
+class MirrorPresetInfo(BaseModel):
+    id: str
+    name: str
+    git_mirror: Optional[str] = None
+    pypi_mirror: Optional[str] = None
+    hf_mirror: Optional[str] = None
+
+
+class MirrorConfigResponse(BaseModel):
+    active_preset: str
+    presets: List[MirrorPresetInfo]
+    custom_git_mirror: Optional[str] = None
+    custom_pypi_mirror: Optional[str] = None
+    custom_hf_mirror: Optional[str] = None
+
+
+class UpdateMirrorConfigRequest(BaseModel):
+    active_preset: Literal["direct", "china_mainland", "custom"]
+    custom_git_mirror: Optional[str] = None
+    custom_pypi_mirror: Optional[str] = None
+    custom_hf_mirror: Optional[str] = None
+
+
+class EngineInstallRequest(BaseModel):
+    mirror_preset: Optional[Literal["direct", "china_mainland", "custom"]] = None
+
+
+class EngineLogResponse(BaseModel):
+    instance_id: str
+    total_lines: int
+    logs: List[str]
+
+
+class RuntimeStartResponse(BaseModel):
+    success: bool
+    code: Optional[str] = None  # e.g. "NOT_INSTALLED", "ENV_MISSING", "ALREADY_RUNNING"
+    message: str
+    pid: Optional[int] = None
+
+
+
 

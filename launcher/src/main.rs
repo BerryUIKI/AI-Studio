@@ -19,27 +19,7 @@ const DEFAULT_PORT: u16 = 8000;
 const MUTEX_NAME: &str = "Global\\BerryAIStudioLauncherMutex";
 
 fn resolve_root_dir() -> PathBuf {
-    // Current executable directory or current working directory
-    if let Ok(exe_path) = env::current_exe() {
-        if let Some(parent) = exe_path.parent() {
-            // Check if backend directory exists in parent or grandparent
-            if parent.join("backend").is_dir() {
-                return parent.to_path_buf();
-            }
-            if let Some(grandparent) = parent.parent() {
-                if grandparent.join("backend").is_dir() {
-                    return grandparent.to_path_buf();
-                }
-                if let Some(ggp) = grandparent.parent() {
-                    if ggp.join("backend").is_dir() {
-                        return ggp.to_path_buf();
-                    }
-                }
-            }
-        }
-    }
-    // Fallback to current dir
-    env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    berry_runtime::detect_root_dir()
 }
 
 fn print_help() {

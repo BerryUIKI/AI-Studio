@@ -1,5 +1,7 @@
 # Berry AI Studio v0.1: Unified Product Acceptance Dossier
 
+> **Historical document (evidence gathered 2026-09-24; notice added 2026-11-01).** This dossier describes only the commit named in section 1. Repairs merged into `dev` afterwards and later test runs do not carry over, and the `VERIFIED` / `PHYSICAL_VERIFIED` labels below describe only the evidence gathered at that commit. Present release acceptance is governed by the [current-head release gate](RELEASE_ACCEPTANCE_GATE.md) and requires R01–R18, L01–L12 and end-to-end scenario artifacts on the exact release-candidate SHA. See the [2026-11-01 review follow-up](reviews/2026-11-01-acceptance-follow-up.md) for the current development baseline.
+
 **Target Milestone**: v0.1.0 First Release Unified Product Acceptance  
 **Target Git Branch**: `dev`  
 **Governing Documents**: [`docs/PRD.md`](PRD.md), [`docs/LAUNCHER_MANAGER_REQUIREMENTS.md`](LAUNCHER_MANAGER_REQUIREMENTS.md), [`docs/PRODUCT_VISION.md`](PRODUCT_VISION.md), [`docs/ARCHITECTURE.md`](ARCHITECTURE.md), [`docs/SUPPORT_MATRIX.md`](SUPPORT_MATRIX.md).

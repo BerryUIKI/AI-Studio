@@ -1,6 +1,7 @@
 """Unit tests for macro subgraph compiler and local ComfyUI node execution."""
 
 import pytest
+from app.main import app
 from app.nodes.registry import registry
 from app.runners.macro_compiler import build_comfy_txt2img_graph
 from app.runners.comfy_runner import run_comfy_txt2img_node
@@ -101,3 +102,73 @@ async def test_run_comfy_node_offline_error():
     # Last status should be error
     final_status = next(e for e in reversed(events) if e.type == "NODE_STATUS")
     assert final_status.status == "error"
+
+
+def test_build_comfy_upscale_graph_native_4x_requested_at_2x():
+    """When a native-4x model is requested at 2x, an ImageScale node rescales to exact 2x dimensions."""
+    from app.runners.macro_compiler import build_comfy_upscale_graph
+
+    # 640x360 landscape at 2x -> target 1280x720
+    graph = build_comfy_upscale_graph(
+        image_filename="fixture_640x360.png",
+        upscaler_model="RealESRGAN_x4plus.pth",
+        upscale_factor=2.0,
+        source_width=640,
+        source_height=360,
+    )
+
+    # Core nodes
+    assert graph["1"]["class_type"] == "LoadImage"
+    assert graph["2"]["class_type"] == "UpscaleModelLoader"
+    assert graph["3"]["class_type"] == "ImageUpscaleWithModel"
+
+    # Because model is 4x and request is 2x, ImageScale must be inserted
+    assert "4" in graph
+    assert graph["4"]["class_type"] == "ImageScale"
+    assert graph["4"]["inputs"]["width"] == 1280
+    assert graph["4"]["inputs"]["height"] == 720
+    assert graph["4"]["inputs"]["upscale_method"] == "lanczos"
+    assert graph["4"]["inputs"]["image"] == ["3", 0]
+
+    # SaveImage must save from node 4
+    assert graph["5"]["class_type"] == "SaveImage"
+    assert graph["5"]["inputs"]["images"] == ["4", 0]
+
+
+def test_build_comfy_upscale_graph_native_4x_requested_at_4x():
+    """When a native-4x model is requested at 4x, SaveImage connects directly to model output."""
+    from app.runners.macro_compiler import build_comfy_upscale_graph
+
+    # 640x360 landscape at 4x -> target 2560x1440
+    graph = build_comfy_upscale_graph(
+        image_filename="fixture_640x360.png",
+        upscaler_model="RealESRGAN_x4plus.pth",
+        upscale_factor=4.0,
+        source_width=640,
+        source_height=360,
+    )
+
+    assert graph["3"]["class_type"] == "ImageUpscaleWithModel"
+    # No extra ImageScale node needed
+    assert "4" in graph
+    assert graph["4"]["class_type"] == "SaveImage"
+    assert graph["4"]["inputs"]["images"] == ["3", 0]
+
+
+def test_build_comfy_upscale_graph_portrait():
+    """Portrait inputs (e.g. 360x640) scale correctly without distortion."""
+    from app.runners.macro_compiler import build_comfy_upscale_graph
+
+    # 360x640 portrait at 2x -> target 720x1280
+    graph = build_comfy_upscale_graph(
+        image_filename="fixture_360x640.png",
+        upscaler_model="RealESRGAN_x4plus.pth",
+        upscale_factor=2.0,
+        source_width=360,
+        source_height=640,
+    )
+
+    assert graph["4"]["class_type"] == "ImageScale"
+    assert graph["4"]["inputs"]["width"] == 720
+    assert graph["4"]["inputs"]["height"] == 1280
+    assert graph["5"]["inputs"]["images"] == ["4", 0]

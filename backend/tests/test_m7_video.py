@@ -60,6 +60,32 @@ def test_video_schemas():
 
 def test_video_cache_hashing():
     """Verify deterministic cache hashing incorporates video-specific parameters."""
+    from app.runners.creative_runner import compute_creative_cache_hash
+
+    req1 = CreativeActionRequest(
+        action=CreativeActionType.IMG2VIDEO,
+        prompt="Ocean waves gently breaking on sandy beach",
+        model="svd_xt.safetensors",
+        fps=16,
+        num_frames=25,
+        motion_bucket_id=127,
+        duration_seconds=2.5,
+    )
+    req2 = CreativeActionRequest(
+        action=CreativeActionType.IMG2VIDEO,
+        prompt="Ocean waves gently breaking on sandy beach",
+        model="svd_xt.safetensors",
+        fps=24,  # Different FPS
+        num_frames=25,
+        motion_bucket_id=127,
+        duration_seconds=2.5,
+    )
+
+    hash1 = compute_creative_cache_hash(req1, connection_id="comfyui-managed")
+    hash2 = compute_creative_cache_hash(req2, connection_id="comfyui-managed")
+
+    # Different fps must yield different cache keys
+    assert hash1 != hash2
     req1 = CreativeActionRequest(
         action=CreativeActionType.IMG2VIDEO,
         prompt="Ocean waves gently breaking on sandy beach",
@@ -79,21 +105,21 @@ def test_video_cache_hashing():
         duration_seconds=2.5,
     )
     # Identical requests produce identical hash
-    hash1 = compute_creative_cache_hash(req1, input_hash="sha256_input_abc")
-    hash2 = compute_creative_cache_hash(req2, input_hash="sha256_input_abc")
+    hash1 = compute_creative_cache_hash(req1, connection_id="comfyui-managed", input_hash="sha256_input_abc")
+    hash2 = compute_creative_cache_hash(req2, connection_id="comfyui-managed", input_hash="sha256_input_abc")
     assert hash1 == hash2
 
     # Changing fps changes hash
     req_diff_fps = req1.model_copy(update={"fps": 24})
-    assert compute_creative_cache_hash(req_diff_fps, input_hash="sha256_input_abc") != hash1
+    assert compute_creative_cache_hash(req_diff_fps, connection_id="comfyui-managed", input_hash="sha256_input_abc") != hash1
 
     # Changing motion bucket changes hash
     req_diff_motion = req1.model_copy(update={"motion_bucket_id": 200})
-    assert compute_creative_cache_hash(req_diff_motion, input_hash="sha256_input_abc") != hash1
+    assert compute_creative_cache_hash(req_diff_motion, connection_id="comfyui-managed", input_hash="sha256_input_abc") != hash1
 
     # Changing num_frames changes hash
     req_diff_frames = req1.model_copy(update={"num_frames": 16})
-    assert compute_creative_cache_hash(req_diff_frames, input_hash="sha256_input_abc") != hash1
+    assert compute_creative_cache_hash(req_diff_frames, connection_id="comfyui-managed", input_hash="sha256_input_abc") != hash1
 
 
 def test_comfy_img2video_macro_graph():
@@ -312,7 +338,45 @@ async def test_cloud_video_cancellation_disclaimer():
     cancel_res = await creative_runner.cancel_task(task_id)
 
     assert cancel_res["task_id"] == task_id
-    assert cancel_res["status"] == "cancelled"
+    assert cancel_res["status"] == "cancel-requested"
     assert cancel_res["disclaimer"] is not None
-    assert "external cloud providers" in cancel_res["disclaimer"]
+    assert "external cloud providers" in cancel_res["disclaimer"].lower()
+
+
+@pytest.mark.asyncio
+async def test_siliconflow_video_polling_loop():
+    """Verify _call_siliconflow_video submits task and polls status until completion."""
+    from app.runners.api_runner import _call_siliconflow_video
+
+    submit_response = {"requestId": "sf_req_999"}
+    status_response = {
+        "status": "Succeed",
+        "results": {
+            "videos": [{"url": "https://api.siliconflow.cn/files/output_polled.mp4"}]
+        }
+    }
+
+    mock_client = AsyncMock()
+    mock_resp1 = AsyncMock()
+    mock_resp1.raise_for_status = lambda: None
+    mock_resp1.json = lambda: submit_response
+
+    mock_resp2 = AsyncMock()
+    mock_resp2.status_code = 200
+    mock_resp2.is_success = True
+    mock_resp2.json = lambda: status_response
+
+    mock_client.post = AsyncMock(side_effect=[mock_resp1, mock_resp2])
+
+    with patch("app.runners.api_runner.get_shared_client", return_value=mock_client), \
+         patch("asyncio.sleep", new=AsyncMock()):
+        video_url = await _call_siliconflow_video(
+            action="txt2video",
+            prompt="cyberpunk drone soaring",
+            api_key="test_api_key",
+        )
+
+        assert video_url == "https://api.siliconflow.cn/files/output_polled.mp4"
+        assert mock_client.post.call_count == 2
+
 
