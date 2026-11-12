@@ -55,6 +55,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     temperature: 0.7,
     enabled: true,
   });
+  const [llmApiKeyDraft, setLlmApiKeyDraft] = useState('');
+  const [redactedApiKey, setRedactedApiKey] = useState('');
   const [llmTesting, setLlmTesting] = useState(false);
   const [llmTestResult, setLlmTestResult] = useState<{ valid: boolean; message: string } | null>(null);
   const [llmSaving, setLlmSaving] = useState(false);
@@ -63,7 +65,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     fetch('/api/v1/agent/llm/config')
       .then((res) => res.json())
       .then((data) => {
-        if (data && data.provider) setLlmConfig(data);
+        if (data && data.provider) {
+          // Write-only secret: never re-display the stored key, only hint at it
+          setRedactedApiKey(typeof data.api_key === 'string' ? data.api_key : '');
+          setLlmConfig({ ...data, api_key: '' });
+        }
       })
       .catch(() => {});
   }, []);
@@ -71,12 +77,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const handleSaveLlmConfig = async () => {
     setLlmSaving(true);
     try {
+      // Empty api_key keeps the stored secret server-side (write-only sentinel)
+      const payload = { ...llmConfig, api_key: llmApiKeyDraft };
       const res = await fetch('/api/v1/agent/llm/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(llmConfig),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
+        const saved = await res.json();
+        setRedactedApiKey(typeof saved.api_key === 'string' ? saved.api_key : '');
+        setLlmApiKeyDraft('');
+        setLlmConfig((prev) => ({ ...prev, api_key: '' }));
         setLlmTestResult({ valid: true, message: ui("ui_settings_saved_successfully") });
       }
     } finally {
@@ -91,7 +103,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       const res = await fetch('/api/v1/agent/llm/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(llmConfig),
+        body: JSON.stringify({ ...llmConfig, api_key: llmApiKeyDraft }),
       });
       const data = await res.json();
       setLlmTestResult({ valid: data.valid, message: data.message });
@@ -354,9 +366,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </label>
                     <input
                       type="password"
-                      value={llmConfig.api_key || ''}
-                      onChange={(e) => setLlmConfig({ ...llmConfig, api_key: e.target.value })}
-                      placeholder={llmConfig.provider === 'llama_server' ? t('agent_api_key_placeholder_llama', currentLang) : ui("ui_sk")}
+                      value={llmApiKeyDraft}
+                      onChange={(e) => setLlmApiKeyDraft(e.target.value)}
+                      placeholder={
+                        redactedApiKey
+                          ? ui("ui_enter_new_key_to_replace_value", { value1: redactedApiKey })
+                          : (llmConfig.provider === 'llama_server'
+                              ? t('agent_api_key_placeholder_llama', currentLang)
+                              : ui("ui_sk"))
+                      }
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
                     />
                   </div>
