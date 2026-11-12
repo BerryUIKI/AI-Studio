@@ -243,6 +243,22 @@ describe('Launcher and Model Setup Screens Locale Verification (Issue #139)', ()
 
       expect(markup).toContain('AI Agent 与大模型基座');
     });
+
+    it('renders the agent api key field write-only with no stored value pre-filled', () => {
+      useSettingsStore.getState().setLanguage('en');
+
+      const markup = renderToStaticMarkup(
+        <SettingsView initialSection="agent" />
+      );
+
+      // The secret input starts empty: no value attribute may carry a key-looking string
+      const keyInputs = markup.match(/<input[^>]*type="password"[^>]*>/g) || [];
+      expect(keyInputs.length).toBeGreaterThan(0);
+      for (const input of keyInputs) {
+        expect(input).not.toMatch(/value="[^"]*sk-[^"]*"/);
+        expect(input).not.toMatch(/value="[^"]*\.\.\.[^"]*"/);
+      }
+    });
   });
 });
 

@@ -1,4 +1,6 @@
 import json
+import logging
+import os
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -138,3 +140,48 @@ def test_llm_config_set_persistence_error_returns_500():
         resp = client.post("/api/v1/agent/llm/config", json=req_payload)
         assert resp.status_code == 500
         assert "Failed to persist LLM configuration" in resp.json()["detail"]
+
+
+def test_non_windows_chmod_failure_raises(monkeypatch):
+    """A chmod failure must abort the save instead of storing a world-readable secret file."""
+    if not hasattr(os, "chmod"):
+        pytest.skip("platform without os.chmod")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        monkeypatch.setattr("app.runtime.credentials._is_windows", lambda: False)
+
+        mgr = CredentialManager(data_dir=Path(tmpdir))
+
+        def broken_chmod(path, mode):
+            raise OSError("Simulated chmod failure")
+
+        monkeypatch.setattr(os, "chmod", broken_chmod)
+        with pytest.raises(OSError, match="Failed to persist credentials"):
+            mgr.set_key(CloudProviderId.OPENAI, "sk-nonwin-chmod-fail")
+
+
+def test_non_windows_chmod_enforced_on_save(monkeypatch):
+    """On non-Windows the saved credential file must end up with no group/other access."""
+    if os.name == "nt":
+        pytest.skip("0600 enforcement is a non-Windows behavior")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        mgr = CredentialManager(data_dir=Path(tmpdir))
+        mgr.set_key(CloudProviderId.OPENAI, "sk-nonwin-enforced")
+        mode = mgr.creds_file.stat().st_mode
+        assert (mode & 0o077) == 0
+        # Reloading in another manager must recover the secret
+        reloaded = CredentialManager(data_dir=Path(tmpdir))
+        assert reloaded.get_key(CloudProviderId.OPENAI) == "sk-nonwin-enforced"
+
+
+def test_save_failure_log_contains_no_secret(monkeypatch, caplog):
+    """Persistence errors must log messages that never contain the secret itself."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        secret = "sk-log-leak-probe-9876543210abcdef"
+        mgr = CredentialManager(data_dir=Path(tmpdir))
+        with caplog.at_level(logging.ERROR, logger="app.runtime.credentials"):
+            with patch.object(Path, "write_text", side_effect=OSError("Disk full")):
+                with pytest.raises(OSError, match="Failed to persist credentials"):
+                    mgr.set_key(CloudProviderId.OPENAI, secret)
+        # The raised error is the actionable message; the log must exist but never echo the secret
+        assert secret not in caplog.text
+        assert any("Error saving credentials" in record.message for record in caplog.records)

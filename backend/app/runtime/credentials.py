@@ -4,6 +4,13 @@ Secure BYOK Credential Manager.
 Manages API keys for external cloud providers (OpenAI, Fal.ai, SiliconFlow).
 Ensures secrets are stored locally, never exposed in workflow files or logs,
 and strictly redacted in all diagnostic and status APIs.
+
+Platform at-rest behavior:
+- Windows: DPAPI (CryptProtectData) encrypts the whole credential payload.
+- Linux/macOS: the file holds plaintext JSON protected by 0600 permissions;
+  a chmod failure aborts the save rather than storing a world-readable file.
+  Native OS keychain integration (macOS Keychain, libsecret) is a tracked
+  production-hardening item, not implemented here.
 """
 
 import base64
@@ -139,11 +146,13 @@ class CredentialManager:
                 self.creds_file.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
             else:
                 self.creds_file.write_text(raw_text, encoding="utf-8")
-                if hasattr(os, "chmod") and os.name != "nt":
-                    try:
-                        os.chmod(self.creds_file, 0o600)
-                    except Exception:
-                        pass
+                if hasattr(os, "chmod") and not _is_windows():
+                    os.chmod(self.creds_file, 0o600)
+                    if (self.creds_file.stat().st_mode & 0o077) != 0:
+                        raise OSError(
+                            "Credential file permissions could not be restricted; "
+                            "refusing to store secrets world-readable"
+                        )
         except Exception as e:
             logger.error(f"Error saving credentials: {e}")
             raise OSError(f"Failed to persist credentials: {e}") from e
