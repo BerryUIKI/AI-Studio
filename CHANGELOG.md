@@ -7,13 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-11-01
+## [0.1.1] - 2026-11-13
 
 First release candidate after the v0.1.0 baseline. Focused on review-driven
-correctness fixes rather than new capability.
+correctness fixes rather than new capability, plus a first-image onboarding
+guide merged from `dev` before the acceptance gate.
+
+### Added
+
+- Canvas: guide a new user to a first image with a readiness-driven setup panel
+  that points at cloud setup, engine install or model browsing (`#246`).
+- Release: add a Chinese acceptance execution guide, an evidence bundle scaffold
+  (`scripts/acceptance_bundle.py`), a ComfyUI txt2img smoke test, and a workflow
+  that uploads the reviewed evidence bundle for the release gate.
 
 ### Fixed
 
+- Canvas: open the model access console from the first-image guide instead of
+  calling the removed cloud key modal, which broke `tsc` on this branch.
+- Agent: stop starting llama-server inside a chat request and show when a reply
+  came from the rule engine or degraded inference (`#244`).
 - Projects: keep work recoverable when a project action fails, and gate window
   close and shutdown on a successful save (`#230`).
 - Engines: report observed service health separately from process ownership,
@@ -34,6 +47,8 @@ correctness fixes rather than new capability.
 
 ### Changed
 
+- Docs: rewrite the README around the selection-based workflow with product
+  illustrations (`#247`).
 - Tests: declare the pytest async fixture event-loop scope explicitly, removing
   the last backend configuration warning (`#241`).
 
@@ -43,6 +58,9 @@ correctness fixes rather than new capability.
   missing or reversed build order instead of warning (`#239`).
 - Desktop: align both Tauri dialog plugins on 2.7.3 and add a Tauri CLI
   compatibility check to CI (`#240`).
+- CI: run the CI workflow on pushes to and pull requests targeting
+  `release/**` branches, so release stabilization gets the same checks as
+  integration without waiting for the release PR.
 
 ### Known limitations
 
