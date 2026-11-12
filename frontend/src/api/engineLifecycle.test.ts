@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openEngineDirectory, removeEngine } from './engineLifecycle';
 import type { EngineInstance } from '../stores/useEngineStore';
 
@@ -7,21 +7,40 @@ const managed: EngineInstance = {
   is_builtin: false, status: 'stopped', capabilities: [],
 };
 
-afterEach(() => vi.unstubAllGlobals());
+const win = globalThis as { window?: { __BERRY_SESSION__?: string } };
+
+beforeEach(() => {
+  // Short-circuit fetchWithSession's token resolution so no extra fetch to
+  // /api/v1/auth/session consumes the mocked responses.
+  win.window = { __BERRY_SESSION__: 'test-token' };
+});
+
+afterEach(() => {
+  delete win.window;
+  vi.unstubAllGlobals();
+});
 
 describe('engine action contracts', () => {
   it('managed uninstall uses the uninstall endpoint and returns retained data', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true, retained_path: 'fixture/backup' })));
     vi.stubGlobal('fetch', fetch);
     expect((await removeEngine(managed)).retained_path).toBe('fixture/backup');
-    expect(fetch).toHaveBeenCalledWith('/api/v1/runtime/comfyui/uninstall', { method: 'POST' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/v1/runtime/comfyui/uninstall',
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('external removal deletes only the connection', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true })));
     vi.stubGlobal('fetch', fetch);
     await removeEngine({ ...managed, id: 'external/fixture', is_managed: false });
-    expect(fetch).toHaveBeenCalledWith('/api/v1/engines/unbind/external%2Ffixture', { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/v1/engines/unbind/external%2Ffixture',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    const init = fetch.mock.calls[0]?.[1] as RequestInit;
+    expect(new Headers(init.headers).get('X-Session-Token')).toBe('test-token');
   });
 
   it('propagates refusal instead of reporting successful removal', async () => {

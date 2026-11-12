@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Project } from '../types/project';
 import { useCanvasStore } from './useCanvasStore';
+import { fetchWithSession } from '../api/session';
 
 const STORAGE_ACTIVE_PROJECT_KEY = 'berry_last_active_project_id';
 const AUTOSAVE_DEBOUNCE_MS = 1500;
@@ -133,7 +134,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     try {
-      const resp = await fetch('/api/v1/projects', {
+      const resp = await fetchWithSession('/api/v1/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -251,7 +252,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         generationHistory: canvasState.generationHistory,
       };
 
-      const resp = await fetch(`/api/v1/projects/${targetId}`, {
+      const resp = await fetchWithSession(`/api/v1/projects/${targetId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -303,7 +304,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   renameProject: async (projectId: string, newName: string) => {
     try {
-      const resp = await fetch(`/api/v1/projects/${projectId}`, {
+      const resp = await fetchWithSession(`/api/v1/projects/${projectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName }),
@@ -325,7 +326,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   deleteProject: async (projectId: string) => {
     try {
-      const resp = await fetch(`/api/v1/projects/${projectId}`, { method: 'DELETE' });
+      const resp = await fetchWithSession(`/api/v1/projects/${projectId}`, { method: 'DELETE' });
       if (!resp.ok) return false;
 
       const remaining = get().projects.filter((p) => p.id !== projectId);

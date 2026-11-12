@@ -9,8 +9,9 @@ import { useNavigationStore } from '../stores/useNavigationStore';
 beforeEach(() => {
   useEngineStore.setState({ ...useEngineStore.getInitialState(), instances: defaultBuiltinInstances });
   useNavigationStore.setState(useNavigationStore.getInitialState());
+  (window as any).__BERRY_SESSION__ = 'test-token';
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); delete (window as any).__BERRY_SESSION__; vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const noop = () => undefined;
 
 it('starts WebUI through its own lifecycle endpoint even while ComfyUI is running', async () => {
@@ -19,7 +20,11 @@ it('starts WebUI through its own lifecycle endpoint even while ComfyUI is runnin
   vi.stubGlobal('fetch', fetcher);
   render(<ConnectedEngineView engineType="webui" onDeployEngine={noop} onOpenDirectory={noop} />);
   fireEvent.click(screen.getByRole('button', { name: 'Start SD WebUI Now' }));
-  await waitFor(() => expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/v1/runtime/webui/start', { method: 'POST' }));
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/v1/runtime/webui/start', expect.objectContaining({ method: 'POST' }));
+    const init = fetcher.mock.calls[0][1] as RequestInit;
+    expect(new Headers(init.headers).get('X-Session-Token')).toBe('test-token');
+  });
   expect(useEngineStore.getState().instances.find((item) => item.type === 'comfyui')?.status).toBe('running');
   expect(screen.queryByRole('button', { name: 'Start SD WebUI Now' })).toBeNull();
 });

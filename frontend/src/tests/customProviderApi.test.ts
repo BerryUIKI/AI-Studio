@@ -1,7 +1,18 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { customProviders, newCustomProvider } from '../api/customProviders';
 
-afterEach(() => vi.unstubAllGlobals());
+const g = globalThis as unknown as { window?: { __BERRY_SESSION__?: string } };
+
+beforeEach(() => {
+  // Short-circuit the session wrapper so it never makes an extra fetch
+  // (this test file runs in the node environment, so inject a minimal window).
+  g.window = { __BERRY_SESSION__: 'test-token' };
+});
+
+afterEach(() => {
+  delete g.window;
+  vi.unstubAllGlobals();
+});
 
 it('sends configuration and fixtures only to the local provider service', async () => {
   const fetcher = vi.fn(async () => ({ ok: true, json: async () => ({}) }));

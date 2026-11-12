@@ -30,7 +30,10 @@ it('saves an undo made while the deletion snapshot is still in flight', async ()
   let finishFirst!: (response: Response) => void;
   const first = new Promise<Response>((resolve) => { finishFirst = resolve; });
   const payloads: { canvas: ProjectCanvasData; version: number; name: string }[] = [];
-  vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) => {
+  vi.stubGlobal('fetch', vi.fn((url: string, init: RequestInit) => {
+    if (url === '/api/v1/auth/session') {
+      return Promise.resolve(new Response(JSON.stringify({ session_token: 'test-token' }), { status: 200 }));
+    }
     const payload = JSON.parse(String(init.body)) as (typeof payloads)[number];
     payloads.push(payload);
     if (payloads.length === 1) return first;
@@ -38,6 +41,7 @@ it('saves an undo made while the deletion snapshot is still in flight', async ()
   }));
   useCanvasStore.getState().removeNode('image');
   const saving = useProjectStore.getState().saveProject();
+  await vi.advanceTimersByTimeAsync(0);
   expect(payloads[0].canvas.nodes).toHaveLength(0);
   useCanvasStore.getState().undo();
   expect(useCanvasStore.getState().nodes).toHaveLength(1);

@@ -1,3 +1,4 @@
+import { fetchWithSession } from '../../api/session';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
 import React, { useState, useEffect, useRef } from 'react';
@@ -36,7 +37,7 @@ export const DeploymentDrawer: React.FC<DeploymentDrawerProps> = ({
     setError(null);
 
     // Trigger installation
-    fetch(`/api/v1/runtime/${engineType}/install`, {
+    fetchWithSession(`/api/v1/runtime/${engineType}/install`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: mirrorPreset ? JSON.stringify({ mirror_preset: mirrorPreset }) : undefined,
     }).then((response) => { if (!response.ok) throw new Error(ui("ui_installation_request_failed_value", { value1: response.status })); })

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { fetchWithSession } from '../api/session';
 
 export interface ModelSource {
   name: string;
@@ -116,7 +117,7 @@ export const useModelHubStore = create<ModelHubState>((set, get) => ({
       if (models.length === 0) return;
 
       const modelIds = models.map((m) => m.id);
-      const res = await fetch('/api/v1/models/hub/evaluate', {
+      const res = await fetchWithSession('/api/v1/models/hub/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model_ids: modelIds }),

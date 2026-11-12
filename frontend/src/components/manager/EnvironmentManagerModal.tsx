@@ -1,4 +1,5 @@
 import { useUiText } from '../../i18n/useUiText';
+import { fetchWithSession } from '../../api/session';
 import { Dialog } from '../ui/Dialog';
 import React, { useState, useEffect } from 'react';
 import { ModelReadiness, type ModelReadinessEvidence } from './ModelReadiness';
@@ -130,21 +131,21 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
 
   const handleStartEngine = async (type: string) => {
     setLoading(true);
-    await fetch(`/api/v1/runtime/${type === 'webui' ? 'webui/' : ''}start`, { method: 'POST' });
+    await fetchWithSession(`/api/v1/runtime/${type === 'webui' ? 'webui/' : ''}start`, { method: 'POST' });
     await fetchStatus();
     setLoading(false);
   };
 
   const handleStopEngine = async (type: string) => {
     setLoading(true);
-    await fetch(`/api/v1/runtime/${type === 'webui' ? 'webui/' : ''}stop`, { method: 'POST' });
+    await fetchWithSession(`/api/v1/runtime/${type === 'webui' ? 'webui/' : ''}stop`, { method: 'POST' });
     await fetchStatus();
     setLoading(false);
   };
 
   const handleInstallEngine = async (type: string) => {
     setLoading(true);
-    await fetch(`/api/v1/runtime/${type}/install`, { method: 'POST' });
+    await fetchWithSession(`/api/v1/runtime/${type}/install`, { method: 'POST' });
     await fetchStatus();
     setLoading(false);
   };
@@ -152,7 +153,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
   const handleUpdateEngine = async (type: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/runtime/${type}/update`, { method: 'POST' });
+      const res = await fetchWithSession(`/api/v1/runtime/${type}/update`, { method: 'POST' });
       if (res.ok) {
         const manifest = await res.json();
         setUpdateManifest(manifest);
@@ -167,7 +168,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
   const handleRescanModels = async () => {
     setRescanning(true);
     try {
-      const res = await fetch('/api/v1/models/rescan', { method: 'POST' });
+      const res = await fetchWithSession('/api/v1/models/rescan', { method: 'POST' });
       if (res.ok) setModels(await res.json());
       await fetchStatus();
     } finally {
@@ -179,7 +180,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
     e.preventDefault();
     if (!newRootPath || !newRootLabel) return;
     try {
-      const res = await fetch('/api/v1/models/roots', {
+      const res = await fetchWithSession('/api/v1/models/roots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: newRootPath, label: newRootLabel }),
@@ -196,7 +197,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
 
   const handleRemoveRoot = async (id: string) => {
     try {
-      await fetch(`/api/v1/models/roots/${id}`, { method: 'DELETE' });
+      await fetchWithSession(`/api/v1/models/roots/${id}`, { method: 'DELETE' });
       fetchModels();
     } catch (err) {
       console.error('Failed to remove root:', err);
@@ -207,7 +208,7 @@ export const EnvironmentManagerModal: React.FC<EnvironmentManagerModalProps> = (
     setShuttingDown(true);
     setShutdownError(null);
     try {
-      const res = await fetch('/api/v1/manager/shutdown', {
+      const res = await fetchWithSession('/api/v1/manager/shutdown', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force }),

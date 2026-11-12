@@ -8,7 +8,7 @@
  * - Connection registry compatibility
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useCreativeStore } from '../stores/useCreativeStore';
 import { useEngineStore } from '../stores/useEngineStore';
 
@@ -49,8 +49,16 @@ describe('Engine Connection Routing Integration', () => {
       ],
     });
 
+    // Inject session token so fetchWithSession short-circuits without an
+    // extra fetch to /api/v1/auth/session.
+    (globalThis as any).__BERRY_SESSION__ = 'test-token';
+
     // Mock fetch
     globalThis.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).__BERRY_SESSION__;
   });
 
   describe('Connection ID Mapping', () => {
@@ -110,10 +118,14 @@ describe('Engine Connection Routing Integration', () => {
         '/api/v1/creative/submit',
         expect.objectContaining({
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: expect.stringContaining('"connection_id":"comfyui-managed"'),
         })
       );
+      // Headers are a Headers instance; verify the JSON content type survives.
+      const submitCall = mockFetch.mock.calls.find(([url]) => url === '/api/v1/creative/submit');
+      expect(submitCall).toBeDefined();
+      const submitInit = submitCall![1] as RequestInit;
+      expect(new Headers(submitInit.headers).get('content-type')).toBe('application/json');
     });
 
     it('should include both connection_id and legacy engine_id for backward compatibility', async () => {
@@ -190,6 +202,7 @@ describe('Engine Connection Routing Integration', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/runtime/start', {
         method: 'POST',
+        headers: expect.any(Headers),
       });
     });
 
@@ -205,6 +218,7 @@ describe('Engine Connection Routing Integration', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/runtime/webui/start', {
         method: 'POST',
+        headers: expect.any(Headers),
       });
     });
 
@@ -246,6 +260,7 @@ describe('Engine Connection Routing Integration', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/runtime/stop', {
         method: 'POST',
+        headers: expect.any(Headers),
       });
     });
 
@@ -258,6 +273,7 @@ describe('Engine Connection Routing Integration', () => {
 
       expect(mockFetch).toHaveBeenCalledWith('/api/v1/runtime/webui/stop', {
         method: 'POST',
+        headers: expect.any(Headers),
       });
     });
   });
