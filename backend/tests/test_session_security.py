@@ -35,22 +35,23 @@ def test_info_omits_session_token():
     assert "session_token" not in resp.json()
 
 
-def test_index_html_injects_session_script(monkeypatch, tmp_path):
-    # The packaged flow serves index.html with the token injected inline
+def test_index_html_injection(tmp_path):
+    # The packaged flow serves index.html with the token injected inline.
+    # Tested through the renderer directly: CI runners have no frontend/dist,
+    # so the GET / route may be the L02 packaging-error page there.
+    from app.main import render_session_bootstrapped_index
+
     fake_dist = tmp_path / "dist"
     fake_dist.mkdir()
     (fake_dist / "index.html").write_text(
         "<!doctype html><html><head><title>Berry</title></head><body></body></html>",
         encoding="utf-8",
     )
-    import app.main as main_module
-    monkeypatch.setattr(main_module, "frontend_dist", fake_dist)
-
-    resp = client.get("/")
-    assert resp.status_code == 200
-    body = resp.text
+    response = render_session_bootstrapped_index(fake_dist)
+    body = response.body.decode("utf-8")
     assert "window.__BERRY_SESSION__" in body
     assert session_manager.get_token() in body
+    assert body.index("window.__BERRY_SESSION__") < body.index("</head>")
 
 
 def test_cross_origin_untrusted_post_rejected():

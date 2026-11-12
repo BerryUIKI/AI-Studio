@@ -1290,28 +1290,33 @@ async def _execute_workflow_request(request: WorkflowRunRequest, websocket: Work
 # ---------------------------------------------------------------------------
 
 frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+
+def render_session_bootstrapped_index(dist_dir: Path) -> HTMLResponse:
+    """Serve index.html with the per-launch token injected for same-origin pages.
+
+    Only callers that received this page from the backend itself can read the
+    token; an attacker who can read it could already run script on the page,
+    so this grants no new capability while keeping the token out of JSON APIs.
+    """
+    html = (dist_dir / "index.html").read_text(encoding="utf-8")
+    injection = (
+        "<script>window.__BERRY_SESSION__="
+        f"\"{session_manager.get_token()}\";</script>"
+    )
+    if "</head>" in html:
+        html = html.replace("</head>", f"{injection}</head>", 1)
+    else:
+        html = injection + html
+    return HTMLResponse(content=html)
+
+
 if frontend_dist.is_dir() and (frontend_dist / "index.html").is_file():
     from fastapi.staticfiles import StaticFiles
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def session_bootstrapped_index() -> HTMLResponse:
-        """Serve index.html with the per-launch token injected for same-origin pages.
-
-        Only callers that received this page from the backend itself can read the
-        token; an attacker who can read it could already run script on the page,
-        so this grants no new capability while keeping the token out of JSON APIs.
-        """
-        index_path = frontend_dist / "index.html"
-        html = index_path.read_text(encoding="utf-8")
-        injection = (
-            "<script>window.__BERRY_SESSION__="
-            f"\"{session_manager.get_token()}\";</script>"
-        )
-        if "</head>" in html:
-            html = html.replace("</head>", f"{injection}</head>", 1)
-        else:
-            html = injection + html
-        return HTMLResponse(content=html)
+        return render_session_bootstrapped_index(frontend_dist)
 
     app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 else:
