@@ -20,6 +20,7 @@ import { EngineLogViewer } from './components/launcher/EngineLogViewer';
 import { EngineNotInstalledModal } from './components/launcher/EngineNotInstalledModal';
 import { EngineRemovalDialog } from './components/launcher/EngineRemovalDialog';
 import { openEngineDirectory } from './api/engineLifecycle';
+import { fetchWithSession } from './api/session';
 import { SetupWizardModal } from './components/launcher/SetupWizardModal';
 import { ExitConfirmDialog, RunningEngineItem } from './components/launcher/ExitConfirmDialog';
 import { FloatingDownloadWidget } from './components/hub/FloatingDownloadWidget';
@@ -177,9 +178,9 @@ export default function App() {
 
   const toggleRuntime = async () => {
     if (runtimeStatus?.running) {
-      await fetch('/api/v1/runtime/stop', { method: 'POST' });
+      await fetchWithSession('/api/v1/runtime/stop', { method: 'POST' });
     } else {
-      await fetch('/api/v1/runtime/start', { method: 'POST' });
+      await fetchWithSession('/api/v1/runtime/start', { method: 'POST' });
     }
     refreshStatus();
   };

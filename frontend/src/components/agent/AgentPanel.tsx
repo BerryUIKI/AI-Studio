@@ -1,4 +1,5 @@
 import { useUiText } from '../../i18n/useUiText';
+import { fetchWithSession } from '../../api/session';
 import { mediaCardFields } from '../../utils/media';
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -106,7 +107,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
     setExecutionError(null);
 
     try {
-      const resp = await fetch('/api/v1/agent/chat', {
+      const resp = await fetchWithSession('/api/v1/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -148,7 +149,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose, inline 
         approved: true,
       };
 
-      const resp = await fetch('/api/v1/agent/execute', {
+      const resp = await fetchWithSession('/api/v1/agent/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

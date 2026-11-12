@@ -17,7 +17,7 @@ describe('Workflow subscriptions', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     FakeSocket.instances = [];
-    vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:8000' } });
+    vi.stubGlobal('window', { __BERRY_SESSION__: 'test-token', location: { protocol: 'http:', host: 'localhost:8000' } });
     vi.stubGlobal('WebSocket', FakeSocket);
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
     useCanvasStore.setState({ nodes: [{ id: 'text', type: 'workflowNode', position: { x: 0, y: 0 },

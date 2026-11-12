@@ -1,3 +1,4 @@
+import { fetchWithSession } from '../../api/session';
 import { useUiText } from '../../i18n/useUiText';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
@@ -90,7 +91,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
 
   const handleBindDetected = async (item: DetectedItem) => {
     try {
-      const res = await fetch('/api/v1/engines/bind', {
+      const res = await fetchWithSession('/api/v1/engines/bind', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,7 +124,7 @@ export const AddEngineModal: React.FC<AddEngineModalProps> = ({
     setIsSubmittingManual(true);
     setManualError(null);
     try {
-      const res = await fetch('/api/v1/engines/bind', {
+      const res = await fetchWithSession('/api/v1/engines/bind', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

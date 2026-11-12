@@ -52,8 +52,9 @@ print(json.dumps({'health': health.status_code, 'preflight': preflight.status_co
                  'cors_origin': preflight.headers.get('access-control-allow-origin'),
                  'blocked': [client.get('/health', headers={'Origin': origin}).status_code
                              for origin in blocked], 'websocket_code': websocket_code,
-                 'token_rejected': client.get('/health', headers={
-                     'Origin': allowed, 'X-Session-Token': 'invalid-test-token'}).status_code}))
+                 'token_rejected': client.post('/api/v1/runtime/start', headers={
+                     'Origin': allowed, 'X-Session-Token': 'invalid-test-token'},
+                     json={'engine': 'comfyui'}).status_code}))
 """
     result = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True,
                             text=True, cwd=Path(__file__).resolve().parents[1], timeout=30, check=True)

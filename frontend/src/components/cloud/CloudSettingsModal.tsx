@@ -1,4 +1,5 @@
 import { useUiText } from '../../i18n/useUiText';
+import { fetchWithSession } from '../../api/session';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import { Dialog } from '../ui/Dialog';
 import { useCreationSetupStore } from '../../stores/useCreationSetupStore';
@@ -58,7 +59,7 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
 
     setSavingId(providerId);
     try {
-      const res = await fetch('/api/v1/cloud/credentials', {
+      const res = await fetchWithSession('/api/v1/cloud/credentials', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ provider_id: providerId, api_key: key.trim() }),
@@ -74,7 +75,7 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
 
   const handleDeleteKey = async (providerId: string) => {
     try {
-      await fetch(`/api/v1/cloud/credentials/${providerId}`, { method: 'DELETE' });
+      await fetchWithSession(`/api/v1/cloud/credentials/${providerId}`, { method: 'DELETE' });
       await fetchProviders();
       setTestResults((prev) => {
         const next = { ...prev };
@@ -98,7 +99,7 @@ export const CloudSettingsModal = ({ isOpen, onClose }: CloudSettingsModalProps)
       : { provider_id: providerId };
 
     try {
-      const res = await fetch('/api/v1/cloud/credentials/test', {
+      const res = await fetchWithSession('/api/v1/cloud/credentials/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

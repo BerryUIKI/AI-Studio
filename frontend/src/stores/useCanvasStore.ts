@@ -12,6 +12,7 @@ import {
 import { CustomNodeData, ExecutionStatus, NodeDefinition, NodeOutputValue, NodeParamValue } from '../types/workflow';
 import { CanvasNodeData, ImageCardData } from '../types/creative';
 import { GenerationHistoryItem, ProjectCanvasData, ProjectViewport } from '../types/project';
+import { fetchWithSession, getSessionToken } from '../api/session';
 import { useProjectStore } from './useProjectStore';
 
 interface WorkflowStreamEvent {
@@ -471,7 +472,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   cancelRun: () => {
     const { currentRunId } = get();
     if (currentRunId) {
-      fetch(`/api/v1/workflow/cancel/${currentRunId}`, { method: 'POST' }).catch(() => {});
+      fetchWithSession(`/api/v1/workflow/cancel/${currentRunId}`, { method: 'POST' }).catch(() => {});
       // Keep the subscription and run identity until the server records an outcome.
     }
   },
@@ -528,7 +529,8 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     };
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/workflow/run`;
+    const sessionToken = await getSessionToken();
+    const wsUrl = `${protocol}//${window.location.host}/ws/workflow/run${sessionToken ? `?token=${encodeURIComponent(sessionToken)}` : ''}`;
 
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 3;
@@ -601,7 +603,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     };
 
     try {
-      const response = await fetch('/api/v1/workflow/submit', {
+      const response = await fetchWithSession('/api/v1/workflow/submit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(runPayload),
       });
       if (!response.ok) throw new Error(`Workflow submission failed (${response.status})`);

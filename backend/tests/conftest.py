@@ -23,6 +23,30 @@ _test_root = (
 os.environ["BERRY_DATA_DIR"] = str(_test_root / "data")
 os.environ["AI_WORKFLOW_ENGINE_DIR"] = str(_test_root / "engines")
 
+# Session boundary: sensitive routes require the per-launch token (F02). Give the
+# whole suite a known token and make every TestClient present it by default, so
+# business-logic tests exercise their endpoints as authenticated local clients.
+# Session-security tests override or omit the header themselves.
+os.environ.setdefault("BERRY_SESSION_TOKEN", "test-session-token-default")
+
+
+def _authorize_testclient():
+    from fastapi.testclient import TestClient as _TC
+
+    _original_init = _TC.__init__
+
+    def patched_init(self, *args, **kwargs):
+        headers = kwargs.pop("headers", None) or {}
+        if isinstance(headers, dict):
+            headers.setdefault("X-Session-Token", os.environ["BERRY_SESSION_TOKEN"])
+        kwargs["headers"] = headers
+        _original_init(self, *args, **kwargs)
+
+    _TC.__init__ = patched_init
+
+
+_authorize_testclient()
+
 
 @pytest_asyncio.fixture(autouse=True)
 async def close_test_databases(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:

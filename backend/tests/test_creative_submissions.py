@@ -11,6 +11,7 @@ import pytest
 from app.core.creative_tasks import CreativeTaskService
 from app.core.task_registry import task_registry
 from app.main import app
+from app.core.session import session_manager
 from app.runners.creative_runner import CreativeRunner
 from app.schemas.creative import CreativeActionRequest
 from app.storage.db import DatabaseManager
@@ -41,7 +42,7 @@ async def test_submit_returns_before_inference_and_cancel_preserves_real_result(
         ), patch("app.runners.creative_runner.cache_store.set_async", new=AsyncMock()), patch(
             "app.runners.creative_runner.asset_store.get_asset", new=AsyncMock(return_value=SimpleNamespace(width=32, height=24))
         ):
-            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost") as client:
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Session-Token": session_manager.get_token()}) as client:
                 # Inference remains blocked on release throughout admission. This
                 # tests submission ordering, not a two-second filesystem SLA.
                 response = await asyncio.wait_for(client.post("/api/v1/creative/submit", json={"action": "txt2img", "engine_id": "fal_ai", "seed": 42}), 10)

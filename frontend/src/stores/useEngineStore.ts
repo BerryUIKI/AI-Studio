@@ -1,5 +1,6 @@
 import { errorMessage as getErrorMessage } from '../utils/errors';
 import { create } from 'zustand';
+import { fetchWithSession } from '../api/session';
 
 export interface EngineInstance {
   id: string;
@@ -183,7 +184,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     config: { port: number; extraArgs: string[] }
   ): Promise<SaveEngineConfigResult> => {
     try {
-      const res = await fetch(`/api/v1/engines/${encodeURIComponent(instanceId)}/config`, {
+      const res = await fetchWithSession(`/api/v1/engines/${encodeURIComponent(instanceId)}/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -253,7 +254,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     try {
       // Route lifecycle controls by engine type
       const endpoint = inst.type === 'webui' ? '/api/v1/runtime/webui/start' : '/api/v1/runtime/start';
-      const res = await fetch(endpoint, { method: 'POST' });
+      const res = await fetchWithSession(endpoint, { method: 'POST' });
       if (res.ok) {
         const data = await res.json().catch(() => ({ success: false }));
         const isSuccess = data.success === true || (data.success !== false && data.status === 'started');
@@ -299,7 +300,7 @@ export const useEngineStore = create<EngineState>((set, get) => ({
     try {
       // Route lifecycle controls by engine type
       const endpoint = inst.type === 'webui' ? '/api/v1/runtime/webui/stop' : '/api/v1/runtime/stop';
-      const res = await fetch(endpoint, { method: 'POST' });
+      const res = await fetchWithSession(endpoint, { method: 'POST' });
       const data: { success?: boolean; status?: string; message?: string } = await res.json().catch(() => ({ success: false }));
       if (res.ok && (data.success === true || (data.success !== false && data.status === 'stopped'))) {
         set((state) => ({

@@ -231,8 +231,10 @@ describe('Project Persistence & Store Flow', () => {
     vi.advanceTimersByTime(1000);
     expect(saveCalls).toBe(0);
 
-    // Fast-forward past 1500ms
+    // Fast-forward past 1500ms, then flush the microtask chain
+    // (getSessionToken -> fetchWithSession -> PUT) before asserting.
     vi.advanceTimersByTime(600);
+    await vi.advanceTimersByTimeAsync(0);
     expect(saveCalls).toBe(1);
   });
 

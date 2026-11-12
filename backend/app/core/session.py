@@ -38,16 +38,55 @@ def configured_loopback_origins(port: int) -> Set[str]:
 
 ALLOWED_ORIGINS.update(configured_loopback_origins(int(os.environ.get("BERRY_PORT", "8000"))))
 
-# Routes that perform execution, lifecycle modifications, or access secrets
+# Routes that perform execution, lifecycle modifications, or access secrets.
+# Enforcement applies to non-GET methods only; status/history GETs stay open so
+# read-only polling is not broken.
 SENSITIVE_PREFIXES = (
     "/api/v1/runtime/",
     "/api/v1/shutdown",
     "/api/v1/manager/",
-    "/api/v1/creative/execute",
-    "/api/v1/workflow/run",
+    "/api/v1/creative/",
+    "/api/v1/workflow/",
+    "/api/v1/agent/chat",
+    "/api/v1/agent/execute",
     "/api/v1/agent/llm/config",
+    "/api/v1/agent/llm/test",
     "/api/v1/cloud/credentials",
+    "/api/v1/llama-server/",
+    "/api/v1/engines/",
+    "/api/v1/models/hub/",
+    "/api/v1/models/roots",
+    "/api/v1/models/scan",
+    "/api/v1/models/rescan",
+    "/api/v1/tasks/",
+    "/api/v1/installer/",
+    "/api/v1/updates/",
+    "/api/v1/custom-providers",
+    "/api/v1/projects/",
 )
+
+# GETs under these prefixes still touch secrets and require a token.
+TOKEN_REQUIRED_GET_PREFIXES = (
+    "/api/v1/cloud/credentials",
+    "/api/v1/agent/llm/config",
+)
+
+# Token delivery itself must stay reachable without a token.
+TOKEN_EXEMPT_PREFIXES = (
+    "/api/v1/auth/session",
+    "/health",
+)
+
+
+def should_require_token(path: str, method: str) -> bool:
+    """Decide whether a request must present the per-launch session token."""
+    if path.startswith(TOKEN_EXEMPT_PREFIXES):
+        return False
+    if not path.startswith(SENSITIVE_PREFIXES):
+        return False
+    if method.upper() == "GET":
+        return path.startswith(TOKEN_REQUIRED_GET_PREFIXES)
+    return True
 
 
 class SessionManager:

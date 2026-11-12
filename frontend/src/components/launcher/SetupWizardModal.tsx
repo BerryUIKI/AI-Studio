@@ -1,3 +1,4 @@
+import { fetchWithSession } from '../../api/session';
 import { formatNumber } from '../../i18n/format';
 import { useUiText } from '../../i18n/useUiText';
 import { ProgressBar } from '../ui/ProgressBar';
@@ -206,7 +207,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
     setLoadingLlama(true);
     setStartError(null);
     try {
-      const res = await fetch('/api/v1/llama-server/start', { method: 'POST' });
+      const res = await fetchWithSession('/api/v1/llama-server/start', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!data.success) {
         setStartError(data.message || (ui("ui_failed_to_start_llama_server")));
@@ -223,7 +224,7 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
     setInstallingLlama(true);
     setInstallMessage(ui("ui_initializing_embedded_llama_cpp_runtime"));
     try {
-      const res = await fetch('/api/v1/llama-server/install', { method: 'POST' });
+      const res = await fetchWithSession('/api/v1/llama-server/install', { method: 'POST' });
       const data = await res.json();
       if (data.installed) {
         setInstallMessage(ui("ui_embedded_llama_server_runtime_is_ready"));
@@ -251,10 +252,10 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         // Auto-install llama-server binary if not present
         if (!llamaStatus?.installed) {
           setPullProgress({ status: ui("ui_deploying_llama_cpp_runtime") });
-          await fetch('/api/v1/llama-server/install', { method: 'POST' }).catch(() => {});
+          await fetchWithSession('/api/v1/llama-server/install', { method: 'POST' }).catch(() => {});
         }
 
-        const startRes = await fetch('/api/v1/models/hub/download', {
+        const startRes = await fetchWithSession('/api/v1/models/hub/download', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model_id: preset.hubModelId, target_engine: 'llama_server' }),
@@ -292,14 +293,14 @@ export const SetupWizardModal: React.FC<SetupWizardModalProps> = ({
         }
 
         // Auto-start llama-server with the new model
-        await fetch('/api/v1/llama-server/start', {
+        await fetchWithSession('/api/v1/llama-server/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ model_name: preset.hubModelId }),
         }).catch(() => {});
 
         // Configure default LLM provider to llama_server
-        await fetch('/api/v1/cloud/llm/config', {
+        await fetchWithSession('/api/v1/cloud/llm/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

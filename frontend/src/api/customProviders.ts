@@ -1,3 +1,5 @@
+import { fetchWithSession } from './session';
+
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 export type AdapterMode = 'rest' | 'javascript' | 'python' | 'python_sdk';
 export type ImageAction = 'txt2img' | 'img2img' | 'inpaint' | 'upscale';
@@ -38,7 +40,7 @@ export interface FixtureResult {
 }
 
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const response = await fetch(`/api/v1/custom-providers${path}`, {
+  const response = await fetchWithSession(`/api/v1/custom-providers${path}`, {
     method, ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
   if (!response.ok) throw new Error(`Custom platform operation failed (HTTP ${response.status}). Check the configuration, approval and isolated environment.`);

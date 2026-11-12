@@ -1,4 +1,5 @@
 import { useUiText } from '../../i18n/useUiText';
+import { fetchWithSession } from '../../api/session';
 import { errorMessage as getErrorMessage } from '../../utils/errors';
 import React, { useState } from 'react';
 import {
@@ -62,7 +63,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [llmSaving, setLlmSaving] = useState(false);
 
   React.useEffect(() => {
-    fetch('/api/v1/agent/llm/config')
+    fetchWithSession('/api/v1/agent/llm/config')
       .then((res) => res.json())
       .then((data) => {
         if (data && data.provider) {
@@ -79,7 +80,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       // Empty api_key keeps the stored secret server-side (write-only sentinel)
       const payload = { ...llmConfig, api_key: llmApiKeyDraft };
-      const res = await fetch('/api/v1/agent/llm/config', {
+      const res = await fetchWithSession('/api/v1/agent/llm/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -100,7 +101,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setLlmTesting(true);
     setLlmTestResult(null);
     try {
-      const res = await fetch('/api/v1/agent/llm/test', {
+      const res = await fetchWithSession('/api/v1/agent/llm/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...llmConfig, api_key: llmApiKeyDraft }),

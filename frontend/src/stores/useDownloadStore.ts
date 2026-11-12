@@ -1,3 +1,4 @@
+import { fetchWithSession } from '../api/session';
 import { listDownloadTasks } from '../api/modelDownloads';
 import { create } from 'zustand';
 import { useModelHubStore } from './useModelHubStore';
@@ -75,7 +76,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
   startDownload: async (modelId: string, targetEngine = 'comfyui', mirrorPreset?: string) => {
     try {
-      const res = await fetch('/api/v1/models/hub/download', {
+      const res = await fetchWithSession('/api/v1/models/hub/download', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -106,7 +107,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
   pauseTask: async (taskId: string) => {
     try {
-      const res = await fetch(`/api/v1/models/hub/tasks/${taskId}/pause`, { method: 'POST' });
+      const res = await fetchWithSession(`/api/v1/models/hub/tasks/${taskId}/pause`, { method: 'POST' });
       if (res.ok) {
         set((state) => ({
           tasks: state.tasks.map((t) => (t.task_id === taskId ? { ...t, status: 'paused', speed_bps: 0 } : t)),
@@ -121,7 +122,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
   resumeTask: async (taskId: string) => {
     try {
-      const res = await fetch(`/api/v1/models/hub/tasks/${taskId}/resume`, { method: 'POST' });
+      const res = await fetchWithSession(`/api/v1/models/hub/tasks/${taskId}/resume`, { method: 'POST' });
       if (res.ok) {
         set((state) => ({
           tasks: state.tasks.map((t) => (t.task_id === taskId ? { ...t, status: 'downloading' } : t)),
@@ -137,7 +138,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
   cancelTask: async (taskId: string) => {
     try {
-      const res = await fetch(`/api/v1/models/hub/tasks/${taskId}`, { method: 'DELETE' });
+      const res = await fetchWithSession(`/api/v1/models/hub/tasks/${taskId}`, { method: 'DELETE' });
       if (res.ok) {
         set((state) => ({
           tasks: state.tasks.filter((t) => t.task_id !== taskId),

@@ -1,6 +1,7 @@
 import { mediaCardFields } from '../utils/media';
 import { create } from 'zustand';
 import { observeCreativeTask } from '../api/creativeTasks';
+import { fetchWithSession } from '../api/session';
 import { CreativeActionRequest, CreativeActionResult, ImageCardData } from '../types/creative';
 import { useCanvasStore } from './useCanvasStore';
 import { useProjectStore } from './useProjectStore';
@@ -118,7 +119,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
     const taskId = get().activeTaskId;
     if (!taskId || get().cancellationRequested) return;
     try {
-      const response = await fetch(`/api/v1/tasks/${taskId}/cancel`, { method: 'POST' });
+      const response = await fetchWithSession(`/api/v1/tasks/${taskId}/cancel`, { method: 'POST' });
       if (!response.ok) throw new Error(`Cancellation request failed (HTTP ${response.status})`);
       const outcome: { disclaimer?: string } = await response.json();
       if (get().activeTaskId === taskId) set({ cancellationRequested: true, generationStage: 'Cancellation requested',
@@ -233,7 +234,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
     });
 
     try {
-      const resp = await fetch('/api/v1/creative/submit', {
+      const resp = await fetchWithSession('/api/v1/creative/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, project_id: projectId }),
@@ -334,7 +335,7 @@ export const useCreativeStore = create<CreativeState>((set, get) => ({
     formData.append('file', file);
 
     try {
-      const resp = await fetch('/api/v1/creative/upload', {
+      const resp = await fetchWithSession('/api/v1/creative/upload', {
         method: 'POST',
         body: formData,
       });

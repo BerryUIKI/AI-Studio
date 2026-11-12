@@ -1,4 +1,5 @@
 import type { EngineInstance } from '../stores/useEngineStore';
+import { fetchWithSession } from './session';
 
 export interface EngineRemovalResult {
   retained_path: string | null;
@@ -6,7 +7,7 @@ export interface EngineRemovalResult {
 }
 
 async function request(url: string, method: 'POST' | 'DELETE'): Promise<Record<string, unknown>> {
-  const response = await fetch(url, { method });
+  const response = await fetchWithSession(url, { method });
   const data: unknown = await response.json();
   if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid engine response');
   const record = data as Record<string, unknown>;

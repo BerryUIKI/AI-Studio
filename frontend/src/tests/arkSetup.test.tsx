@@ -15,8 +15,9 @@ const provider = {
   key_test_supported: false,
 };
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); delete (window as any).__BERRY_SESSION__; });
 beforeEach(() => {
+  (window as any).__BERRY_SESSION__ = 'test-token';
   useCreationSetupStore.setState({ providers: [], models: [], loading: false, error: null });
   useCreativeStore.setState({ connectionId: '', model: '', referenceImage: null, isGenerating: false, error: null });
 });
